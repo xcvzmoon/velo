@@ -20,8 +20,8 @@ tauri-build = { version = "2.7.0", features = [] }
 
 [dependencies]
 tokio = { version = "1", features = ["sync"] }
+velo-contracts = { path = "../crates/velo-contracts" }
 velo-engine = { path = "../crates/velo-engine" }
-ts-rs = "12"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }

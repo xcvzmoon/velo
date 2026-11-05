@@ -6,7 +6,7 @@ Configure GET/POST requests, run a constant or staged VU workload, monitor live 
 
 ## Install and develop
 
-Install Node.js 26, pnpm 12, Rust 1.90 or newer, and the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system. Windows needs the C++ build tools and WebView2; Linux needs WebKitGTK 4.1 and its development libraries; macOS needs Xcode command line tools.
+Install Node.js 26, pnpm 12, the Rust toolchain pinned in `rust-toolchain.toml`, and the [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system. Windows needs the C++ build tools and WebView2; Linux needs WebKitGTK 4.1 and its development libraries; macOS needs Xcode command line tools.
 
 ```sh
 pnpm install
@@ -24,6 +24,7 @@ Open Settings and run the native diagnostic. A successful response identifies th
 | `app/`                   | Vue screens, shadcn-vue/Reka UI components, Valibot validation, native client |
 | `app/types/contracts.ts` | TypeScript contracts generated from Rust                                      |
 | `crates/velo-engine/`    | Independent Rust API; no Tauri or webview dependency                          |
+| `crates/velo-contracts/` | Shared diagnostic contracts and the desktop-independent binding exporter      |
 | `src-tauri/src/`         | Native startup, validated commands, transport DTOs, structured errors         |
 | `scripts/bindings.ts`    | Binding generation and drift verification                                     |
 
@@ -74,7 +75,7 @@ pnpm bindings:generate
 pnpm bindings:check
 ```
 
-The generator uses `ts-rs` declarations from Rust and runs through `cargo run -p velo --bin export-bindings`. Commit generated contract updates alongside the Rust types that require them. Do not edit `app/types/contracts.ts` manually. CI checks for drift. Nuxt exposes native contract types through `#imports`.
+The generator uses `ts-rs` declarations from Rust and runs through `cargo run --locked -p velo-contracts --example export-bindings`. Commit generated contract updates alongside the Rust types that require them. Do not edit `app/types/contracts.ts` manually. CI checks for drift. Nuxt exposes native contract types through `#imports`.
 
 TypeScript and Vue component tests live under `tests/`, mirroring the application directories.
 
@@ -113,3 +114,22 @@ On macOS, open `target/release/bundle/macos/Velo.app`. On Windows or Linux, inst
 Read [AGENTS.md](AGENTS.md) for repository conventions, [CONTRIBUTING.md](CONTRIBUTING.md) for contributions, and [SECURITY.md](SECURITY.md) for vulnerability reports. Do not run future load tests against targets without authorization.
 
 Velo is licensed under [MIT](LICENSE.md).
+
+## Continuous integration
+
+CI runs lint, binding drift verification, formatting, typechecking, tests, and an
+optimized desktop build on ARM macOS (`macos-15`). Installer packaging runs in the
+macOS release workflow. PR builds use `--no-bundle` to avoid creating unused
+installers and mounting DMG images on the runner.
+
+Both workflows use the pinned Rust toolchain and the same dependency cache.
+Successful CI runs on `main` save Rust caches that subsequent PRs can restore.
+PRs restore those caches without saving isolated copies. A new toolchain or
+runner architecture needs a successful run on `main` before other branches can
+reuse its Rust cache.
+
+The target is under 10 minutes including setup and cache operations. The
+20-minute job timeout leaves room to measure the first cold build; it does not
+represent the performance target. Measure a cold run and subsequent warm runs
+before treating that target as verified. ARM runner allocation must also succeed;
+Intel previously served as a workaround for an ARM allocation failure.

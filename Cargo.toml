@@ -1,3 +1,3 @@
 [workspace]
-members = ["crates/velo-engine", "src-tauri"]
+members = ["crates/velo-engine", "crates/velo-contracts", "src-tauri"]
 resolver = "3"

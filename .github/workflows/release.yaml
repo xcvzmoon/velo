@@ -15,7 +15,7 @@ concurrency:
 jobs:
   create-release:
     name: Create release
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - name: Checkout
@@ -39,10 +39,11 @@ jobs:
       - name: Lint, check, typecheck, test, and build
         run: |
           pnpm lint
+          pnpm bindings:check
           pnpm check
           pnpm typecheck
           pnpm test
-          pnpm build
+          pnpm build --ci
 
       - name: Create or sync release
         env:

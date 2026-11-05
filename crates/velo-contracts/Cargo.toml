@@ -1,0 +1,14 @@
+[package]
+name = "velo-contracts"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+ts-rs = "12"
+
+[dev-dependencies]
+velo-engine = { path = "../velo-engine" }
