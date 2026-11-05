@@ -71,14 +71,17 @@ pub enum RequestBody {
     Json(String),
     /// URL-encoded pairs; duplicate names retain their order.
     Form(#[ts(type = "NameValue[]")] Vec<NameValue>),
+    /// Ordered text and streamed file parts. Files must remain unchanged during a run.
+    Multipart(#[ts(type = "MultipartPart[]")] Vec<crate::MultipartPart>),
 }
 
 /// Explicit local allocation budgets, adjustable before starting a run.
 ///
 /// Defaults allow 256 workers and an 8-MiB request-data budget across the
-/// template, VU request clones, and stage schedule. Shared bodies are conservatively counted per VU. They
-/// are allocation safeguards, not a measured capacity claim. HTTP transport and
-/// runtime overhead also consume memory outside these request-data budgets.
+/// template, VU request clones, stage schedule, and threshold rules. Shared bodies
+/// are conservatively counted per VU. These are allocation safeguards, not a measured
+/// capacity claim. Streaming uploads reserve two 16-KiB buffers per file per VU.
+/// HTTP transport and runtime overhead also consume memory outside these budgets.
 ///
 /// # Examples
 /// ```
@@ -91,7 +94,8 @@ pub struct ResourceBudget {
     /// Maximum number of simultaneously owned VU tasks; must be positive.
     pub max_vus: u32,
     /// Maximum normalized request bytes across the template and VU clones,
-    /// including pair overhead and the stage schedule. This is not a process-wide memory limit.
+    /// including pair overhead, the stage schedule, threshold rules, and upload buffers.
+    /// This is not a process-wide memory limit.
     pub max_request_bytes: u32,
 }
 
@@ -226,6 +230,10 @@ pub(crate) struct ValidatedConfig {
     pub confirmation: RunConfirmation,
     pub thresholds: Vec<crate::Threshold>,
     pub request: reqwest::Request,
+    pub multipart: Option<Vec<crate::http_options::PreparedPart>>,
+    pub timeout: Duration,
+    pub uploads: tokio::sync::Mutex<tokio::task::JoinSet<()>>,
+    pub upload_stop: tokio_util::sync::CancellationToken,
     pub client: Client,
     pub schedule: Schedule,
     pub duration: Duration,
@@ -269,18 +277,9 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             .saturating_add(pair.name.len())
             .saturating_add(pair.value.len());
     }
-    let body_size = match &config.body {
-        RequestBody::None => 0,
-        RequestBody::Text(value) | RequestBody::Json(value) => value.len(),
-        RequestBody::Form(pairs) => pairs.iter().fold(0_usize, |size, pair| {
-            size.saturating_add(std::mem::size_of::<NameValue>())
-                .saturating_add(pair.name.len())
-                .saturating_add(pair.value.len())
-        }),
-    };
-    size = size
-        .saturating_add(body_size)
-        .saturating_add(crate::http_options::auth_size(&config.auth));
+    let body_size = crate::http_options::body_size(&config.body);
+    size = size.saturating_add(crate::http_options::auth_size(&config.auth));
+    size = size.saturating_add(body_size);
     if size > config.budget.max_request_bytes as usize || config.budget.max_request_bytes == 0 {
         return Err(RunError::new(
             "REQUEST_BUDGET_EXCEEDED",
@@ -352,6 +351,14 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             "auth",
         ));
     }
+    if matches!(config.body, RequestBody::Multipart(_))
+        && headers.contains_key(header::CONTENT_TYPE)
+    {
+        return Err(invalid(
+            "Multipart Content-Type and boundary are managed by the client.",
+            "headers",
+        ));
+    }
     let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .retry(reqwest::retry::never())
@@ -361,21 +368,21 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         .no_deflate()
         .no_zstd()
         .pool_max_idle_per_host(schedule.peak_vus as usize)
-        .timeout(Duration::from_millis(config.timeout_ms.into()))
-        .build()
-        .map_err(|_| {
-            RunError::new(
-                "HTTP_CLIENT_INIT_FAILED",
-                "HTTP client initialization failed.",
-                None,
-            )
-        })?;
+        .timeout(Duration::from_millis(config.timeout_ms.into()));
+    let client = client.build().map_err(|_| {
+        RunError::new(
+            "HTTP_CLIENT_INIT_FAILED",
+            "HTTP client initialization failed.",
+            None,
+        )
+    })?;
+
     if !headers.contains_key(header::CONTENT_TYPE) {
         let content_type = match &config.body {
             RequestBody::Text(_) => Some("text/plain; charset=utf-8"),
             RequestBody::Json(_) => Some("application/json"),
             RequestBody::Form(_) => Some("application/x-www-form-urlencoded"),
-            RequestBody::None => None,
+            RequestBody::None | RequestBody::Multipart(_) => None,
         };
         if let Some(content_type) = content_type {
             headers
@@ -393,6 +400,7 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     }
     let mut request = client.request(method, url).headers(headers);
     request = crate::http_options::authenticate(request, &config.auth)?;
+    let mut multipart = None;
     match config.body {
         RequestBody::None => {}
         RequestBody::Form(pairs) => {
@@ -401,6 +409,9 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
                 .map(|pair| (pair.name, pair.value))
                 .collect();
             request = request.form(&pairs);
+        }
+        RequestBody::Multipart(parts) => {
+            multipart = Some(crate::http_options::prepare_parts(parts)?);
         }
         RequestBody::Text(value) => {
             request = request.body(value);
@@ -429,10 +440,12 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             .saturating_add(name.as_str().len())
             .saturating_add(value.len());
     }
+    let upload_bytes = crate::http_options::upload_buffer_bytes(multipart.as_deref());
     let retained_bytes = request_bytes
         .saturating_mul(schedule.peak_vus as usize + 1)
         .saturating_add(schedule.retained_bytes())
-        .saturating_add(threshold_bytes);
+        .saturating_add(threshold_bytes)
+        .saturating_add(upload_bytes.saturating_mul(schedule.peak_vus as usize));
     if retained_bytes > config.budget.max_request_bytes as usize {
         return Err(RunError::new(
             "REQUEST_BUDGET_EXCEEDED",
@@ -459,6 +472,10 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             },
         },
         thresholds: config.thresholds,
+        multipart,
+        timeout: Duration::from_millis(config.timeout_ms.into()),
+        uploads: tokio::sync::Mutex::new(tokio::task::JoinSet::new()),
+        upload_stop: tokio_util::sync::CancellationToken::new(),
         request,
         client,
         duration: Duration::from_millis(schedule.duration_ms.into()),

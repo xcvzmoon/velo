@@ -63,11 +63,12 @@
       authToken: '',
       authUsername: '',
       authPassword: '',
+      formPairs: [],
+      multipartParts: [],
       thresholds: [],
       headers: [],
       query: [],
       bodyKind: 'none',
-      formPairs: [],
       bodyValue: '',
       workloadKind: 'constant',
       rate: 10,
@@ -108,7 +109,7 @@
 
     <p class="text-muted-foreground mt-2 text-sm leading-relaxed">
       Repeat one request with constant or ramping virtual users. Each user waits for its response
-      before sending another request. Redirects and automatic retries are disabled.
+      before sending another request. Automatic retries and redirects are disabled.
     </p>
 
     <FormischForm

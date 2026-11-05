@@ -40,6 +40,7 @@
             <SelectItem value="text">Plain text</SelectItem>
             <SelectItem value="json">JSON</SelectItem>
             <SelectItem value="form">URL-encoded form</SelectItem>
+            <SelectItem value="multipart">Multipart / files</SelectItem>
           </SelectContent>
         </Select>
 
@@ -142,9 +143,16 @@
         </div>
       </FormischFieldArray>
 
+      <RunMultipartEditor
+        v-if="mode.input === 'multipart'"
+        :form="form"
+        :disabled="disabled"
+      />
+
       <p class="text-muted-foreground text-xs leading-relaxed">
         GET and HEAD do not accept bodies. Other methods support every body format. Duplicate form
-        names retain their order. Inactive body and authentication values are not sent.
+        and multipart names retain their order. Inactive body and authentication values are not
+        sent.
       </p>
     </div>
   </FormischField>

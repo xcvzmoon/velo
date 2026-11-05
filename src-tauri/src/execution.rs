@@ -20,8 +20,14 @@ pub(crate) struct DesktopRuns {
 }
 
 #[tauri::command]
-pub(crate) fn prepare_run(config: RunConfig) -> Result<RunConfirmation, RunError> {
-    RunManager::prepare(config)
+pub(crate) async fn prepare_run(config: RunConfig) -> Result<RunConfirmation, RunError> {
+    tauri::async_runtime::spawn_blocking(move || RunManager::prepare(config))
+        .await
+        .map_err(|_| RunError {
+            code: "RUN_PREPARATION_FAILED".into(),
+            message: "Request preparation could not complete.".into(),
+            field: None,
+        })?
 }
 
 #[tauri::command]

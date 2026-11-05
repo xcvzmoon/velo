@@ -292,7 +292,7 @@ async fn get_post_query_headers_json_and_text_are_constructed() {
                     Some("text/plain; charset=utf-8")
                 );
             }
-            RequestBody::None | RequestBody::Form(_) => unreachable!(),
+            RequestBody::None | RequestBody::Form(_) | RequestBody::Multipart(_) => unreachable!(),
         }
     }
     input.headers.push(NameValue {
@@ -1265,4 +1265,102 @@ async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_t
     }
     manager.shutdown().await;
     server.close().await;
+}
+
+#[tokio::test]
+async fn multipart_streams_files_replays_redirects_and_closes_files_after_cancellation() {
+    use std::io::Write;
+    use velo_engine::MultipartPart;
+
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+    file.write_all(&vec![b'x'; 64 * 1024]).unwrap();
+    file.flush().unwrap();
+    let path = file.path().to_str().unwrap().to_owned();
+    let parts = vec![
+        MultipartPart::Text {
+            name: "tag".into(),
+            value: "one".into(),
+        },
+        MultipartPart::Text {
+            name: "tag".into(),
+            value: "two".into(),
+        },
+        MultipartPart::File {
+            name: "upload".into(),
+            path: path.clone(),
+            filename: "public.txt".into(),
+            content_type: "text/plain".into(),
+        },
+    ];
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    for endpoint in ["echo"] {
+        let mut input = config(format!("{}/{endpoint}", server.url));
+        input.method = RequestMethod::POST;
+        input.body = RequestBody::Multipart(parts.clone());
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert!(summary.metrics.counters.successes > 0);
+        let received = target.received.lock().await.clone().unwrap();
+        assert!(
+            received
+                .content_type
+                .unwrap()
+                .starts_with("multipart/form-data; boundary=")
+        );
+        let body = String::from_utf8(received.body).unwrap();
+        assert!(body.contains("filename=\"public.txt\""));
+        assert!(!body.contains(&path));
+        assert!(body.contains(&"x".repeat(64 * 1024)));
+        assert!(body.find("one").unwrap() < body.find("two").unwrap());
+        assert!(!serde_json::to_string(&summary).unwrap().contains(&path));
+    }
+    server.close().await;
+    file.as_file().set_len(128 * 1024 * 1024).unwrap();
+    let stalled = Server::raw(b"", true).await;
+    let mut input = config(stalled.url.clone());
+    input.method = RequestMethod::POST;
+    input.body = RequestBody::Multipart(parts);
+    input.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 30_000,
+    };
+    input.grace_ms = 0;
+    let accepted = manager.start(input, true).await.unwrap();
+    wait_for_run(&manager, |snapshot| {
+        snapshot.metrics.counters.in_flight == 1
+    })
+    .await;
+    sleep(Duration::from_millis(50)).await;
+    manager.stop(&accepted.run_id).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.metrics.counters.cancelled, 1);
+    manager.shutdown().await;
+    stalled.close().await;
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("/usr/sbin/lsof")
+            .args(["-a", "-p", &std::process::id().to_string(), "-Fn", "--"])
+            .arg(std::fs::canonicalize(&path).unwrap())
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let output = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(
+            output.lines().filter(|line| line.starts_with('n')).count(),
+            1,
+            "only the test-owned temporary file handle remains"
+        );
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let canonical = std::fs::canonicalize(&path).unwrap();
+        let mut open = 0;
+        for entry in std::fs::read_dir("/proc/self/fd").unwrap() {
+            if std::fs::read_link(entry.unwrap().path()).ok().as_ref() == Some(&canonical) {
+                open += 1;
+            }
+        }
+        assert_eq!(open, 1, "only the test-owned temporary file handle remains");
+    }
 }

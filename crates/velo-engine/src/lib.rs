@@ -5,12 +5,13 @@ mod http_options;
 mod metrics;
 mod runner;
 mod threshold;
+mod transport;
 mod workload;
 
 pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
-pub use http_options::RequestAuth;
+pub use http_options::{MultipartPart, RequestAuth};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
 pub use threshold::{

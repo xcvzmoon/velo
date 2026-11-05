@@ -59,11 +59,43 @@ export type RequestAuth =
        */
       password: string;
     };
+export type MultipartPart =
+  | {
+      kind: 'text';
+      /**
+       * Multipart field name without control characters.
+       */
+      name: string;
+      /**
+       * UTF-8 content.
+       */
+      value: string;
+    }
+  | {
+      kind: 'file';
+      /**
+       * Multipart field name without control characters.
+       */
+      name: string;
+      /**
+       * Absolute local file path, never used as the transmitted filename.
+       */
+      path: string;
+      /**
+       * Transmitted filename; no path separators or control characters.
+       */
+      filename: string;
+      /**
+       * Valid MIME type; defaults in the editor to application/octet-stream.
+       */
+      content_type: string;
+    };
 export type RequestBody =
   | { kind: 'none' }
   | { kind: 'text'; value: string }
   | { kind: 'json'; value: string }
-  | { kind: 'form'; value: NameValue[] };
+  | { kind: 'form'; value: NameValue[] }
+  | { kind: 'multipart'; value: MultipartPart[] };
 export type ResourceBudget = {
   /**
    * Maximum number of simultaneously owned VU tasks; must be positive.
@@ -71,7 +103,8 @@ export type ResourceBudget = {
   max_vus: number;
   /**
    * Maximum normalized request bytes across the template and VU clones,
-   * including pair overhead and the stage schedule. This is not a process-wide memory limit.
+   * including pair overhead, the stage schedule, threshold rules, and upload buffers.
+   * This is not a process-wide memory limit.
    */
   max_request_bytes: number;
 };

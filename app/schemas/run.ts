@@ -90,11 +90,21 @@ const requestFieldsSchema = v.object({
       value: v.string(),
     }),
   ),
-  bodyKind: v.picklist(['none', 'text', 'json', 'form']),
+  bodyKind: v.picklist(['none', 'text', 'json', 'form', 'multipart']),
   formPairs: v.array(
     v.object({
       name: v.string(),
       value: v.string(),
+    }),
+  ),
+  multipartParts: v.array(
+    v.object({
+      kind: v.picklist(['text', 'file']),
+      name: v.string(),
+      value: v.string(),
+      path: v.string(),
+      filename: v.string(),
+      content_type: v.string(),
     }),
   ),
   bodyValue: v.string(),
@@ -223,11 +233,31 @@ export const requestEditorSchema = v.pipe(
     }, 'Enter valid credentials and remove conflicting Authorization headers.'),
     ['authKind'],
   ),
+  v.forward(
+    v.check(
+      ({ bodyKind, headers, multipartParts }) =>
+        bodyKind !== 'multipart' ||
+        (!headers.some(({ name }) => name.toLowerCase() === 'content-type') &&
+          multipartParts.every(
+            (part) =>
+              part.name.length > 0 &&
+              !/\p{Cc}/u.test(part.name) &&
+              (part.kind === 'text' ||
+                (part.path.length > 0 &&
+                  part.filename.length > 0 &&
+                  !/[\\/\p{Cc}]/u.test(part.filename) &&
+                  /^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/.test(part.content_type))),
+          )),
+      'Multipart needs valid names, selected files, filenames and MIME types; remove custom Content-Type headers.',
+    ),
+    ['bodyKind'],
+  ),
   v.transform(
     ({
       bodyKind,
       bodyValue,
       formPairs,
+      multipartParts,
       authKind,
       authToken,
       authUsername,
@@ -284,10 +314,29 @@ export const requestEditorSchema = v.pipe(
                 kind: 'form',
                 value: formPairs,
               }
-            : {
-                kind: bodyKind,
-                value: bodyValue,
-              },
+            : bodyKind === 'multipart'
+              ? {
+                  kind: 'multipart',
+                  value: multipartParts.map((part) =>
+                    part.kind === 'text'
+                      ? {
+                          kind: 'text',
+                          name: part.name,
+                          value: part.value,
+                        }
+                      : {
+                          kind: 'file',
+                          name: part.name,
+                          path: part.path,
+                          filename: part.filename,
+                          content_type: part.content_type,
+                        },
+                  ),
+                }
+              : {
+                  kind: bodyKind,
+                  value: bodyValue,
+                },
       budget: { max_vus, max_request_bytes },
     }),
   ),
