@@ -1,5 +1,7 @@
 mod diagnostic;
 mod execution;
+#[cfg(target_os = "macos")]
+mod macos_exit;
 
 use std::sync::{Arc, atomic::Ordering};
 
@@ -46,6 +48,11 @@ pub fn run() {
                 }
             }
         });
+    #[cfg(target_os = "macos")]
+    let builder = builder.setup(|app| {
+        macos_exit::install(app.handle())?;
+        Ok(())
+    });
     builder
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
