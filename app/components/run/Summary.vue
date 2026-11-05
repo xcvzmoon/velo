@@ -51,6 +51,11 @@
       </div>
 
       <div class="flex justify-between gap-4 border-b pb-2">
+        <dt class="text-muted-foreground">Peak requested / actual VUs</dt>
+        <dd class="font-mono">{{ snapshot.confirmation.vus }} / {{ snapshot.max_vus }}</dd>
+      </div>
+
+      <div class="flex justify-between gap-4 border-b pb-2">
         <dt class="text-muted-foreground">HTTP failure rate</dt>
 
         <dd class="font-mono">

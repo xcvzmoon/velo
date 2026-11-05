@@ -79,6 +79,7 @@
           <dt class="text-muted-foreground">Workload</dt>
 
           <dd class="mt-1 font-mono">
+            {{ confirmation.workload.kind === 'ramping' ? 'Ramping, peak' : 'Constant' }}
             {{ confirmation.vus }} VUs for {{ confirmation.duration_ms / 1000 }} s
           </dd>
         </div>
@@ -92,6 +93,29 @@
           </dd>
         </div>
       </dl>
+
+      <div
+        v-if="confirmation.workload.kind === 'ramping'"
+        class="space-y-3 rounded-md border p-4 text-sm"
+      >
+        <p>Start at {{ confirmation.workload.start_vus }} VUs.</p>
+
+        <ol class="space-y-2">
+          <li
+            v-for="(stage, index) in confirmation.workload.stages"
+            :key="index"
+            class="font-mono text-xs"
+          >
+            {{ index + 1 }}. Ramp to {{ stage.target_vus }} VUs over
+            {{ stage.duration_ms / 1000 }} s
+          </li>
+        </ol>
+
+        <p class="text-muted-foreground text-xs">
+          Retiring users finish their current request. Actual VUs can lag the desired count during
+          transitions.
+        </p>
+      </div>
 
       <p
         v-if="confirmation.warnings.length"

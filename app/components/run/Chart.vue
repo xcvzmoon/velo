@@ -6,6 +6,7 @@
     unit: string;
     values: (number | null)[];
     seconds: number[];
+    comparisonValues?: (number | null)[];
   }>();
 
   const host = useTemplateRef<HTMLDivElement>('host');
@@ -14,7 +15,9 @@
   let observer: ResizeObserver | null = null;
 
   function data(): uPlot.AlignedData {
-    return [props.seconds, props.values];
+    return props.comparisonValues
+      ? [props.seconds, props.values, props.comparisonValues]
+      : [props.seconds, props.values];
   }
 
   onMounted(() => {
@@ -34,11 +37,22 @@
         series: [
           { label: 'Elapsed (s)' },
           {
-            label: props.unit,
+            label: props.comparisonValues ? 'Actual VUs' : props.unit,
             stroke: '#38bdf8',
             width: 1.5,
             spanGaps: false,
           },
+          ...(props.comparisonValues
+            ? [
+                {
+                  label: 'Desired VUs',
+                  stroke: '#fbbf24',
+                  width: 1.5,
+                  dash: [5, 4],
+                  spanGaps: false,
+                },
+              ]
+            : []),
         ],
         axes: [
           {
@@ -55,7 +69,7 @@
             size: 54,
           },
         ],
-        legend: { show: false },
+        legend: { show: Boolean(props.comparisonValues) },
       },
       data(),
       element,
@@ -73,7 +87,7 @@
   });
 
   watch(
-    () => props.values,
+    () => [props.values, props.comparisonValues],
     () => chart?.setData(data()),
   );
 
@@ -93,7 +107,7 @@
 
     <div
       ref="host"
-      :aria-label="`${title}, ${values.length} samples. Current value ${values.at(-1)?.toFixed(2) ?? 'unavailable'} ${unit}.`"
+      :aria-label="`${title}, ${values.length} samples. Current value ${values.at(-1)?.toFixed(2) ?? 'unavailable'} ${unit}.${comparisonValues ? ` Desired ${comparisonValues.at(-1) ?? 'unavailable'} VUs.` : ''}`"
       class="min-h-47.5 w-full overflow-hidden"
       role="img"
     />

@@ -153,7 +153,10 @@ mod tests {
                 "http://{}/private?token=secret",
                 listener.local_addr().unwrap()
             ),
-            duration_ms: 30_000,
+            workload: velo_engine::Workload::Constant {
+                vus: 1,
+                duration_ms: 30_000,
+            },
             grace_ms: 0,
             ..RunConfig::default()
         };
@@ -221,6 +224,20 @@ mod tests {
         assert_eq!(summary["active_vus"], 0);
         assert_eq!(summary["metrics"]["counters"]["in_flight"], "0");
         assert!(!summary.to_string().contains("secret"));
+        let mut ramp = config.clone();
+        ramp.workload = velo_engine::Workload::Ramping {
+            start_vus: 0,
+            stages: vec![velo_engine::RampStage {
+                duration_ms: 1_000,
+                target_vus: 2,
+            }],
+        };
+        let confirmation = invoke(&window, "prepare_run", json!({ "config": ramp })).unwrap();
+        assert_eq!(confirmation["vus"], 2);
+        assert_eq!(confirmation["workload"]["kind"], "ramping");
+        assert_eq!(confirmation["workload"]["stages"][0]["target_vus"], 2);
+        assert_eq!(summary["desired_vus"], 0);
+        assert_eq!(summary["retiring_vus"], 0);
         let mut sequence = 0_u64;
         loop {
             let update = received.recv_timeout(Duration::from_secs(2)).unwrap();

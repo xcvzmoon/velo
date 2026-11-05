@@ -17,7 +17,7 @@ const nonnegativeIntegerSchema = v.pipe(
   v.maxValue(4_294_967_295, 'The value exceeds the supported representation.'),
 );
 
-const requestEditorFieldsSchema = v.object({
+const requestFieldsSchema = v.object({
   url: v.pipe(
     v.string(),
     v.url('Enter an absolute HTTP(S) URL.'),
@@ -62,8 +62,6 @@ const requestEditorFieldsSchema = v.object({
   ),
   bodyKind: v.picklist(['none', 'text', 'json']),
   bodyValue: v.string(),
-  vus: positiveIntegerSchema,
-  duration_ms: positiveIntegerSchema,
   timeout_ms: v.pipe(
     positiveIntegerSchema,
     v.maxValue(3_600_000, 'Timeout cannot exceed one hour.'),
@@ -73,6 +71,38 @@ const requestEditorFieldsSchema = v.object({
   max_vus: positiveIntegerSchema,
   max_request_bytes: positiveIntegerSchema,
 });
+
+const numericInputSchema = v.union([v.string(), v.number()]);
+const inactiveStagesSchema = v.array(
+  v.object({
+    duration_ms: numericInputSchema,
+    target_vus: numericInputSchema,
+  }),
+);
+
+const requestEditorFieldsSchema = v.variant('workloadKind', [
+  v.object({
+    ...requestFieldsSchema.entries,
+    workloadKind: v.literal('constant'),
+    vus: positiveIntegerSchema,
+    duration_ms: positiveIntegerSchema,
+    start_vus: numericInputSchema,
+    stages: inactiveStagesSchema,
+  }),
+  v.object({
+    ...requestFieldsSchema.entries,
+    workloadKind: v.literal('ramping'),
+    vus: numericInputSchema,
+    duration_ms: numericInputSchema,
+    start_vus: nonnegativeIntegerSchema,
+    stages: v.array(
+      v.object({
+        duration_ms: positiveIntegerSchema,
+        target_vus: nonnegativeIntegerSchema,
+      }),
+    ),
+  }),
+]);
 
 export const requestEditorSchema = v.pipe(
   requestEditorFieldsSchema,
@@ -92,20 +122,71 @@ export const requestEditorSchema = v.pipe(
     ['bodyValue'],
   ),
   v.forward(
-    v.check(({ vus, max_vus }) => vus <= max_vus, 'VU count exceeds the worker budget.'),
-    ['vus'],
+    v.check(
+      ({ workloadKind, vus, start_vus, stages, max_vus }) =>
+        workloadKind === 'constant'
+          ? vus <= max_vus
+          : start_vus <= max_vus && stages.every(({ target_vus }) => target_vus <= max_vus),
+      'Peak VUs exceed the worker budget.',
+    ),
+    ['max_vus'],
   ),
-  v.transform(({ bodyKind, bodyValue, max_vus, max_request_bytes, ...config }): RunConfig => ({
-    ...config,
-    body:
-      bodyKind === 'none'
-        ? { kind: 'none' }
-        : {
-            kind: bodyKind,
-            value: bodyValue,
-          },
-    budget: { max_vus, max_request_bytes },
-  })),
+  v.forward(
+    v.check(({ workloadKind, stages }) => {
+      if (workloadKind === 'constant') {
+        return true;
+      }
+
+      if (stages.length === 0) {
+        return false;
+      }
+
+      let total = 0;
+
+      for (const { duration_ms } of stages) {
+        total += duration_ms;
+      }
+
+      return total <= 4_294_967_295;
+    }, 'Add at least one stage; total duration must not exceed 4,294,967,295 ms.'),
+    ['stages'],
+  ),
+  v.transform(
+    ({
+      bodyKind,
+      bodyValue,
+      max_vus,
+      max_request_bytes,
+      workloadKind,
+      vus,
+      duration_ms,
+      start_vus,
+      stages,
+      ...config
+    }): RunConfig => ({
+      ...config,
+      workload:
+        workloadKind === 'constant'
+          ? {
+              kind: 'constant',
+              vus,
+              duration_ms,
+            }
+          : {
+              kind: 'ramping',
+              start_vus,
+              stages,
+            },
+      body:
+        bodyKind === 'none'
+          ? { kind: 'none' }
+          : {
+              kind: bodyKind,
+              value: bodyValue,
+            },
+      budget: { max_vus, max_request_bytes },
+    }),
+  ),
 );
 
 export const confirmationSettingsSchema = v.object({
