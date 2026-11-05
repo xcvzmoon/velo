@@ -21,6 +21,7 @@ const input = {
       value: 'second',
     },
   ],
+  thresholds: [],
   bodyKind: 'json',
   bodyValue: '{"enabled":true}',
   workloadKind: 'constant',
@@ -42,6 +43,7 @@ describe('request editor schema', () => {
     expect(v.parse(requestEditorSchema, input)).toEqual({
       url: input.url,
       method: 'POST',
+      thresholds: [],
       headers: input.headers,
       query: input.query,
       body: {
@@ -309,6 +311,73 @@ describe('arrival workload editor', () => {
         ...input,
         workloadKind: 'arrival',
         ...change,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('final thresholds', () => {
+  it('preserves strict operators and decimal limits in native units', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+      thresholds: [
+        {
+          metric: 'http_failure_percent',
+          operator: 'less_than',
+          limit: '1.25',
+        },
+      ],
+    });
+    expect(result.thresholds).toEqual([
+      {
+        metric: 'http_failure_percent',
+        operator: 'less_than',
+        limit: 1.25,
+      },
+    ]);
+  });
+
+  it.each([
+    {
+      metric: 'http_failure_percent',
+      operator: 'less_than',
+      limit: 101,
+    },
+    {
+      metric: 'response_p95_ms',
+      operator: 'less_than',
+      limit: 3_600_001,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: -1,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: '',
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: Infinity,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: NaN,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'equal',
+      limit: 1,
+    },
+  ])('rejects invalid rule %j', (rule) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        thresholds: [rule],
       }).success,
     ).toBe(false);
   });

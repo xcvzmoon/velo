@@ -88,6 +88,9 @@ pub struct RunSnapshot {
     pub arrival: ArrivalSnapshot,
     /// Cumulative counters, rates, and separate duration populations.
     pub metrics: MetricsSnapshot,
+    /// Final threshold outcomes; empty while active or when no rules are configured.
+    #[ts(type = "ThresholdResult[]")]
+    pub thresholds: Vec<crate::ThresholdResult>,
     /// Stable internal failure code, without infrastructure or target details.
     pub failure_code: Option<String>,
 }
@@ -177,6 +180,7 @@ struct Progress {
 struct Run {
     id: String,
     confirmation: RunConfirmation,
+    thresholds: Vec<crate::Threshold>,
     stop: CancellationToken,
     progress: Mutex<Progress>,
 }
@@ -206,7 +210,14 @@ impl Run {
         let elapsed = now.saturating_duration_since(start);
         let scheduling_us = end.saturating_duration_since(start).as_micros() as u64;
         let actual_us = elapsed.as_micros() as u64;
+        let metrics = progress.metrics.snapshot(elapsed);
+        let thresholds = if progress.state.is_terminal() {
+            crate::threshold::evaluate(&self.thresholds, &metrics)
+        } else {
+            Vec::new()
+        };
         RunSnapshot {
+            thresholds,
             run_id: self.id.clone(),
             state: progress.state,
             confirmation: self.confirmation.clone(),
@@ -217,7 +228,7 @@ impl Run {
             retiring_vus: progress.retiring_vus,
             active_vus: progress.active_vus,
             max_vus: progress.max_vus,
-            metrics: progress.metrics.snapshot(elapsed),
+            metrics,
             arrival: progress.arrival.clone(),
             failure_code: progress.failure_code.clone(),
         }
@@ -370,6 +381,7 @@ impl RunManager {
         let run = Arc::new(Run {
             id: id.to_string(),
             confirmation: config.confirmation.clone(),
+            thresholds: config.thresholds.clone(),
             stop: CancellationToken::new(),
             progress: Mutex::new(Progress {
                 state: RunState::Starting,

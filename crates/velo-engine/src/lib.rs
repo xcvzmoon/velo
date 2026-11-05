@@ -3,6 +3,7 @@
 mod config;
 mod metrics;
 mod runner;
+mod threshold;
 mod workload;
 
 pub use config::{
@@ -10,6 +11,9 @@ pub use config::{
 };
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
+pub use threshold::{
+    Threshold, ThresholdMetric, ThresholdOperator, ThresholdResult, ThresholdStatus,
+};
 pub use workload::{RampStage, Workload};
 
 /// Returns the engine's build identity without executing network requests.

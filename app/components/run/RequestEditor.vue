@@ -59,6 +59,7 @@
     initialInput: {
       url: 'http://127.0.0.1:8080/',
       method: 'GET',
+      thresholds: [],
       headers: [],
       query: [],
       bodyKind: 'none',
@@ -422,6 +423,11 @@
             requests, drains for the configured grace, then cancels remaining requests.
           </p>
         </div>
+
+        <RunThresholdEditor
+          :form="form"
+          :disabled="disabled"
+        />
 
         <Button
           :disabled="disabled || form.isSubmitting"

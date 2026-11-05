@@ -102,6 +102,37 @@ export type Workload =
        */
       stages: RampStage[];
     };
+export type ThresholdMetric = 'response_p95_ms' | 'http_failure_percent' | 'request_rate';
+export type ThresholdOperator = 'less_than' | 'greater_than';
+export type Threshold = {
+  /**
+   * Population and unit to evaluate.
+   */
+  metric: ThresholdMetric;
+  /**
+   * Strict comparison against the limit.
+   */
+  operator: ThresholdOperator;
+  /**
+   * Maximum 100 for percentages and 3,600,000 for latency milliseconds.
+   */
+  limit: number;
+};
+export type ThresholdStatus = 'passed' | 'failed' | 'insufficient_data';
+export type ThresholdResult = {
+  /**
+   * Configured rule in its original order.
+   */
+  rule: Threshold;
+  /**
+   * Unrounded observed value in the rule's unit, or None for insufficient data.
+   */
+  observed: number | null;
+  /**
+   * Final comparison outcome.
+   */
+  status: ThresholdStatus;
+};
 export type RunConfig = {
   /**
    * Absolute HTTP(S) URL without embedded credentials or a fragment.
@@ -139,6 +170,10 @@ export type RunConfig = {
    * Maximum drain time after stop or duration expiry; zero aborts immediately.
    */
   grace_ms: number;
+  /**
+   * Final cumulative metric rules; empty by default.
+   */
+  thresholds: Threshold[];
   /**
    * Explicit task and retained request-data limits.
    */
@@ -398,6 +433,10 @@ export type RunSnapshot = {
    * Cumulative counters, rates, and separate duration populations.
    */
   metrics: MetricsSnapshot;
+  /**
+   * Final threshold outcomes; empty while active or when no rules are configured.
+   */
+  thresholds: ThresholdResult[];
   /**
    * Stable internal failure code, without infrastructure or target details.
    */

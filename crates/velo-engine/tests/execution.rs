@@ -1128,3 +1128,52 @@ fn arrival_validation_rejects_invalid_inputs_and_reports_rate_warning() {
     .unwrap();
     assert_eq!(confirmation.warnings, vec!["HIGH_ARRIVAL_RATE"]);
 }
+
+#[tokio::test]
+async fn final_thresholds_use_terminal_populations_without_changing_http_outcomes() {
+    use velo_engine::{Threshold, ThresholdMetric, ThresholdOperator, ThresholdStatus};
+
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    let mut settings = config(format!("{}/failure", server.url));
+    settings.thresholds = vec![
+        Threshold {
+            metric: ThresholdMetric::HttpFailurePercent,
+            operator: ThresholdOperator::LessThan,
+            limit: 100.0,
+        },
+        Threshold {
+            metric: ThresholdMetric::RequestRate,
+            operator: ThresholdOperator::GreaterThan,
+            limit: 0.0,
+        },
+    ];
+    let initial = manager.start(settings, true).await.unwrap();
+    assert!(initial.thresholds.is_empty());
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Completed);
+    assert_eq!(summary.thresholds[0].observed, Some(100.0));
+    assert_eq!(summary.thresholds[0].status, ThresholdStatus::Failed);
+    assert_eq!(summary.thresholds[1].status, ThresholdStatus::Passed);
+    assert_eq!(
+        summary.metrics.counters.responses,
+        summary.metrics.counters.status_failures
+    );
+
+    let mut settings = config(server.url.clone());
+    settings.thresholds = vec![Threshold {
+        metric: ThresholdMetric::HttpFailurePercent,
+        operator: ThresholdOperator::LessThan,
+        limit: 1.0,
+    }];
+    let initial = manager.start(settings, true).await.unwrap();
+    manager.stop(&initial.run_id).await.unwrap();
+    let partial = terminal(&manager).await;
+    assert_eq!(partial.state, RunState::Cancelled);
+    assert_eq!(
+        partial.thresholds[0].status,
+        ThresholdStatus::InsufficientData
+    );
+    manager.shutdown().await;
+    server.close().await;
+}

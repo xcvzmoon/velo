@@ -17,6 +17,31 @@ const nonnegativeIntegerSchema = v.pipe(
   v.maxValue(4_294_967_295, 'The value exceeds the supported representation.'),
 );
 
+const thresholdSchema = v.pipe(
+  v.object({
+    metric: v.picklist(['response_p95_ms', 'http_failure_percent', 'request_rate']),
+    operator: v.picklist(['less_than', 'greater_than']),
+    limit: v.pipe(
+      v.union([v.pipe(v.string(), v.nonEmpty('Enter a limit.')), v.number()]),
+      v.toNumber(),
+      v.finite('Enter a finite limit.'),
+      v.minValue(0, 'Enter zero or a positive limit.'),
+    ),
+  }),
+  v.forward(
+    v.check(
+      ({ metric, limit }) =>
+        metric === 'http_failure_percent'
+          ? limit <= 100
+          : metric === 'response_p95_ms'
+            ? limit <= 3_600_000
+            : true,
+      'Percentages cannot exceed 100; latency cannot exceed one hour.',
+    ),
+    ['limit'],
+  ),
+);
+
 const requestFieldsSchema = v.object({
   url: v.pipe(
     v.string(),
@@ -38,6 +63,7 @@ const requestFieldsSchema = v.object({
     }, 'Use HTTP(S) without URL credentials or a fragment.'),
   ),
   method: v.picklist(['GET', 'POST']),
+  thresholds: v.array(thresholdSchema),
   headers: v.array(
     v.object({
       name: v.pipe(

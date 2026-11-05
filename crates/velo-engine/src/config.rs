@@ -124,6 +124,9 @@ pub struct RunConfig {
     pub pacing_ms: u32,
     /// Maximum drain time after stop or duration expiry; zero aborts immediately.
     pub grace_ms: u32,
+    /// Final cumulative metric rules; empty by default.
+    #[ts(type = "Threshold[]")]
+    pub thresholds: Vec<crate::Threshold>,
     /// Explicit task and retained request-data limits.
     pub budget: ResourceBudget,
 }
@@ -140,6 +143,7 @@ impl Default for RunConfig {
             timeout_ms: 30_000,
             pacing_ms: 0,
             grace_ms: 5_000,
+            thresholds: Vec::new(),
             budget: ResourceBudget::default(),
         }
     }
@@ -205,6 +209,7 @@ pub struct RunConfirmation {
 
 pub(crate) struct ValidatedConfig {
     pub confirmation: RunConfirmation,
+    pub thresholds: Vec<crate::Threshold>,
     pub request: reqwest::Request,
     pub client: Client,
     pub schedule: Schedule,
@@ -215,6 +220,11 @@ pub(crate) struct ValidatedConfig {
 
 pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let invalid = |message, field| RunError::new("INVALID_RUN_CONFIG", message, Some(field));
+    crate::threshold::validate(&config.thresholds)?;
+    let threshold_bytes = config
+        .thresholds
+        .len()
+        .saturating_mul(std::mem::size_of::<crate::Threshold>());
     let schedule = Schedule::new(
         &config.workload,
         config.budget.max_vus,
@@ -233,7 +243,11 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         ));
     }
 
-    let mut size = config.url.len().saturating_add(schedule.retained_bytes());
+    let mut size = config
+        .url
+        .len()
+        .saturating_add(schedule.retained_bytes())
+        .saturating_add(threshold_bytes);
     for pair in config.headers.iter().chain(&config.query) {
         size = size
             .saturating_add(std::mem::size_of::<NameValue>())
@@ -362,7 +376,8 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     }
     let retained_bytes = request_bytes
         .saturating_mul(schedule.peak_vus as usize + 1)
-        .saturating_add(schedule.retained_bytes());
+        .saturating_add(schedule.retained_bytes())
+        .saturating_add(threshold_bytes);
     if retained_bytes > config.budget.max_request_bytes as usize {
         return Err(RunError::new(
             "REQUEST_BUDGET_EXCEEDED",
@@ -388,6 +403,7 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
                 warnings
             },
         },
+        thresholds: config.thresholds,
         request,
         client,
         duration: Duration::from_millis(schedule.duration_ms.into()),
