@@ -14,7 +14,7 @@ use ts_rs::TS;
 
 use crate::{
     config::{RunConfig, RunConfirmation, RunError, ValidatedConfig, validate},
-    metrics::{Metrics, MetricsSnapshot, Outcome, decimal},
+    metrics::{LatencySnapshot, Metrics, MetricsSnapshot, Outcome, decimal},
 };
 
 /// Native execution lifecycle. Terminal states are published only after worker cleanup.
@@ -86,9 +86,46 @@ pub struct RunSnapshot {
     pub failure_code: Option<String>,
 }
 
+/// One sequenced aggregate interval and the authoritative cumulative state.
+///
+/// Interval response latency excludes transport failures, timeouts, and cancellations.
+/// Lost updates cannot be reconstructed; cumulative totals remain recoverable through
+/// [`RunManager::current`]. No individual observations or request secrets are retained.
+///
+/// # Examples
+/// ```
+/// fn requests_per_second(update: &velo_engine::RunUpdate) -> Option<f64> {
+///     (update.interval_us > 0).then(|| update.interval_requests as f64
+///         * 1_000_000.0 / update.interval_us as f64)
+/// }
+/// ```
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct RunUpdate {
+    /// Sequence starting at one within each run, encoded as decimal.
+    pub sequence: String,
+    /// Authoritative cumulative state at this sample.
+    pub snapshot: RunSnapshot,
+    /// Monotonic time since the preceding sample or execution start, in microseconds.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub interval_us: u64,
+    /// Completed non-cancelled attempts in this interval.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub interval_requests: u64,
+    /// Status, transport, and timeout failures in this interval.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub interval_failures: u64,
+    /// Bounded response-latency population for this interval.
+    pub response_latency: LatencySnapshot,
+}
+
 struct Progress {
     state: RunState,
     metrics: Metrics,
+    sequence: u64,
+    sampled_us: u64,
     started: Option<Instant>,
     deadline: Option<Instant>,
     scheduling_end: Option<Instant>,
@@ -120,7 +157,10 @@ impl Run {
     }
 
     fn snapshot(&self) -> RunSnapshot {
-        let progress = self.lock();
+        self.snapshot_locked(&self.lock())
+    }
+
+    fn snapshot_locked(&self, progress: &Progress) -> RunSnapshot {
         let now = progress.finished.unwrap_or_else(Instant::now);
         let start = progress.started.unwrap_or(now);
         let end = progress.scheduling_end.unwrap_or(now);
@@ -291,6 +331,8 @@ impl RunManager {
             progress: Mutex::new(Progress {
                 state: RunState::Starting,
                 metrics: Metrics::new(),
+                sequence: 0,
+                sampled_us: 0,
                 started: None,
                 deadline: None,
                 scheduling_end: None,
@@ -328,6 +370,50 @@ impl RunManager {
             .current
             .as_ref()
             .map(|current| current.run.snapshot())
+    }
+
+    /// Samples and resets the current run's interval metrics without changing cumulative totals.
+    ///
+    /// Call from one aggregate publisher per run. Sampling holds a bounded metrics
+    /// lock after HTTP latency measurement; contention is reported in cumulative metrics.
+    ///
+    /// # Arguments
+    /// * `run_id` - Exact run ID, preventing a previous publisher from sampling a new run.
+    ///
+    /// # Returns
+    /// The next sequenced interval, or None when the run is absent, replaced, or its
+    /// sequence representation is exhausted. Cancelling before lock acquisition has
+    /// no side effects. A successful sample consumes that interval's histogram.
+    ///
+    /// # Examples
+    /// ```
+    /// # async fn example() {
+    /// let manager = velo_engine::RunManager::default();
+    /// assert!(manager.sample("missing").await.is_none());
+    /// # }
+    /// ```
+    pub async fn sample(&self, run_id: &str) -> Option<RunUpdate> {
+        let state = self.state.lock().await;
+        let current = state.current.as_ref()?;
+        if current.run.id != run_id {
+            return None;
+        }
+        let mut progress = current.run.lock();
+        let sequence = progress.sequence.checked_add(1)?;
+        let snapshot = current.run.snapshot_locked(&progress);
+        let interval_us = snapshot.actual_us.saturating_sub(progress.sampled_us);
+        let (response_latency, interval_requests, interval_failures) =
+            progress.metrics.take_interval();
+        progress.sequence = sequence;
+        progress.sampled_us = snapshot.actual_us;
+        Some(RunUpdate {
+            sequence: sequence.to_string(),
+            snapshot,
+            interval_us,
+            interval_requests,
+            interval_failures,
+            response_latency,
+        })
     }
 
     /// Closes admission for the matching run and requests graceful drain.

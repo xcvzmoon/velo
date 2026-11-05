@@ -2,7 +2,7 @@
 
 Velo is a local desktop API load-testing studio built with Tauri 2, Nuxt 4, Vue 3, and an independent Rust engine crate.
 
-The application provides Dashboard, Tests, Results, and Settings navigation and a native diagnostic round trip. The Rust engine supports constant-VU GET/POST runs through native commands. The request editor, execution controls, live charts, and persistence are not available yet.
+Configure GET/POST requests, run a constant-VU workload, monitor live aggregate charts, stop execution, and inspect the final summary. Runs survive navigation. The latest summary stays in memory until the next run or application exit; saved history and persistence are not available yet.
 
 ## Install and develop
 
@@ -35,17 +35,31 @@ The frontend uses Composition API, TypeScript, Tailwind 4, and the existing shad
 
 The independent engine validates GET/POST requests, custom headers, query pairs, and optional text/JSON POST bodies. Each VU executes sequential requests through a shared keep-alive pool. Timeout defaults to 30 seconds, pacing to zero, and drain grace to five seconds. Redirects, automatic retries, proxies, cookies, and automatic response decompression are disabled. TLS uses system certificate validation.
 
-Native commands are `prepare_run`, `start_run`, `stop_run`, and `current_run`. Prepare returns a safe target origin, requested workload, explicit budgets, and high-load warning codes without HTTP traffic. Start requires `authorized: true`, returns a run ID immediately, and rejects overlapping runs. Stop requires that ID and closes admission before drain. Current returns `null` before the first run, then the latest current/final summary. A new accepted run replaces the previous summary. Application exit blocks new starts and awaits cleanup. Confirmation UI and exit prompts arrive with milestone 3.
+Native commands are `prepare_run`, `start_run`, `stop_run`, and `current_run`. Prepare returns a safe target origin, requested workload, explicit budgets, and high-load warning codes without HTTP traffic. Start requires `authorized: true`, returns a run ID immediately, and rejects overlapping runs. Stop requires that ID and closes admission before drain. Current returns `null` before the first run, then the latest current/final summary. A new accepted run replaces the previous summary. The editor prepares a safe workload confirmation before starting. Application exit asks for confirmation during an active run, blocks new starts, and awaits cleanup before closing.
 
 The default budgets allow 256 worker tasks and 8 MiB of request data across the normalized template and VU clones. Request-body sharing is conservatively budgeted as a copy per VU. Both budgets are adjustable; exceeding either rejects the run before worker creation. A warning applies at 100 VUs. These defaults are allocation safeguards, not capacity claims or a process-wide memory limit. Transport, TLS, runtime, and allocator overhead consume additional memory.
 
 Responses are streamed and discarded. Body-byte totals count encoded application bytes actually consumed, including partial bodies from failures and cancellations. They exclude headers, TLS, retransmissions, and unread payloads. With redirects disabled, each iteration has one logical request. Final HTTP status 200–399 succeeds only after the body is fully consumed. Status failures, transport failures, timeouts, and cancellations remain separate.
 
-Three fixed HDR histograms measure completed responses, transport failures, and timeouts. Response latency includes connection acquisition and body reading, excludes aggregation, and includes status failures. Histograms use microseconds and three significant digits over 1 μs–1 hour. Statistics are approximate; empty populations return `null`, and out-of-range samples are counted explicitly. There is no per-request history or observation queue. Metrics lock waits over one millisecond flag aggregation interference.
+Three fixed cumulative HDR histograms measure completed responses, transport failures, and timeouts. A fourth fixed histogram measures interval response latency and resets after each aggregate update. Response latency includes connection acquisition and body reading, excludes aggregation, and includes status failures. Histograms use microseconds and three significant digits over 1 μs–1 hour. Statistics are approximate; empty populations return `null`, and out-of-range samples are counted explicitly. There is no per-request history or observation queue. Metrics lock waits over one millisecond flag aggregation interference.
 
-Counters reconcile as `started = responses + transport_failures + timeouts + cancelled + in_flight`. Terminal states have zero in-flight requests and zero owned workers. HTTP failure rate excludes cancellations; request throughput divides non-cancelled terminal attempts by scheduling plus drain time. Cancelled runs retain partial results. Counters and microsecond durations serialize as decimal strings, preserving u64 precision; percentile values fit safely in JavaScript numbers. Future chart consumers must check range before converting counters.
+Counters reconcile as `started = responses + transport_failures + timeouts + cancelled + in_flight`. Terminal states have zero in-flight requests and zero owned workers. HTTP failure rate excludes cancellations; request throughput divides non-cancelled terminal attempts by scheduling plus drain time. Cancelled runs retain partial results. Counters and microsecond durations serialize as decimal strings, preserving u64 precision; percentile values fit safely in JavaScript numbers. Chart consumers check range before converting interval counters; cumulative counters remain decimal strings.
 
 Local-server tests cover construction, connection reuse, streaming, encoded and partial bytes, status/transport/timeout classification, pacing, duration, stop races, resource validation, repeated runs, and stalled-target cleanup. A Tauri test runtime exercises actual command dispatch and serialization without a webview or external target. No sustained-load capacity benchmark or Windows/Linux verification is claimed.
+
+## Run and monitor
+
+1. Start a local target, such as `python3 -m http.server 8080 --bind 127.0.0.1` in a directory containing only test content.
+2. Open Tests. Enter the target URL, method, optional headers/query pairs, and POST body. Set VUs, scheduling duration, timeout, pacing, grace, and local resource budgets.
+3. Select Review run. Check the target origin, load, budgets, and high-load warnings, then acknowledge authorization to start.
+4. Monitor interval request rate, response p95, HTTP failure rate, and active VUs in Tests, Dashboard, or Results. Stop closes admission and drains requests before publishing partial results.
+5. Open Results for the final counters, duration breakdown, throughput, failure fraction, and separate response/transport/timeout distributions.
+
+Aggregate `run-update` events carry a run ID, decimal sequence, monotonic interval duration, cumulative state, interval outcome counts, and interval response histogram. `start_run` accepts optional `updateIntervalMs` (250–10,000 ms; default 1,000). The UI offers 500 ms, 1 s, and 2 s. One native publisher owns each run; missed timer ticks do not produce catch-up bursts. Emission failures do not fail HTTP execution.
+
+An application-scoped subscription preserves monitoring across navigation. Recovery reads run every two seconds to restore cumulative totals and final state after missed events. Charts retain at most 600 points, show gaps for missing intervals, and do not reconstruct lost percentiles. Empty response populations have no latency value. Charts and resize observers are destroyed on route teardown; the event listener is removed on application teardown.
+
+This milestone adds [uPlot](https://github.com/leeoniya/uPlot) for charts and the Rust [Tauri dialog plugin](https://v2.tauri.app/plugin/dialog/) for native exit confirmation. Dialogs are called from Rust; no frontend dialog permissions are granted. macOS uses the existing Objective-C runtime crates directly to route AppKit termination requests, including Dock Quit and Command-Q, through the same confirmation and cleanup path. This is required because the current Tauri macOS delegate does not intercept AppKit termination.
 
 ## Generated contracts
 

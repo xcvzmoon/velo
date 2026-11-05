@@ -298,3 +298,29 @@ export type RunSnapshot = {
    */
   failure_code: string | null;
 };
+export type RunUpdate = {
+  /**
+   * Sequence starting at one within each run, encoded as decimal.
+   */
+  sequence: string;
+  /**
+   * Authoritative cumulative state at this sample.
+   */
+  snapshot: RunSnapshot;
+  /**
+   * Monotonic time since the preceding sample or execution start, in microseconds.
+   */
+  interval_us: string;
+  /**
+   * Completed non-cancelled attempts in this interval.
+   */
+  interval_requests: string;
+  /**
+   * Status, transport, and timeout failures in this interval.
+   */
+  interval_failures: string;
+  /**
+   * Bounded response-latency population for this interval.
+   */
+  response_latency: LatencySnapshot;
+};
