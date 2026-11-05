@@ -136,6 +136,9 @@ pub struct RunConfig {
     pub auth: crate::RequestAuth,
     /// Negotiated HTTP by default; HTTP/2 forces h2, including prior knowledge for cleartext.
     pub protocol: crate::HttpProtocol,
+    /// Maximum redirects to follow; zero disables redirects. Cross-origin redirects and
+    /// HTTPS downgrades are rejected, keeping custom credentials and payloads on the target origin.
+    pub max_redirects: u32,
     /// Constant, staged, or arrival schedule, validated before worker allocation.
     pub workload: Workload,
     /// Full response timeout, including streamed body; 1–3,600,000 ms.
@@ -161,6 +164,7 @@ impl Default for RunConfig {
             body: RequestBody::None,
             auth: crate::RequestAuth::None,
             protocol: crate::HttpProtocol::Auto,
+            max_redirects: 0,
             workload: Workload::default(),
             timeout_ms: 30_000,
             pacing_ms: 0,
@@ -234,6 +238,7 @@ pub(crate) struct ValidatedConfig {
     pub thresholds: Vec<crate::Threshold>,
     pub request: reqwest::Request,
     pub multipart: Option<Vec<crate::http_options::PreparedPart>>,
+    pub max_redirects: u32,
     pub timeout: Duration,
     pub uploads: tokio::sync::Mutex<tokio::task::JoinSet<()>>,
     pub upload_stop: tokio_util::sync::CancellationToken,
@@ -481,6 +486,7 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         },
         thresholds: config.thresholds,
         multipart,
+        max_redirects: config.max_redirects,
         timeout: Duration::from_millis(config.timeout_ms.into()),
         uploads: tokio::sync::Mutex::new(tokio::task::JoinSet::new()),
         upload_stop: tokio_util::sync::CancellationToken::new(),

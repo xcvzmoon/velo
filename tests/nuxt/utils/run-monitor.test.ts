@@ -142,8 +142,9 @@ describe('run monitor', () => {
     const config: RunConfig = {
       url: 'http://127.0.0.1:8080/',
       method: 'GET',
-      protocol: 'auto',
       auth: { kind: 'none' },
+      protocol: 'auto',
+      max_redirects: 0,
       headers: [],
       query: [],
       thresholds: [],

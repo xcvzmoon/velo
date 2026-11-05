@@ -30,7 +30,8 @@
 
     <p class="text-muted-foreground text-xs leading-relaxed">
       Credentials stay in memory and are excluded from run reports. Use HTTPS to protect them in
-      transit. HTTP/2 requires server support and uses prior knowledge over cleartext.
+      transit. Redirects stay on the original origin; other origins and HTTPS downgrades fail as
+      transport errors. HTTP/2 requires server support and uses prior knowledge over cleartext.
     </p>
 
     <FormischField
@@ -132,6 +133,36 @@
               <SelectItem value="http2">Require HTTP/2</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+      </FormischField>
+
+      <FormischField
+        v-slot="field"
+        :of="form"
+        :path="['max_redirects']"
+      >
+        <div class="space-y-2">
+          <Label for="request-redirects">Maximum redirects (0 disables)</Label>
+
+          <Input
+            v-model="field.input"
+            v-bind="field.props"
+            :aria-invalid="Boolean(field.errors)"
+            id="request-redirects"
+            aria-describedby="request-redirects-error"
+            type="number"
+            min="0"
+            step="1"
+          />
+
+          <p
+            v-if="field.errors"
+            id="request-redirects-error"
+            class="text-destructive text-xs"
+            role="alert"
+          >
+            {{ field.errors[0] }}
+          </p>
         </div>
       </FormischField>
     </div>

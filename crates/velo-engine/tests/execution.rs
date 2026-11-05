@@ -141,11 +141,11 @@ async fn handle(
     let path = request.uri().path().to_owned();
     let (parts, body) = request.into_parts();
     let received = Received {
-        version: format!("{:?}", parts.version),
         authorization: parts
             .headers
             .get("authorization")
             .map(|value| value.to_str().unwrap().into()),
+        version: format!("{:?}", parts.version),
         method: parts.method.to_string(),
         uri: parts.uri.to_string(),
         header: parts
@@ -159,6 +159,36 @@ async fn handle(
         body: to_bytes(body, 1024 * 1024).await.unwrap().to_vec(),
     };
     *target.received.lock().await = Some(received);
+    if let Some(status) = path.strip_prefix("/redirect/") {
+        let status = status.parse::<u16>().unwrap();
+        return Response::builder()
+            .status(status)
+            .header("location", "/echo")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
+    if path == "/loop" {
+        return Response::builder()
+            .status(302)
+            .header("location", "/loop")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
+    if path == "/cross-origin" {
+        return Response::builder()
+            .status(307)
+            .header("location", "http://127.0.0.1:1/secret")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
+    if path == "/delayed-redirect" {
+        sleep(Duration::from_millis(80)).await;
+        return Response::builder()
+            .status(307)
+            .header("location", "/slow")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
     if path == "/held" {
         target.gate.acquire().await.unwrap().forget();
     }
@@ -1285,6 +1315,69 @@ async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_t
 }
 
 #[tokio::test]
+async fn redirects_count_payloads_preserve_or_rewrite_methods_and_enforce_limits_and_deadlines() {
+    use velo_engine::RequestAuth;
+
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    for status in [301, 302, 303, 307, 308] {
+        let mut input = config(format!("{}/redirect/{status}", server.url));
+        input.method = RequestMethod::POST;
+        input.body = RequestBody::Text("private-body".into());
+        input.auth = RequestAuth::Bearer {
+            token: "private-token".into(),
+        };
+        input.max_redirects = 1;
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert_eq!(
+            summary.metrics.counters.response_body_bytes,
+            summary.metrics.counters.responses * 10
+        );
+        let received = target.received.lock().await.clone().unwrap();
+        assert_eq!(received.uri, "/echo");
+        assert_eq!(
+            received.authorization.as_deref(),
+            Some("Bearer private-token")
+        );
+        if status < 307 {
+            assert_eq!(received.method, "GET");
+            assert!(received.body.is_empty());
+            assert!(received.content_type.is_none());
+        } else {
+            assert_eq!(received.method, "POST");
+            assert_eq!(received.body, b"private-body");
+        }
+    }
+    for path in ["loop", "cross-origin"] {
+        let mut input = config(format!("{}/{path}", server.url));
+        input.max_redirects = 2;
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert_eq!(summary.metrics.counters.responses, 0);
+        assert!(summary.metrics.counters.transport_failures > 0);
+        assert_eq!(
+            summary.metrics.counters.response_body_bytes,
+            summary.metrics.counters.transport_failures * if path == "loop" { 9 } else { 3 }
+        );
+    }
+    let mut input = config(format!("{}/delayed-redirect", server.url));
+    input.max_redirects = 1;
+    input.timeout_ms = 120;
+    input.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 30,
+    };
+    input.grace_ms = 300;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.metrics.counters.timeouts, 1);
+    assert_eq!(summary.metrics.counters.response_body_bytes, 3);
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
 async fn multipart_streams_files_replays_redirects_and_closes_files_after_cancellation() {
     use std::io::Write;
     use velo_engine::MultipartPart;
@@ -1311,10 +1404,11 @@ async fn multipart_streams_files_replays_redirects_and_closes_files_after_cancel
     ];
     let (server, target) = Server::start().await;
     let manager = RunManager::default();
-    for endpoint in ["echo"] {
+    for endpoint in ["echo", "redirect/307", "redirect/308"] {
         let mut input = config(format!("{}/{endpoint}", server.url));
         input.method = RequestMethod::POST;
         input.body = RequestBody::Multipart(parts.clone());
+        input.max_redirects = 1;
         manager.start(input, true).await.unwrap();
         let summary = terminal(&manager).await;
         assert!(summary.metrics.counters.successes > 0);

@@ -1,4 +1,4 @@
-use reqwest::{Request, header, multipart};
+use reqwest::{Method, Request, StatusCode, header, multipart};
 use tokio::io::AsyncReadExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -147,13 +147,52 @@ async fn consume(
     cancel: &CancellationToken,
     uploads_done: &TaskTracker,
 ) -> Result<bool, Failure> {
-    let request = request(config, true, cancel, uploads_done).await?;
-    let mut response = config.client.execute(request).await?;
-    let success = (200..400).contains(&response.status().as_u16());
-    while let Some(chunk) = response.chunk().await? {
-        *bytes = bytes.saturating_add(chunk.len() as u64);
+    let mut url = config.request.url().clone();
+    let mut method = config.request.method().clone();
+    let mut include_body = true;
+    let mut followed = 0_u32;
+    loop {
+        let hop_cancel = cancel.child_token();
+        let _hop_cleanup = hop_cancel.clone().drop_guard();
+        let mut request = request(config, include_body, &hop_cancel, uploads_done).await?;
+        *request.url_mut() = url.clone();
+        *request.method_mut() = method.clone();
+        let mut response = config.client.execute(request).await?;
+        let status = response.status();
+        let location = response.headers().get(header::LOCATION).cloned();
+        while let Some(chunk) = response.chunk().await? {
+            *bytes = bytes.saturating_add(chunk.len() as u64);
+        }
+        hop_cancel.cancel();
+        uploads_done.close();
+        uploads_done.wait().await;
+        if config.max_redirects == 0
+            || !matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
+            || location.is_none()
+        {
+            return Ok((200..400).contains(&status.as_u16()));
+        }
+        if followed >= config.max_redirects {
+            return Err(Failure::Transport);
+        }
+        let location = location.ok_or(Failure::Transport)?;
+        let mut next = url
+            .join(location.to_str().map_err(|_| Failure::Transport)?)
+            .map_err(|_| Failure::Transport)?;
+        next.set_fragment(None);
+        if next.origin() != url.origin() || !next.username().is_empty() || next.password().is_some()
+        {
+            return Err(Failure::Transport);
+        }
+        if (status == StatusCode::SEE_OTHER && method != Method::HEAD)
+            || (matches!(status.as_u16(), 301 | 302) && method == Method::POST)
+        {
+            method = Method::GET;
+            include_body = false;
+        }
+        followed += 1;
+        url = next;
     }
-    Ok(success)
 }
 
 #[cfg(test)]

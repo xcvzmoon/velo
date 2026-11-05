@@ -59,11 +59,12 @@
     initialInput: {
       url: 'http://127.0.0.1:8080/',
       method: 'GET',
-      protocol: 'auto',
       authKind: 'none',
       authToken: '',
       authUsername: '',
       authPassword: '',
+      protocol: 'auto',
+      max_redirects: 0,
       formPairs: [],
       multipartParts: [],
       thresholds: [],
@@ -110,7 +111,8 @@
 
     <p class="text-muted-foreground mt-2 text-sm leading-relaxed">
       Repeat one request with constant or ramping virtual users. Each user waits for its response
-      before sending another request. Automatic retries and redirects are disabled.
+      before sending another request. Automatic retries are disabled. Redirects are optional and
+      stay on the target origin.
     </p>
 
     <FormischForm

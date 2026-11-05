@@ -68,6 +68,7 @@ const requestFieldsSchema = v.object({
   authUsername: v.string(),
   authPassword: v.string(),
   protocol: v.picklist(['auto', 'http1', 'http2']),
+  max_redirects: nonnegativeIntegerSchema,
   thresholds: v.array(thresholdSchema),
   headers: v.array(
     v.object({

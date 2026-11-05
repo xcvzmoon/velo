@@ -218,6 +218,11 @@ export type RunConfig = {
    */
   protocol: HttpProtocol;
   /**
+   * Maximum redirects to follow; zero disables redirects. Cross-origin redirects and
+   * HTTPS downgrades are rejected, keeping custom credentials and payloads on the target origin.
+   */
+  max_redirects: number;
+  /**
    * Constant, staged, or arrival schedule, validated before worker allocation.
    */
   workload: Workload;

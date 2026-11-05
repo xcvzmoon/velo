@@ -5,11 +5,14 @@ import { requestEditorSchema } from '../../../app/schemas/run';
 const input = {
   url: 'http://127.0.0.1:8080/items',
   method: 'POST',
-  protocol: 'auto',
   authKind: 'none',
   authToken: '',
   authUsername: '',
   authPassword: '',
+  protocol: 'auto',
+  max_redirects: 0,
+  formPairs: [],
+  multipartParts: [],
   headers: [
     {
       name: 'X-Request-Label',
@@ -28,8 +31,6 @@ const input = {
   ],
   thresholds: [],
   bodyKind: 'json',
-  formPairs: [],
-  multipartParts: [],
   bodyValue: '{"enabled":true}',
   workloadKind: 'constant',
   rate: '10',
@@ -50,8 +51,9 @@ describe('request editor schema', () => {
     expect(v.parse(requestEditorSchema, input)).toEqual({
       url: input.url,
       method: 'POST',
-      protocol: 'auto',
       auth: { kind: 'none' },
+      protocol: 'auto',
+      max_redirects: 0,
       thresholds: [],
       headers: input.headers,
       query: input.query,
