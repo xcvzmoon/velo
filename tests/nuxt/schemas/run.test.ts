@@ -408,21 +408,13 @@ describe('HTTP request options', () => {
     ];
     const result = v.parse(requestEditorSchema, {
       ...input,
-
       method,
-
       bodyKind: 'form',
-
       formPairs: pairs,
-
       authKind: 'bearer',
-
       authToken: 'private-token',
-
       authPassword: 'unused',
-
       protocol: 'http2',
-
       max_redirects: '2',
     });
     expect(result.body).toEqual({
@@ -441,15 +433,10 @@ describe('HTTP request options', () => {
   it('constructs file and text parts without sending inactive fields', () => {
     const result = v.parse(requestEditorSchema, {
       ...input,
-
       bodyKind: 'multipart',
-
       authKind: 'basic',
-
       authUsername: 'user',
-
       authPassword: 'private-password',
-
       multipartParts: [
         {
           kind: 'text',
@@ -461,22 +448,16 @@ describe('HTTP request options', () => {
         },
         {
           kind: 'file',
-
           name: 'upload',
-
           value: 'unused',
-
           path: '/tmp/upload.txt',
-
           filename: 'public.txt',
-
           content_type: 'text/plain',
         },
       ],
     });
     expect(result.body).toEqual({
       kind: 'multipart',
-
       value: [
         {
           kind: 'text',
@@ -485,13 +466,9 @@ describe('HTTP request options', () => {
         },
         {
           kind: 'file',
-
           name: 'upload',
-
           path: '/tmp/upload.txt',
-
           filename: 'public.txt',
-
           content_type: 'text/plain',
         },
       ],
@@ -523,9 +500,7 @@ describe('HTTP request options', () => {
     },
     {
       authKind: 'bearer',
-
       authToken: 'private-token',
-
       headers: [
         {
           name: 'authorization',
@@ -539,19 +514,13 @@ describe('HTTP request options', () => {
     { protocol: 'unsupported' },
     {
       bodyKind: 'multipart',
-
       multipartParts: [
         {
           kind: 'file',
-
           name: 'upload',
-
           value: '',
-
           path: '',
-
           filename: 'upload.txt',
-
           content_type: 'text/plain',
         },
       ],
@@ -577,13 +546,9 @@ describe('HTTP request options', () => {
   it('allows HEAD without a body and discards inactive credentials', () => {
     const result = v.parse(requestEditorSchema, {
       ...input,
-
       method: 'HEAD',
-
       bodyKind: 'none',
-
       authToken: 'unused',
-
       authPassword: 'unused',
     });
     expect(result.auth).toEqual({ kind: 'none' });
