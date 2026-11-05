@@ -3,8 +3,12 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use tokio::sync::Mutex;
-use velo_engine::{RunConfig, RunConfirmation, RunError, RunManager, RunSnapshot};
+use tauri::{Emitter, async_runtime::JoinHandle};
+use tokio::{
+    sync::Mutex,
+    time::{Duration, MissedTickBehavior},
+};
+use velo_engine::{RunConfig, RunConfirmation, RunError, RunManager, RunSnapshot, RunState};
 
 #[derive(Default)]
 pub(crate) struct DesktopRuns {
@@ -12,6 +16,7 @@ pub(crate) struct DesktopRuns {
     pub closing: AtomicBool,
     pub exit_ready: AtomicBool,
     pub admission: Mutex<()>,
+    pub monitor: Mutex<Option<JoinHandle<()>>>,
 }
 
 #[tauri::command]
@@ -20,10 +25,12 @@ pub(crate) fn prepare_run(config: RunConfig) -> Result<RunConfirmation, RunError
 }
 
 #[tauri::command]
-pub(crate) async fn start_run(
+pub(crate) async fn start_run<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     state: tauri::State<'_, Arc<DesktopRuns>>,
     config: RunConfig,
     authorized: bool,
+    update_interval_ms: Option<u32>,
 ) -> Result<RunSnapshot, RunError> {
     let _admission = state.admission.lock().await;
     if state.closing.load(Ordering::Acquire) {
@@ -33,7 +40,42 @@ pub(crate) async fn start_run(
             field: None,
         });
     }
+    let interval_ms = update_interval_ms.unwrap_or(1_000);
+    if !(250..=10_000).contains(&interval_ms) {
+        return Err(RunError {
+            code: "INVALID_UPDATE_INTERVAL".into(),
+            message: "Update interval must be between 250 and 10,000 milliseconds.".into(),
+            field: Some("update_interval_ms".into()),
+        });
+    }
     let snapshot = state.manager.start(config, authorized).await?;
+    let mut monitor = state.monitor.lock().await;
+    if let Some(previous) = monitor.take() {
+        previous.abort();
+        let _ = previous.await;
+    }
+    let runs = state.inner().clone();
+    let run_id = snapshot.run_id.clone();
+    *monitor = Some(tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(interval_ms.into()));
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        loop {
+            interval.tick().await;
+            let Some(update) = runs.manager.sample(&run_id).await else {
+                break;
+            };
+            let terminal = matches!(
+                update.snapshot.state,
+                RunState::Completed | RunState::Cancelled | RunState::Failed
+            );
+            if app.emit_to("main", "run-update", &update).is_err() {
+                tracing::warn!(run_id, "Aggregate update delivery failed");
+            }
+            if terminal {
+                break;
+            }
+        }
+    }));
     tracing::info!(
         run_id = snapshot.run_id,
         vus = snapshot.confirmation.vus,
@@ -62,7 +104,7 @@ mod tests {
     use super::*;
     use serde_json::{Value, json};
     use tauri::{
-        WebviewWindow,
+        Listener, WebviewWindow,
         ipc::{CallbackFn, InvokeBody},
         test::{MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets},
         webview::InvokeRequest,
@@ -137,10 +179,24 @@ mod tests {
         assert_eq!(error["field"], "timeout_ms");
         assert!(!error.to_string().contains("secret"));
 
+        let (updates, received) = std::sync::mpsc::channel();
+        window.listen("run-update", move |event| {
+            updates
+                .send(serde_json::from_str::<Value>(event.payload()).unwrap())
+                .unwrap();
+        });
+        let invalid_interval = invoke(
+            &window,
+            "start_run",
+            json!({ "config": config, "authorized": true, "updateIntervalMs": 1 }),
+        )
+        .unwrap_err();
+        assert_eq!(invalid_interval["code"], "INVALID_UPDATE_INTERVAL");
+        assert!(invoke(&window, "current_run", json!({})).unwrap().is_null());
         let accepted = invoke(
             &window,
             "start_run",
-            json!({ "config": config, "authorized": true }),
+            json!({ "config": config, "authorized": true, "updateIntervalMs": 250 }),
         )
         .unwrap();
         assert!(accepted["run_id"].is_string());
@@ -165,6 +221,20 @@ mod tests {
         assert_eq!(summary["active_vus"], 0);
         assert_eq!(summary["metrics"]["counters"]["in_flight"], "0");
         assert!(!summary.to_string().contains("secret"));
+        let mut sequence = 0_u64;
+        loop {
+            let update = received.recv_timeout(Duration::from_secs(2)).unwrap();
+            let next = update["sequence"].as_str().unwrap().parse::<u64>().unwrap();
+            assert!(next > sequence);
+            sequence = next;
+            assert_eq!(update["snapshot"]["run_id"], accepted["run_id"]);
+            assert!(update["interval_requests"].is_string());
+            assert!(!update.to_string().contains("secret"));
+            if update["snapshot"]["state"] == "cancelled" {
+                assert_eq!(update["snapshot"]["metrics"]["counters"]["in_flight"], "0");
+                break;
+            }
+        }
         state.closing.store(true, Ordering::Release);
         assert_eq!(
             invoke(

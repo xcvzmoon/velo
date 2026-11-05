@@ -47,6 +47,10 @@ pub fn run() {
                     tauri::async_runtime::spawn(async move {
                         let _admission = state.admission.lock().await;
                         state.manager.shutdown().await;
+                        if let Some(monitor) = state.monitor.lock().await.take() {
+                            monitor.abort();
+                            let _ = monitor.await;
+                        }
                         state.exit_ready.store(true, Ordering::Release);
                         app.exit(code.unwrap_or(0));
                     });
