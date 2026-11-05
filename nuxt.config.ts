@@ -70,7 +70,7 @@ export default defineNuxtConfig({
   },
   ssr: false,
   ignore: ['**/src-tauri/**'],
-  css: ['~/assets/css/tailwind.css'],
+  css: ['uplot/dist/uPlot.min.css', '~/assets/css/tailwind.css'],
   modules: ['@nuxtjs/color-mode', '@vueuse/nuxt/module', 'shadcn-nuxt', '@nuxt/icon'],
   colorMode: {
     classSuffix: '',

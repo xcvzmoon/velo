@@ -41,6 +41,9 @@ importers:
       shadcn-nuxt:
         specifier: 2.9.0
         version: 2.9.0(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(magicast@0.5.5)
+      uplot:
+        specifier: ^1.6.32
+        version: 1.6.32
       valibot:
         specifier: ^1.5.0
         version: 1.5.0(typescript@6.0.3)
@@ -4756,6 +4759,9 @@ packages:
     hasBin: true
     peerDependencies:
       browserslist: '>= 4.21.0'
+
+  uplot@1.6.32:
+    resolution: {integrity: sha512-KIMVnG68zvu5XXUbC4LQEPnhwOxBuLyW1AHtpm6IKTXImkbLgkMy+jabjLgSLMasNuGGzQm/ep3tOkyTxpiQIw==}
 
   uqr@0.1.3:
     resolution: {integrity: sha512-0rjE8iEJe4YmT9TOhwsZtqCMRLc5DXZUI2UEYUUg63ikBkqqE5EYWaI0etFe/5KUcmcYwLih2RND1kq+hrUJXA==}
@@ -10005,6 +10011,8 @@ snapshots:
       browserslist: 4.29.3
       escalade: 3.2.0
       picocolors: 1.1.1
+
+  uplot@1.6.32: {}
 
   uqr@0.1.3: {}
 
