@@ -135,8 +135,8 @@
 
       <p class="text-muted-foreground text-sm leading-relaxed">
         Starting acknowledges that you are authorized to load this target at the requested level.
-        Velo does not verify ownership. Redirects and retries are disabled. System certificate
-        validation is enabled.
+        Velo does not verify ownership. Automatic retries are disabled. Configured redirects stay on
+        the target origin. System certificate validation is enabled.
       </p>
 
       <FormischField
