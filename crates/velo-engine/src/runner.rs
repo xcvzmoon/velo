@@ -1,0 +1,552 @@
+use std::{
+    sync::{Arc, Mutex, MutexGuard},
+    time::Duration,
+};
+
+use serde::Serialize;
+use tokio::{
+    sync::Mutex as AsyncMutex,
+    task::{JoinHandle, JoinSet},
+    time::Instant,
+};
+use tokio_util::sync::CancellationToken;
+use ts_rs::TS;
+
+use crate::{
+    config::{RunConfig, RunConfirmation, RunError, ValidatedConfig, validate},
+    metrics::{Metrics, MetricsSnapshot, Outcome, decimal},
+};
+
+/// Native execution lifecycle. Terminal states are published only after worker cleanup.
+///
+/// # Examples
+/// ```
+/// assert_eq!(serde_json::to_value(velo_engine::RunState::Cancelled)?, "cancelled");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RunState {
+    /// Accepted, with the supervisor waiting to begin execution.
+    Starting,
+    /// Accepting new sequential iterations.
+    Running,
+    /// Admission closed; draining or cancelling owned requests.
+    Stopping,
+    /// Scheduling duration expired and all tasks were joined.
+    Completed,
+    /// Explicit stop requested and all tasks were joined; partial results retained.
+    Cancelled,
+    /// An owned task failed; remaining work was cleaned up.
+    Failed,
+}
+
+impl RunState {
+    fn is_terminal(self) -> bool {
+        matches!(self, Self::Completed | Self::Cancelled | Self::Failed)
+    }
+}
+
+/// Authoritative current state or final summary. No request secrets are included.
+///
+/// # Examples
+/// A cancelled final summary retains measurements but represents partial work:
+/// ```
+/// fn is_partial(summary: &velo_engine::RunSnapshot) -> bool {
+///     summary.state == velo_engine::RunState::Cancelled
+/// }
+/// ```
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct RunSnapshot {
+    /// Monotonically increasing application-instance identifier, encoded as decimal.
+    pub run_id: String,
+    /// Lifecycle state, terminal only after cleanup.
+    pub state: RunState,
+    /// Safe target and workload details.
+    pub confirmation: RunConfirmation,
+    /// Scheduling time observed so far, in microseconds as a decimal string.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub scheduling_us: u64,
+    /// Time since admission closed, in microseconds as a decimal string.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub drain_us: u64,
+    /// Scheduling plus drain duration, in microseconds as a decimal string.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub actual_us: u64,
+    /// Currently owned VU workers; zero after cleanup.
+    pub active_vus: u32,
+    /// Maximum concurrently owned VU workers.
+    pub max_vus: u32,
+    /// Cumulative counters, rates, and separate duration populations.
+    pub metrics: MetricsSnapshot,
+    /// Stable internal failure code, without infrastructure or target details.
+    pub failure_code: Option<String>,
+}
+
+struct Progress {
+    state: RunState,
+    metrics: Metrics,
+    started: Option<Instant>,
+    deadline: Option<Instant>,
+    scheduling_end: Option<Instant>,
+    finished: Option<Instant>,
+    active_vus: u32,
+    max_vus: u32,
+    failure_code: Option<String>,
+}
+
+struct Run {
+    id: String,
+    confirmation: RunConfirmation,
+    stop: CancellationToken,
+    progress: Mutex<Progress>,
+}
+
+impl Run {
+    fn lock(&self) -> MutexGuard<'_, Progress> {
+        self.progress
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+    }
+
+    fn measured_lock(&self) -> MutexGuard<'_, Progress> {
+        let waiting = Instant::now();
+        let mut progress = self.lock();
+        progress.metrics.wait(waiting.elapsed());
+        progress
+    }
+
+    fn snapshot(&self) -> RunSnapshot {
+        let progress = self.lock();
+        let now = progress.finished.unwrap_or_else(Instant::now);
+        let start = progress.started.unwrap_or(now);
+        let end = progress.scheduling_end.unwrap_or(now);
+        let elapsed = now.saturating_duration_since(start);
+        let scheduling_us = end.saturating_duration_since(start).as_micros() as u64;
+        let actual_us = elapsed.as_micros() as u64;
+        RunSnapshot {
+            run_id: self.id.clone(),
+            state: progress.state,
+            confirmation: self.confirmation.clone(),
+            scheduling_us,
+            drain_us: actual_us - scheduling_us,
+            actual_us,
+            active_vus: progress.active_vus,
+            max_vus: progress.max_vus,
+            metrics: progress.metrics.snapshot(elapsed),
+            failure_code: progress.failure_code.clone(),
+        }
+    }
+
+    fn stop(&self) {
+        let mut progress = self.lock();
+        if !progress.state.is_terminal() {
+            progress.state = RunState::Stopping;
+            let now = Instant::now();
+            let end = progress.deadline.map_or(now, |deadline| now.min(deadline));
+            progress.scheduling_end.get_or_insert(end);
+            self.stop.cancel();
+        }
+    }
+}
+
+struct OwnedRun {
+    run: Arc<Run>,
+    task: Option<JoinHandle<()>>,
+}
+
+impl Drop for OwnedRun {
+    fn drop(&mut self) {
+        self.run.stop();
+    }
+}
+
+#[derive(Default)]
+struct ManagerState {
+    last_id: u64,
+    current: Option<OwnedRun>,
+}
+
+/// Owns at most one run and retains its final summary until the next accepted start.
+///
+/// Use from a Tokio runtime. Call [`Self::shutdown`] before runtime teardown to
+/// stop and join native work. Dropping the manager signals stop; only awaiting
+/// shutdown guarantees cleanup has completed before the caller proceeds.
+///
+/// # Examples
+/// ```no_run
+/// # async fn example() -> Result<(), velo_engine::RunError> {
+/// use velo_engine::{RunConfig, RunManager};
+/// let manager = RunManager::default();
+/// let config = RunConfig { url: "http://127.0.0.1:8080/health".into(), ..RunConfig::default() };
+/// let confirmation = RunManager::prepare(config.clone())?;
+/// assert_eq!(confirmation.vus, 1);
+/// let started = manager.start(config, true).await?;
+/// manager.stop(&started.run_id).await?;
+/// manager.shutdown().await;
+/// assert_eq!(manager.current().await.unwrap().active_vus, 0);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Default)]
+pub struct RunManager {
+    state: AsyncMutex<ManagerState>,
+}
+
+impl RunManager {
+    /// Validates a configuration and returns safe confirmation details without HTTP traffic.
+    ///
+    /// # Arguments
+    /// * `config` - Untrusted settings, consumed after validation.
+    ///
+    /// # Returns
+    /// Target origin, workload, resource budgets, and high-load warning codes.
+    ///
+    /// # Errors
+    /// Returns [`RunError`] with INVALID_RUN_CONFIG, VU_BUDGET_EXCEEDED,
+    /// REQUEST_BUDGET_EXCEEDED, or HTTP_CLIENT_INIT_FAILED on invalid input or
+    /// unavailable HTTP initialization. Input secrets are omitted.
+    ///
+    /// # Examples
+    /// ```
+    /// use velo_engine::{RunConfig, RunManager};
+    /// let config = RunConfig { url: "https://example.com/health".into(), ..RunConfig::default() };
+    /// assert_eq!(RunManager::prepare(config)?.origin, "https://example.com");
+    /// # Ok::<(), velo_engine::RunError>(())
+    /// ```
+    pub fn prepare(config: RunConfig) -> Result<RunConfirmation, RunError> {
+        Ok(validate(config)?.confirmation)
+    }
+
+    /// Validates and atomically starts one run, returning its ID before completion.
+    ///
+    /// # Arguments
+    /// * `config` - Request, workload, and explicit local budgets.
+    /// * `authorized` - Acknowledgement that the caller is authorized to load the
+    ///   target at the requested load. This does not verify target ownership.
+    ///
+    /// # Returns
+    /// The accepted run's initial authoritative snapshot. Only the most recent
+    /// run is retained. Cancelling this future before acceptance starts no work.
+    ///
+    /// # Errors
+    /// Returns [`RunError`] with AUTHORIZATION_REQUIRED, RUN_ALREADY_ACTIVE,
+    /// RUN_ID_EXHAUSTED, or validation/initialization codes from [`Self::prepare`].
+    ///
+    /// # Panics
+    /// Panics if accepted outside a running Tokio runtime.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async fn example() -> Result<(), velo_engine::RunError> {
+    /// let manager = velo_engine::RunManager::default();
+    /// let config = velo_engine::RunConfig { url: "http://127.0.0.1:8080/".into(), ..Default::default() };
+    /// let snapshot = manager.start(config, true).await?;
+    /// assert!(!snapshot.run_id.is_empty());
+    /// manager.shutdown().await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn start(
+        &self,
+        config: RunConfig,
+        authorized: bool,
+    ) -> Result<RunSnapshot, RunError> {
+        if !authorized {
+            return Err(RunError::new(
+                "AUTHORIZATION_REQUIRED",
+                "Acknowledge authorization for this target and requested load.",
+                None,
+            ));
+        }
+        let config = validate(config)?;
+        let mut state = self.state.lock().await;
+        if let Some(current) = &mut state.current {
+            if !current.run.lock().state.is_terminal() {
+                return Err(RunError::new(
+                    "RUN_ALREADY_ACTIVE",
+                    "Stop the active run and wait for cleanup before starting another.",
+                    None,
+                ));
+            }
+            if let Some(task) = &mut current.task {
+                let _ = task.await;
+            }
+            current.task = None;
+        }
+        let id = state.last_id.checked_add(1).ok_or_else(|| {
+            RunError::new(
+                "RUN_ID_EXHAUSTED",
+                "Run identifier capacity exhausted.",
+                None,
+            )
+        })?;
+        let run = Arc::new(Run {
+            id: id.to_string(),
+            confirmation: config.confirmation.clone(),
+            stop: CancellationToken::new(),
+            progress: Mutex::new(Progress {
+                state: RunState::Starting,
+                metrics: Metrics::new(),
+                started: None,
+                deadline: None,
+                scheduling_end: None,
+                finished: None,
+                active_vus: 0,
+                max_vus: 0,
+                failure_code: None,
+            }),
+        });
+        let snapshot = run.snapshot();
+        let task = tokio::spawn(supervise(run.clone(), config));
+        state.last_id = id;
+        state.current = Some(OwnedRun {
+            run,
+            task: Some(task),
+        });
+        Ok(snapshot)
+    }
+
+    /// Reads the latest run, including immutable final measurements after cleanup.
+    ///
+    /// # Returns
+    /// None before the first accepted start. Cancelling this read has no side effects.
+    ///
+    /// # Examples
+    /// ```
+    /// # async fn example() {
+    /// assert!(velo_engine::RunManager::default().current().await.is_none());
+    /// # }
+    /// ```
+    pub async fn current(&self) -> Option<RunSnapshot> {
+        self.state
+            .lock()
+            .await
+            .current
+            .as_ref()
+            .map(|current| current.run.snapshot())
+    }
+
+    /// Closes admission for the matching run and requests graceful drain.
+    ///
+    /// # Arguments
+    /// * `run_id` - Exact ID returned by start, preventing stale UI stop requests.
+    ///
+    /// # Returns
+    /// Current snapshot. Repeated stop calls are safe, including after completion.
+    /// This requests cleanup; use [`Self::current`] to observe terminal state.
+    /// Once requested, stop continues even if the caller cancels this future.
+    ///
+    /// # Errors
+    /// Returns [`RunError`] with RUN_NOT_FOUND if no matching current run exists.
+    ///
+    /// # Examples
+    /// ```
+    /// # async fn example() {
+    /// let error = velo_engine::RunManager::default().stop("missing").await.unwrap_err();
+    /// assert_eq!(error.code, "RUN_NOT_FOUND");
+    /// # }
+    /// ```
+    pub async fn stop(&self, run_id: &str) -> Result<RunSnapshot, RunError> {
+        let state = self.state.lock().await;
+        let current = state
+            .current
+            .as_ref()
+            .filter(|current| current.run.id == run_id)
+            .ok_or_else(|| {
+                RunError::new(
+                    "RUN_NOT_FOUND",
+                    "The requested run is no longer current.",
+                    None,
+                )
+            })?;
+        current.run.stop();
+        Ok(current.run.snapshot())
+    }
+
+    /// Stops the current run and waits until its supervisor has joined all workers.
+    ///
+    /// # Returns
+    /// Completes after the configured grace and cancellation cleanup. Repeated
+    /// calls are safe. Cancelling this future leaves stop requested; call again
+    /// to finish awaiting cleanup before tearing down the runtime.
+    ///
+    /// # Examples
+    /// ```
+    /// # async fn example() {
+    /// velo_engine::RunManager::default().shutdown().await;
+    /// # }
+    /// ```
+    pub async fn shutdown(&self) {
+        let mut state = self.state.lock().await;
+        if let Some(current) = &mut state.current {
+            current.run.stop();
+            if let Some(task) = &mut current.task {
+                let _ = task.await;
+            }
+            current.task = None;
+        }
+    }
+}
+
+async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
+    let started = Instant::now();
+    let deadline = started + config.duration;
+    {
+        let mut progress = run.lock();
+        progress.started = Some(started);
+        progress.deadline = Some(deadline);
+        if progress.state == RunState::Starting {
+            progress.state = RunState::Running;
+        } else {
+            progress.scheduling_end = Some(started);
+        }
+    }
+    let config = Arc::new(config);
+    let mut workers = JoinSet::new();
+    for _ in 0..config.confirmation.vus {
+        let mut progress = run.lock();
+        if progress.state != RunState::Running || Instant::now() >= deadline {
+            break;
+        }
+        progress.active_vus += 1;
+        progress.max_vus = progress.max_vus.max(progress.active_vus);
+        let worker = Worker { run: run.clone() };
+        workers.spawn(execute_worker(worker, config.clone(), deadline));
+    }
+    let mut failed = false;
+    loop {
+        tokio::select! {
+            biased;
+            _ = run.stop.cancelled() => break,
+            _ = tokio::time::sleep_until(deadline) => break,
+            result = workers.join_next(), if !workers.is_empty() => {
+                if result.is_some_and(|result| result.is_err()) {
+                    failed = true;
+                    break;
+                }
+                if workers.is_empty() { break; }
+            }
+        }
+    }
+    let drain_start = {
+        let mut progress = run.lock();
+        progress.state = RunState::Stopping;
+        let end = Instant::now().min(deadline);
+        *progress.scheduling_end.get_or_insert(end)
+    };
+    let drain_deadline = drain_start + config.grace;
+    while !workers.is_empty() {
+        tokio::select! {
+            biased;
+            _ = tokio::time::sleep_until(drain_deadline) => {
+                workers.abort_all();
+                break;
+            }
+            result = workers.join_next() => {
+                failed |= result.is_some_and(|result| result.is_err());
+            }
+        }
+    }
+    while let Some(result) = workers.join_next().await {
+        if let Err(error) = result {
+            failed |= !error.is_cancelled();
+        }
+    }
+    let mut progress = run.lock();
+    progress.finished = Some(Instant::now());
+    progress.state = if failed {
+        progress.failure_code = Some("WORKER_FAILED".into());
+        RunState::Failed
+    } else if run.stop.is_cancelled() {
+        RunState::Cancelled
+    } else {
+        RunState::Completed
+    };
+}
+
+struct Worker {
+    run: Arc<Run>,
+}
+
+impl Drop for Worker {
+    fn drop(&mut self) {
+        self.run.lock().active_vus -= 1;
+    }
+}
+
+struct Attempt {
+    run: Arc<Run>,
+    started: Instant,
+    bytes: u64,
+    outcome: Outcome,
+    elapsed: Option<Duration>,
+}
+
+impl Drop for Attempt {
+    fn drop(&mut self) {
+        let outcome = std::mem::replace(&mut self.outcome, Outcome::Cancelled);
+        let elapsed = self.elapsed.unwrap_or_else(|| self.started.elapsed());
+        self.run
+            .measured_lock()
+            .metrics
+            .observe(outcome, elapsed, self.bytes);
+    }
+}
+
+async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: Instant) {
+    loop {
+        let request = config
+            .request
+            .try_clone()
+            .expect("validated buffered request is cloneable");
+        {
+            let mut progress = worker.run.measured_lock();
+            if progress.state != RunState::Running || Instant::now() >= deadline {
+                break;
+            }
+            progress.metrics.admission();
+        }
+        let mut attempt = Attempt {
+            run: worker.run.clone(),
+            started: Instant::now(),
+            bytes: 0,
+            outcome: Outcome::Cancelled,
+            elapsed: None,
+        };
+        let result = consume_response(&config.client, request, &mut attempt.bytes).await;
+        attempt.elapsed = Some(attempt.started.elapsed());
+        attempt.outcome = match result {
+            Ok(success) => Outcome::Response(success),
+            Err(error) if error.is_timeout() => Outcome::Timeout,
+            Err(_) => Outcome::Transport,
+        };
+        drop(attempt);
+        if config.pacing.is_zero() {
+            tokio::task::yield_now().await;
+        } else {
+            tokio::select! {
+                biased;
+                _ = worker.run.stop.cancelled() => break,
+                _ = tokio::time::sleep_until(deadline) => break,
+                _ = tokio::time::sleep(config.pacing) => {}
+            }
+        }
+    }
+}
+
+async fn consume_response(
+    client: &reqwest::Client,
+    request: reqwest::Request,
+    bytes: &mut u64,
+) -> Result<bool, reqwest::Error> {
+    let mut response = client.execute(request).await?;
+    let success = (200..400).contains(&response.status().as_u16());
+    while let Some(chunk) = response.chunk().await? {
+        *bytes = bytes.saturating_add(chunk.len() as u64);
+    }
+    Ok(success)
+}

@@ -2,7 +2,7 @@
 
 Velo is a local desktop API load-testing studio built with Tauri 2, Nuxt 4, Vue 3, and an independent Rust engine crate.
 
-The application provides Dashboard, Tests, Results, and Settings navigation and a native diagnostic round trip. HTTP execution, workloads, metrics, charts, and persistence are not available yet.
+The application provides Dashboard, Tests, Results, and Settings navigation and a native diagnostic round trip. The Rust engine supports constant-VU GET/POST runs through native commands. The request editor, execution controls, live charts, and persistence are not available yet.
 
 ## Install and develop
 
@@ -27,9 +27,25 @@ Open Settings and run the native diagnostic. A successful response identifies th
 | `src-tauri/src/`         | Native startup, validated commands, transport DTOs, structured errors         |
 | `scripts/bindings.ts`    | Binding generation and drift verification                                     |
 
-Rust owns the serialized contracts. The desktop adapter validates IPC input before calling the engine. Vue validates user input for immediate feedback and displays native success or structured failure. This boundary keeps future load generation out of Vue and Tauri command handlers.
+Rust owns the serialized contracts. The desktop adapter delegates execution validation to the engine boundary. Vue validates user input for immediate feedback and displays native success or structured failure. This boundary keeps future load generation out of Vue and Tauri command handlers.
 
 The frontend uses Composition API, TypeScript, Tailwind 4, and the existing shadcn-vue/Reka UI components. It does not introduce a second component library. The diagnostic sends no HTTP traffic and stores no credentials.
+
+## Constant-VU engine
+
+The independent engine validates GET/POST requests, custom headers, query pairs, and optional text/JSON POST bodies. Each VU executes sequential requests through a shared keep-alive pool. Timeout defaults to 30 seconds, pacing to zero, and drain grace to five seconds. Redirects, automatic retries, proxies, cookies, and automatic response decompression are disabled. TLS uses system certificate validation.
+
+Native commands are `prepare_run`, `start_run`, `stop_run`, and `current_run`. Prepare returns a safe target origin, requested workload, explicit budgets, and high-load warning codes without HTTP traffic. Start requires `authorized: true`, returns a run ID immediately, and rejects overlapping runs. Stop requires that ID and closes admission before drain. Current returns `null` before the first run, then the latest current/final summary. A new accepted run replaces the previous summary. Application exit blocks new starts and awaits cleanup. Confirmation UI and exit prompts arrive with milestone 3.
+
+The default budgets allow 256 worker tasks and 8 MiB of request data across the normalized template and VU clones. Request-body sharing is conservatively budgeted as a copy per VU. Both budgets are adjustable; exceeding either rejects the run before worker creation. A warning applies at 100 VUs. These defaults are allocation safeguards, not capacity claims or a process-wide memory limit. Transport, TLS, runtime, and allocator overhead consume additional memory.
+
+Responses are streamed and discarded. Body-byte totals count encoded application bytes actually consumed, including partial bodies from failures and cancellations. They exclude headers, TLS, retransmissions, and unread payloads. With redirects disabled, each iteration has one logical request. Final HTTP status 200–399 succeeds only after the body is fully consumed. Status failures, transport failures, timeouts, and cancellations remain separate.
+
+Three fixed HDR histograms measure completed responses, transport failures, and timeouts. Response latency includes connection acquisition and body reading, excludes aggregation, and includes status failures. Histograms use microseconds and three significant digits over 1 μs–1 hour. Statistics are approximate; empty populations return `null`, and out-of-range samples are counted explicitly. There is no per-request history or observation queue. Metrics lock waits over one millisecond flag aggregation interference.
+
+Counters reconcile as `started = responses + transport_failures + timeouts + cancelled + in_flight`. Terminal states have zero in-flight requests and zero owned workers. HTTP failure rate excludes cancellations; request throughput divides non-cancelled terminal attempts by scheduling plus drain time. Cancelled runs retain partial results. Counters and microsecond durations serialize as decimal strings, preserving u64 precision; percentile values fit safely in JavaScript numbers. Future chart consumers must check range before converting counters.
+
+Local-server tests cover construction, connection reuse, streaming, encoded and partial bytes, status/transport/timeout classification, pacing, duration, stop races, resource validation, repeated runs, and stalled-target cleanup. A Tauri test runtime exercises actual command dispatch and serialization without a webview or external target. No sustained-load capacity benchmark or Windows/Linux verification is claimed.
 
 ## Generated contracts
 

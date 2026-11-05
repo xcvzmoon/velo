@@ -1,0 +1,649 @@
+use std::{
+    collections::HashSet,
+    net::SocketAddr,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
+
+use axum::{
+    Router,
+    body::{Body, to_bytes},
+    extract::{ConnectInfo, Request, State},
+    http::StatusCode,
+    response::Response,
+    routing::any,
+};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    sync::Mutex,
+    task::{JoinHandle, JoinSet},
+    time::{Instant, sleep, timeout},
+};
+use tokio_util::sync::CancellationToken;
+use velo_engine::{
+    NameValue, RequestBody, RequestMethod, RunConfig, RunManager, RunSnapshot, RunState,
+};
+
+#[derive(Clone, Debug)]
+struct Received {
+    method: String,
+    uri: String,
+    header: Option<String>,
+    content_type: Option<String>,
+    body: Vec<u8>,
+}
+
+#[derive(Clone, Default)]
+struct Target {
+    received: Arc<Mutex<Option<Received>>>,
+    requests: Arc<AtomicUsize>,
+    connections: Arc<Mutex<HashSet<SocketAddr>>>,
+}
+
+struct Server {
+    url: String,
+    stop: CancellationToken,
+    task: JoinHandle<()>,
+}
+
+impl Server {
+    async fn start() -> (Self, Target) {
+        let target = Target::default();
+        let app = Router::new()
+            .fallback(any(handle))
+            .with_state(target.clone());
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let stop = CancellationToken::new();
+        let shutdown = stop.clone();
+        let task = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(shutdown.cancelled_owned())
+            .await
+            .unwrap();
+        });
+        (Self { url, stop, task }, target)
+    }
+
+    async fn raw(response: &'static [u8], stall: bool) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let stop = CancellationToken::new();
+        let shutdown = stop.clone();
+        let task = tokio::spawn(async move {
+            let mut connections = JoinSet::new();
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = shutdown.cancelled() => break,
+                    result = connections.join_next(), if !connections.is_empty() => { result.unwrap().unwrap(); }
+                    result = listener.accept() => {
+                        let (mut stream, _) = result.unwrap();
+                        connections.spawn(async move {
+                            let mut buffer = [0; 4096];
+                            let _ = stream.read(&mut buffer).await;
+                            if !response.is_empty() { let _ = stream.write_all(response).await; }
+                            if stall { std::future::pending::<()>().await; }
+                        });
+                    }
+                }
+            }
+            connections.abort_all();
+            while connections.join_next().await.is_some() {}
+        });
+        Self { url, stop, task }
+    }
+
+    async fn close(mut self) {
+        self.stop.cancel();
+        timeout(Duration::from_secs(3), &mut self.task)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.stop.cancel();
+    }
+}
+
+async fn handle(
+    State(target): State<Target>,
+    ConnectInfo(remote): ConnectInfo<SocketAddr>,
+    request: Request,
+) -> Response {
+    target.connections.lock().await.insert(remote);
+    target.requests.fetch_add(1, Ordering::SeqCst);
+    let path = request.uri().path().to_owned();
+    let (parts, body) = request.into_parts();
+    let received = Received {
+        method: parts.method.to_string(),
+        uri: parts.uri.to_string(),
+        header: parts
+            .headers
+            .get("x-test")
+            .map(|value| value.to_str().unwrap().into()),
+        content_type: parts
+            .headers
+            .get("content-type")
+            .map(|value| value.to_str().unwrap().into()),
+        body: to_bytes(body, 1024 * 1024).await.unwrap().to_vec(),
+    };
+    *target.received.lock().await = Some(received);
+    if path == "/slow" {
+        sleep(Duration::from_millis(80)).await;
+    }
+    if path == "/large" {
+        return Response::new(Body::from(vec![b'a'; 1024 * 1024]));
+    }
+    let status = if path == "/failure" {
+        StatusCode::INTERNAL_SERVER_ERROR
+    } else {
+        StatusCode::OK
+    };
+    Response::builder()
+        .status(status)
+        .body(Body::from("payload"))
+        .unwrap()
+}
+
+fn config(url: String) -> RunConfig {
+    RunConfig {
+        url,
+        duration_ms: 150,
+        grace_ms: 100,
+        pacing_ms: 5,
+        ..RunConfig::default()
+    }
+}
+
+async fn terminal(manager: &RunManager) -> RunSnapshot {
+    timeout(Duration::from_secs(5), async {
+        loop {
+            let snapshot = manager.current().await.unwrap();
+            if matches!(
+                snapshot.state,
+                RunState::Completed | RunState::Cancelled | RunState::Failed
+            ) {
+                reconcile(&snapshot);
+                return snapshot;
+            }
+            sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+
+fn reconcile(snapshot: &RunSnapshot) {
+    let counters = &snapshot.metrics.counters;
+    assert_eq!(
+        counters.started,
+        counters.responses
+            + counters.transport_failures
+            + counters.timeouts
+            + counters.cancelled
+            + counters.in_flight
+    );
+    assert_eq!(
+        counters.responses,
+        counters.successes + counters.status_failures
+    );
+    assert_eq!(
+        counters.completed_iterations,
+        counters.responses + counters.transport_failures + counters.timeouts
+    );
+    assert_eq!(counters.in_flight, 0);
+    assert_eq!(snapshot.active_vus, 0);
+    assert!(snapshot.metrics.max_in_flight <= snapshot.confirmation.vus.into());
+    assert_eq!(
+        snapshot.actual_us,
+        snapshot.scheduling_us + snapshot.drain_us
+    );
+}
+
+#[tokio::test]
+async fn get_post_query_headers_json_and_text_are_constructed() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let mut input = config(format!("{}/echo?existing=yes", server.url));
+    input.query = vec![
+        NameValue {
+            name: "q".into(),
+            value: "a & b".into(),
+        },
+        NameValue {
+            name: "q".into(),
+            value: "second".into(),
+        },
+    ];
+    input.headers = vec![NameValue {
+        name: "x-test".into(),
+        value: "custom".into(),
+    }];
+    manager.start(input.clone(), true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.successes > 0);
+    assert_eq!(
+        summary.metrics.counters.response_body_bytes,
+        summary.metrics.counters.responses * 7
+    );
+    let received = target.received.lock().await.clone().unwrap();
+    assert_eq!(received.method, "GET");
+    assert_eq!(received.uri, "/echo?existing=yes&q=a+%26+b&q=second");
+    assert_eq!(received.header.as_deref(), Some("custom"));
+    assert!(summary.metrics.counters.responses > 1);
+    assert_eq!(target.connections.lock().await.len(), 1);
+    assert!(received.body.is_empty());
+    for body in [
+        RequestBody::Json("{\"ok\":true}".into()),
+        RequestBody::Text("hello".into()),
+    ] {
+        input.method = RequestMethod::POST;
+        input.body = body.clone();
+        manager.start(input.clone(), true).await.unwrap();
+        terminal(&manager).await;
+        let received = target.received.lock().await.clone().unwrap();
+        assert_eq!(received.method, "POST");
+        match body {
+            RequestBody::Json(value) => {
+                assert_eq!(received.body, value.as_bytes());
+                assert_eq!(received.content_type.as_deref(), Some("application/json"));
+            }
+            RequestBody::Text(value) => {
+                assert_eq!(received.body, value.as_bytes());
+                assert_eq!(
+                    received.content_type.as_deref(),
+                    Some("text/plain; charset=utf-8")
+                );
+            }
+            RequestBody::None => unreachable!(),
+        }
+    }
+    input.headers.push(NameValue {
+        name: "content-type".into(),
+        value: "application/custom".into(),
+    });
+    manager.start(input, true).await.unwrap();
+    terminal(&manager).await;
+    assert_eq!(
+        target
+            .received
+            .lock()
+            .await
+            .as_ref()
+            .unwrap()
+            .content_type
+            .as_deref(),
+        Some("application/custom")
+    );
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn status_transport_timeout_partial_body_and_redirect_populations() {
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    manager
+        .start(config(format!("{}/failure", server.url)), true)
+        .await
+        .unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.status_failures > 0);
+    assert_eq!(
+        summary.metrics.response_latency.samples,
+        summary.metrics.counters.responses
+    );
+    assert_eq!(summary.metrics.http_failure_rate, Some(1.0));
+
+    let mut input = config(format!("{}/slow", server.url));
+    input.timeout_ms = 10;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.timeouts > 0);
+    assert_eq!(
+        summary.metrics.timeout_latency.samples,
+        summary.metrics.counters.timeouts
+    );
+    assert_eq!(summary.metrics.response_latency.samples, 0);
+
+    let broken = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nabc", false).await;
+    manager
+        .start(config(broken.url.clone()), true)
+        .await
+        .unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.transport_failures > 0);
+    assert_eq!(summary.metrics.counters.responses, 0);
+    assert!(summary.metrics.counters.response_body_bytes > 0);
+    assert_eq!(
+        summary.metrics.transport_latency.samples,
+        summary.metrics.counters.transport_failures
+    );
+    broken.close().await;
+
+    let redirect = Server::raw(b"HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:1/never\r\nContent-Length: 3\r\nConnection: close\r\n\r\nabc", false).await;
+    manager
+        .start(config(redirect.url.clone()), true)
+        .await
+        .unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.successes > 0);
+    assert_eq!(summary.metrics.counters.transport_failures, 0);
+    assert_eq!(
+        summary.metrics.counters.response_body_bytes,
+        summary.metrics.counters.responses * 3
+    );
+    redirect.close().await;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    drop(listener);
+    manager.start(config(url), true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.transport_failures > 0);
+    assert_eq!(summary.metrics.counters.responses, 0);
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn large_bodies_are_fully_consumed_without_retaining_responses() {
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    manager
+        .start(config(format!("{}/large", server.url)), true)
+        .await
+        .unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.responses > 0);
+    assert_eq!(
+        summary.metrics.counters.response_body_bytes,
+        summary.metrics.counters.responses * 1024 * 1024
+    );
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn stalled_target_is_bounded_cancelled_and_joined_without_backlog() {
+    let server = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nabc", true).await;
+    let manager = RunManager::default();
+    let mut input = config(server.url.clone());
+    input.vus = 16;
+    input.duration_ms = 30_000;
+    input.grace_ms = 20;
+    manager.start(input.clone(), true).await.unwrap();
+    timeout(Duration::from_secs(2), async {
+        loop {
+            if manager.current().await.unwrap().metrics.counters.in_flight == 16 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    sleep(Duration::from_millis(30)).await;
+    assert_eq!(
+        manager.current().await.unwrap().metrics.counters.started,
+        16
+    );
+    assert_eq!(
+        manager.start(input.clone(), true).await.unwrap_err().code,
+        "RUN_ALREADY_ACTIVE"
+    );
+    assert_eq!(
+        manager.stop("stale").await.unwrap_err().code,
+        "RUN_NOT_FOUND"
+    );
+    let id = manager.current().await.unwrap().run_id;
+    let stopping = manager.stop(&id).await.unwrap();
+    let admitted = stopping.metrics.counters.started;
+    assert_eq!(stopping.state, RunState::Stopping);
+    let start = Instant::now();
+    manager.shutdown().await;
+    assert!(start.elapsed() < Duration::from_secs(1));
+    manager.shutdown().await;
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Cancelled);
+    assert_eq!(summary.metrics.counters.started, admitted);
+    assert_eq!(summary.metrics.counters.cancelled, 16);
+    assert_eq!(summary.metrics.counters.responses, 0);
+    assert!(summary.metrics.counters.response_body_bytes > 0);
+    assert_eq!(summary.metrics.response_latency.samples, 0);
+    assert_eq!(summary.metrics.http_failure_rate, None);
+    let frozen = serde_json::to_value(&summary).unwrap();
+    sleep(Duration::from_millis(10)).await;
+    assert_eq!(
+        serde_json::to_value(manager.current().await.unwrap()).unwrap(),
+        frozen
+    );
+    assert_eq!(manager.stop(&id).await.unwrap().state, RunState::Cancelled);
+    input.duration_ms = 30;
+    manager.start(input, true).await.unwrap();
+    let repeated = terminal(&manager).await;
+    assert_eq!(repeated.state, RunState::Completed);
+    assert_ne!(repeated.run_id, id);
+    assert_eq!(repeated.metrics.counters.cancelled, 16);
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn admission_races_stop_before_spawn_and_repeated_shutdown_are_safe() {
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    for _ in 0..5 {
+        let input = config(server.url.clone());
+        let (first, second) = tokio::join!(
+            manager.start(input.clone(), true),
+            manager.start(input, true)
+        );
+        assert!(first.is_ok());
+        assert_eq!(second.unwrap_err().code, "RUN_ALREADY_ACTIVE");
+        manager.stop(&first.unwrap().run_id).await.unwrap();
+        manager.shutdown().await;
+        assert_eq!(terminal(&manager).await.state, RunState::Cancelled);
+        manager.shutdown().await;
+    }
+    server.close().await;
+}
+
+#[tokio::test]
+async fn duration_stops_admission_and_drain_keeps_completed_responses() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let mut input = config(format!("{}/slow", server.url));
+    input.duration_ms = 20;
+    input.grace_ms = 200;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Completed);
+    assert_eq!(summary.metrics.counters.started, 1);
+    assert_eq!(summary.metrics.counters.successes, 1);
+    assert!(summary.drain_us >= 30_000);
+    assert!(summary.metrics.response_latency.min_us.unwrap() >= 60_000);
+    assert_eq!(target.requests.load(Ordering::SeqCst), 1);
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn validation_confirmation_and_authorization_never_send_traffic() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let base = config(format!("{}/private?token=secret", server.url));
+    let confirmation = RunManager::prepare(base.clone()).unwrap();
+    assert_eq!(confirmation.origin, server.url);
+    assert!(confirmation.warnings.is_empty());
+    assert_eq!(
+        manager.start(base.clone(), false).await.unwrap_err().code,
+        "AUTHORIZATION_REQUIRED"
+    );
+    let mut high = base.clone();
+    high.vus = 100;
+    assert_eq!(
+        RunManager::prepare(high).unwrap().warnings,
+        ["HIGH_VU_COUNT"]
+    );
+    let mut invalid = Vec::new();
+    for url in [
+        "file:///tmp/data",
+        "not a URL",
+        "https://user:secret@example.com/",
+        "https://example.com/#secret",
+    ] {
+        let mut input = base.clone();
+        input.url = url.into();
+        invalid.push((input, "INVALID_RUN_CONFIG"));
+    }
+    for vus in [0, 257] {
+        let mut input = base.clone();
+        input.vus = vus;
+        invalid.push((input, "VU_BUDGET_EXCEEDED"));
+    }
+    for timeout_ms in [0, 3_600_001] {
+        let mut input = base.clone();
+        input.timeout_ms = timeout_ms;
+        invalid.push((input, "INVALID_RUN_CONFIG"));
+    }
+    for (name, value) in [
+        ("bad header", "secret"),
+        ("x-test", "secret\r\ninjected: yes"),
+        ("host", "secret"),
+        ("content-length", "999"),
+        ("transfer-encoding", "chunked"),
+    ] {
+        let mut input = base.clone();
+        input.headers.push(NameValue {
+            name: name.into(),
+            value: value.into(),
+        });
+        invalid.push((input, "INVALID_RUN_CONFIG"));
+    }
+    let mut input = base.clone();
+    input.duration_ms = 0;
+    invalid.push((input, "INVALID_RUN_CONFIG"));
+    let mut input = base.clone();
+    input.budget.max_request_bytes = 1;
+    invalid.push((input, "REQUEST_BUDGET_EXCEEDED"));
+    let mut input = base.clone();
+    input.body = RequestBody::Text("secret".into());
+    invalid.push((input, "INVALID_RUN_CONFIG"));
+    let mut input = base.clone();
+    input.method = RequestMethod::POST;
+    input.body = RequestBody::Json("{secret".into());
+    invalid.push((input, "INVALID_RUN_CONFIG"));
+    for (input, code) in invalid {
+        let error = manager.start(input, true).await.unwrap_err();
+        assert_eq!(error.code, code);
+        assert!(!serde_json::to_string(&error).unwrap().contains("secret"));
+    }
+    assert!(manager.current().await.is_none());
+    assert_eq!(target.requests.load(Ordering::SeqCst), 0);
+    let mut oversized = base.clone();
+    oversized.vus = 10;
+    oversized.budget.max_request_bytes = 1_000;
+    oversized.method = RequestMethod::POST;
+    oversized.body = RequestBody::Text("a".repeat(100));
+    assert_eq!(
+        manager.start(oversized, true).await.unwrap_err().code,
+        "REQUEST_BUDGET_EXCEEDED"
+    );
+    let mut adjustable = base;
+    adjustable.vus = 257;
+    adjustable.budget.max_vus = 257;
+    assert_eq!(RunManager::prepare(adjustable).unwrap().vus, 257);
+    server.close().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn stop_before_supervisor_starts_sends_no_requests() {
+    let manager = RunManager::default();
+    let accepted = manager
+        .start(config("http://127.0.0.1:1/".into()), true)
+        .await
+        .unwrap();
+    manager.stop(&accepted.run_id).await.unwrap();
+    manager.shutdown().await;
+    let summary = manager.current().await.unwrap();
+    assert_eq!(summary.state, RunState::Cancelled);
+    assert_eq!(summary.metrics.counters.started, 0);
+    reconcile(&summary);
+}
+
+#[tokio::test]
+async fn body_timeout_includes_reading_and_preserves_encoded_partial_bytes() {
+    let server = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nabc", true).await;
+    let manager = RunManager::default();
+    let mut input = config(server.url.clone());
+    input.timeout_ms = 20;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.timeouts > 0);
+    assert_eq!(summary.metrics.counters.responses, 0);
+    assert_eq!(
+        summary.metrics.counters.response_body_bytes,
+        summary.metrics.counters.timeouts * 3
+    );
+    server.close().await;
+
+    let encoded = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Length: 3\r\nConnection: close\r\n\r\nxyz", false).await;
+    manager
+        .start(config(encoded.url.clone()), true)
+        .await
+        .unwrap();
+    let summary = terminal(&manager).await;
+    assert!(summary.metrics.counters.successes > 0);
+    assert_eq!(summary.metrics.counters.transport_failures, 0);
+    assert_eq!(
+        summary.metrics.counters.response_body_bytes,
+        summary.metrics.counters.responses * 3
+    );
+    manager.shutdown().await;
+    encoded.close().await;
+}
+
+#[tokio::test]
+async fn pacing_does_not_queue_iterations_and_stop_can_drain_successfully() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let mut input = config(server.url.clone());
+    input.pacing_ms = 1_000;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.metrics.counters.started, 1);
+    assert_eq!(target.requests.load(Ordering::SeqCst), 1);
+
+    let mut input = config(format!("{}/slow", server.url));
+    input.duration_ms = 10_000;
+    input.grace_ms = 200;
+    let accepted = manager.start(input, true).await.unwrap();
+    timeout(Duration::from_secs(1), async {
+        while target.requests.load(Ordering::SeqCst) != 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    manager.stop(&accepted.run_id).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Cancelled);
+    assert_eq!(summary.metrics.counters.started, 1);
+    assert_eq!(summary.metrics.counters.successes, 1);
+    assert_eq!(summary.metrics.counters.cancelled, 0);
+    assert_eq!(target.requests.load(Ordering::SeqCst), 2);
+    manager.shutdown().await;
+    server.close().await;
+}
