@@ -1,13 +1,31 @@
+<script setup lang="ts">
+  const { $runs } = useNuxtApp();
+  const { snapshot } = $runs;
+</script>
+
 <template>
   <div>
     <ShellPageHeading
       title="Results"
-      description="Understand response times, throughput, and errors from your load tests."
+      description="Inspect the current run and its final measurements."
     />
 
+    <template v-if="snapshot">
+      <RunMonitor />
+      <RunSummary />
+    </template>
+
     <ShellEmptyState
+      v-else
       title="No results yet"
-      description="Execution summaries will appear here once load testing is implemented. Saved history will follow in a later milestone."
-    />
+      description="Configure and run a request in Tests. The latest summary remains available until the next run or app exit."
+    >
+      <Button
+        variant="outline"
+        as-child
+      >
+        <NuxtLink to="/tests">Configure a test</NuxtLink>
+      </Button>
+    </ShellEmptyState>
   </div>
 </template>
