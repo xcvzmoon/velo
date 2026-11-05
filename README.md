@@ -2,7 +2,7 @@
 
 Velo is a local desktop API load-testing studio built with Tauri 2, Nuxt 4, Vue 3, and an independent Rust engine crate.
 
-Configure GET/POST requests, run a constant-VU workload, monitor live aggregate charts, stop execution, and inspect the final summary. Runs survive navigation. The latest summary stays in memory until the next run or application exit; saved history and persistence are not available yet.
+Configure GET/POST requests, run a constant or staged VU workload, monitor live aggregate charts, stop execution, and inspect the final summary. Runs survive navigation. The latest summary stays in memory until the next run or application exit; saved history and persistence are not available yet.
 
 ## Install and develop
 
@@ -31,13 +31,19 @@ Rust owns the serialized contracts. The desktop adapter delegates execution vali
 
 The frontend uses Composition API, TypeScript, Tailwind 4, and the existing shadcn-vue/Reka UI components. It does not introduce a second component library. The diagnostic sends no HTTP traffic and stores no credentials.
 
-## Constant-VU engine
+## Virtual-user engine
 
 The independent engine validates GET/POST requests, custom headers, query pairs, and optional text/JSON POST bodies. Each VU executes sequential requests through a shared keep-alive pool. Timeout defaults to 30 seconds, pacing to zero, and drain grace to five seconds. Redirects, automatic retries, proxies, cookies, and automatic response decompression are disabled. TLS uses system certificate validation.
 
 Native commands are `prepare_run`, `start_run`, `stop_run`, and `current_run`. Prepare returns a safe target origin, requested workload, explicit budgets, and high-load warning codes without HTTP traffic. Start requires `authorized: true`, returns a run ID immediately, and rejects overlapping runs. Stop requires that ID and closes admission before drain. Current returns `null` before the first run, then the latest current/final summary. A new accepted run replaces the previous summary. The editor prepares a safe workload confirmation before starting. Application exit asks for confirmation during an active run, blocks new starts, and awaits cleanup before closing.
 
-The default budgets allow 256 worker tasks and 8 MiB of request data across the normalized template and VU clones. Request-body sharing is conservatively budgeted as a copy per VU. Both budgets are adjustable; exceeding either rejects the run before worker creation. A warning applies at 100 VUs. These defaults are allocation safeguards, not capacity claims or a process-wide memory limit. Transport, TLS, runtime, and allocator overhead consume additional memory.
+Workloads use a tagged `workload` configuration. Constant workloads contain `kind: 'constant'`, `vus`, and `duration_ms`. Ramping workloads contain `kind: 'ramping'`, `start_vus`, and ordered `stages` with `duration_ms` and `target_vus`. Each stage duration is positive; ramp counts may be zero. Total scheduling duration must fit 4,294,967,295 milliseconds.
+
+Stages interpolate whole VUs from the preceding count toward the target using monotonic deadlines. Counts round toward the starting count until the next whole-VU transition; stage endpoints are exact. A repeated target holds that level. Runtime scheduling can delay transitions; missed transitions are reconciled to the current desired count without replaying them. Zero-VU stages keep the schedule alive without sending requests.
+
+Ramp-down retires users after their current response finishes. Retirement interrupts pacing and prevents another request, without cancelling the response. Retiring workers occupy slots until joined, so a later ramp-up may wait for slow retirees. Desired, actual, and retiring VUs are reported separately. Actual VUs never exceed the workload's peak allocation. Stop and duration expiry still apply the configured drain grace, then abort and join remaining work.
+
+The default budgets allow 256 worker tasks and 8 MiB of request data across the normalized template and VU clones. Request-body sharing is conservatively budgeted as a copy per VU. Stage configuration and the compiled schedule also count against the byte budget. Both budgets are adjustable; exceeding either rejects the run before worker creation. A warning applies at 100 VUs. These defaults are allocation safeguards, not capacity claims or a process-wide memory limit. Transport, TLS, runtime, and allocator overhead consume additional memory.
 
 Responses are streamed and discarded. Body-byte totals count encoded application bytes actually consumed, including partial bodies from failures and cancellations. They exclude headers, TLS, retransmissions, and unread payloads. With redirects disabled, each iteration has one logical request. Final HTTP status 200–399 succeeds only after the body is fully consumed. Status failures, transport failures, timeouts, and cancellations remain separate.
 
@@ -50,12 +56,12 @@ Local-server tests cover construction, connection reuse, streaming, encoded and 
 ## Run and monitor
 
 1. Start a local target, such as `python3 -m http.server 8080 --bind 127.0.0.1` in a directory containing only test content.
-2. Open Tests. Enter the target URL, method, optional headers/query pairs, and POST body. Set VUs, scheduling duration, timeout, pacing, grace, and local resource budgets.
+2. Open Tests. Enter the target URL, method, optional headers/query pairs, and POST body. Choose constant VUs and duration, or ramping VUs with a starting count and ordered duration/target stages. Set timeout, pacing, grace, and local resource budgets.
 3. Select Review run. Check the target origin, load, budgets, and high-load warnings, then acknowledge authorization to start.
-4. Monitor interval request rate, response p95, HTTP failure rate, and active VUs in Tests, Dashboard, or Results. Stop closes admission and drains requests before publishing partial results.
+4. Monitor interval request rate, response p95, HTTP failure rate, and desired/actual VUs in Tests, Dashboard, or Results. Stop closes admission and drains requests before publishing partial results.
 5. Open Results for the final counters, duration breakdown, throughput, failure fraction, and separate response/transport/timeout distributions.
 
-Aggregate `run-update` events carry a run ID, decimal sequence, monotonic interval duration, cumulative state, interval outcome counts, and interval response histogram. `start_run` accepts optional `updateIntervalMs` (250–10,000 ms; default 1,000). The UI offers 500 ms, 1 s, and 2 s. One native publisher owns each run; missed timer ticks do not produce catch-up bursts. Emission failures do not fail HTTP execution.
+Aggregate `run-update` events carry a run ID, decimal sequence, monotonic interval duration, cumulative state, interval outcome counts, desired/actual/retiring VUs, and interval response histogram. `start_run` accepts optional `updateIntervalMs` (250–10,000 ms; default 1,000). The UI offers 500 ms, 1 s, and 2 s. One native publisher owns each run; missed timer ticks do not produce catch-up bursts. Emission failures do not fail HTTP execution.
 
 An application-scoped subscription preserves monitoring across navigation. Recovery reads run every two seconds to restore cumulative totals and final state after missed events. Charts retain at most 600 points, show gaps for missing intervals, and do not reconstruct lost percentiles. Empty response populations have no latency value. Charts and resize observers are destroyed on route teardown; the event listener is removed on application teardown.
 
