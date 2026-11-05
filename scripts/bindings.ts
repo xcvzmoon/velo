@@ -2,9 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import process from 'node:process';
 
-const output = execFileSync('cargo', ['run', '-q', '-p', 'velo', '--bin', 'export-bindings'], {
-  encoding: 'utf8',
-});
+const output = execFileSync(
+  'cargo',
+  ['run', '--locked', '-q', '-p', 'velo-contracts', '--example', 'export-bindings'],
+  {
+    encoding: 'utf8',
+  },
+);
 
 const formatted = execFileSync(
   'pnpm',

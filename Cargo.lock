@@ -4325,6 +4325,16 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "velo-contracts",
+ "velo-engine",
+]
+
+[[package]]
+name = "velo-contracts"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.21",
  "ts-rs",
  "velo-engine",
 ]

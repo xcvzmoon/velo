@@ -1,6 +1,33 @@
-export type DiagnosticInput = { label: string };
-export type DiagnosticReport = { engine: string; version: string };
-export type CommandError = { code: string; message: string; field: string | null };
+export type DiagnosticInput = {
+  /**
+   * Label containing 1 to 64 characters after trimming whitespace.
+   */
+  label: string;
+};
+export type DiagnosticReport = {
+  /**
+   * Name of the engine handling the diagnostic.
+   */
+  engine: string;
+  /**
+   * Engine package version.
+   */
+  version: string;
+};
+export type CommandError = {
+  /**
+   * Stable code identifying the failure, such as `INVALID_DIAGNOSTIC_LABEL`.
+   */
+  code: string;
+  /**
+   * Message safe to display to the user.
+   */
+  message: string;
+  /**
+   * Input field associated with the failure, or `None` for command failures.
+   */
+  field: string | null;
+};
 export type NameValue = {
   /**
    * Header or query parameter name.

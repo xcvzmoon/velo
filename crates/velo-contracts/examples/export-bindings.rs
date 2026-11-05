@@ -1,17 +1,12 @@
-#[allow(
-    dead_code,
-    reason = "Binding exporter shares DTO definitions with the command module"
-)]
-#[path = "../diagnostic.rs"]
-mod diagnostic;
 use ts_rs::TS;
+use velo_contracts::{CommandError, DiagnosticInput, DiagnosticReport};
 
 fn main() {
     println!(
         "export {};\nexport {};\nexport {};",
-        diagnostic::DiagnosticInput::decl(&ts_rs::Config::default()),
-        diagnostic::DiagnosticReport::decl(&ts_rs::Config::default()),
-        diagnostic::CommandError::decl(&ts_rs::Config::default())
+        DiagnosticInput::decl(&ts_rs::Config::default()),
+        DiagnosticReport::decl(&ts_rs::Config::default()),
+        CommandError::decl(&ts_rs::Config::default())
     );
     let config = ts_rs::Config::default();
     println!("export {};", velo_engine::NameValue::decl(&config));

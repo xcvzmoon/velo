@@ -1,24 +1,4 @@
-use serde::{Deserialize, Serialize};
-use ts_rs::TS;
-
-#[derive(Deserialize, Serialize, TS)]
-pub(crate) struct DiagnosticInput {
-    pub label: String,
-}
-
-#[derive(Debug, Serialize, TS)]
-pub(crate) struct DiagnosticReport {
-    pub engine: String,
-    pub version: String,
-}
-
-#[derive(Debug, Serialize, TS, thiserror::Error)]
-#[error("{message}")]
-pub(crate) struct CommandError {
-    pub code: String,
-    pub message: String,
-    pub field: Option<String>,
-}
+use velo_contracts::{CommandError, DiagnosticInput, DiagnosticReport};
 
 #[tauri::command]
 pub(crate) fn diagnose(input: DiagnosticInput) -> Result<DiagnosticReport, CommandError> {
