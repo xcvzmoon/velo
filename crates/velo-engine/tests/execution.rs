@@ -1177,3 +1177,37 @@ async fn final_thresholds_use_terminal_populations_without_changing_http_outcome
     manager.shutdown().await;
     server.close().await;
 }
+
+#[tokio::test]
+async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_target() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    for method in [
+        RequestMethod::PUT,
+        RequestMethod::PATCH,
+        RequestMethod::DELETE,
+        RequestMethod::HEAD,
+        RequestMethod::OPTIONS,
+    ] {
+        let mut input = config(format!("{}/echo", server.url));
+        input.method = method;
+        input.body = if matches!(method, RequestMethod::HEAD) {
+            RequestBody::None
+        } else {
+            RequestBody::Text("payload".into())
+        };
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert!(summary.metrics.counters.successes > 0);
+        let received = target.received.lock().await.clone().unwrap();
+        assert_eq!(received.method, format!("{method:?}"));
+        if matches!(method, RequestMethod::HEAD) {
+            assert!(received.body.is_empty());
+            assert_eq!(summary.metrics.counters.response_body_bytes, 0);
+        } else {
+            assert_eq!(received.body, b"payload");
+        }
+    }
+    manager.shutdown().await;
+    server.close().await;
+}

@@ -38,7 +38,7 @@ export type NameValue = {
    */
   value: string;
 };
-export type RequestMethod = 'GET' | 'POST';
+export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 export type RequestBody =
   | { kind: 'none' }
   | { kind: 'text'; value: string }
@@ -139,7 +139,7 @@ export type RunConfig = {
    */
   url: string;
   /**
-   * GET or POST.
+   * Logical HTTP method. GET and HEAD reject request bodies.
    */
   method: RequestMethod;
   /**
@@ -151,7 +151,7 @@ export type RunConfig = {
    */
   query: NameValue[];
   /**
-   * Optional POST body.
+   * Optional body for methods other than GET and HEAD.
    */
   body: RequestBody;
   /**

@@ -38,6 +38,16 @@ pub enum RequestMethod {
     GET,
     /// Submit an optional text or JSON body.
     POST,
+    /// Replace a resource with an optional body.
+    PUT,
+    /// Modify a resource with an optional body.
+    PATCH,
+    /// Delete a resource with an optional body.
+    DELETE,
+    /// Fetch headers without a request or response body.
+    HEAD,
+    /// Query supported communication options, with an optional body.
+    OPTIONS,
 }
 
 /// Request payload. JSON is validated before execution and sent unchanged.
@@ -106,7 +116,7 @@ impl Default for ResourceBudget {
 pub struct RunConfig {
     /// Absolute HTTP(S) URL without embedded credentials or a fragment.
     pub url: String,
-    /// GET or POST.
+    /// Logical HTTP method. GET and HEAD reject request bodies.
     pub method: RequestMethod,
     /// Custom headers; Host, Content-Length, and Transfer-Encoding are reserved.
     #[ts(type = "NameValue[]")]
@@ -114,7 +124,7 @@ pub struct RunConfig {
     /// Additional query pairs appended to the URL, including duplicate names.
     #[ts(type = "NameValue[]")]
     pub query: Vec<NameValue>,
-    /// Optional POST body.
+    /// Optional body for methods other than GET and HEAD.
     pub body: RequestBody,
     /// Constant, staged, or arrival schedule, validated before worker allocation.
     pub workload: Workload,
@@ -310,9 +320,17 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let method = match config.method {
         RequestMethod::GET => Method::GET,
         RequestMethod::POST => Method::POST,
+        RequestMethod::PUT => Method::PUT,
+        RequestMethod::PATCH => Method::PATCH,
+        RequestMethod::DELETE => Method::DELETE,
+        RequestMethod::HEAD => Method::HEAD,
+        RequestMethod::OPTIONS => Method::OPTIONS,
     };
-    if method == Method::GET && !matches!(config.body, RequestBody::None) {
-        return Err(invalid("GET requests cannot contain a body.", "body"));
+    if matches!(method, Method::GET | Method::HEAD) && !matches!(config.body, RequestBody::None) {
+        return Err(invalid(
+            "GET and HEAD requests cannot contain a body.",
+            "body",
+        ));
     }
     let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())

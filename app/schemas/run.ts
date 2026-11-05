@@ -62,7 +62,7 @@ const requestFieldsSchema = v.object({
       }
     }, 'Use HTTP(S) without URL credentials or a fragment.'),
   ),
-  method: v.picklist(['GET', 'POST']),
+  method: v.picklist(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']),
   thresholds: v.array(thresholdSchema),
   headers: v.array(
     v.object({
@@ -152,8 +152,8 @@ export const requestEditorSchema = v.pipe(
   requestEditorFieldsSchema,
   v.forward(
     v.check(
-      ({ method, bodyKind }) => method !== 'GET' || bodyKind === 'none',
-      'GET requests cannot contain a body.',
+      ({ method, bodyKind }) => !['GET', 'HEAD'].includes(method) || bodyKind === 'none',
+      'GET and HEAD requests cannot contain a body.',
     ),
     ['bodyKind'],
   ),

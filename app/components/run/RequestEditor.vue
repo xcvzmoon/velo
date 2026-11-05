@@ -142,6 +142,11 @@
                 <SelectContent>
                   <SelectItem value="GET">GET</SelectItem>
                   <SelectItem value="POST">POST</SelectItem>
+                  <SelectItem value="PUT">PUT</SelectItem>
+                  <SelectItem value="PATCH">PATCH</SelectItem>
+                  <SelectItem value="DELETE">DELETE</SelectItem>
+                  <SelectItem value="HEAD">HEAD</SelectItem>
+                  <SelectItem value="OPTIONS">OPTIONS</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -343,7 +348,7 @@
             :path="['bodyValue']"
           >
             <div class="space-y-2">
-              <Label for="request-body">Request body (POST only)</Label>
+              <Label for="request-body">Request body</Label>
 
               <Textarea
                 v-model="field.input"
