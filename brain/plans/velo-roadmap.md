@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Approved through the project interview on 2026-11-05. Phases 1 and 2 are implemented and verified locally on macOS; milestones 3–8 remain unstarted.
+- Approved through the project interview on 2026-11-05. Phases 1–3 are implemented and verified locally on macOS; milestones 4–8 remain unstarted.
 - Build a local, offline-capable desktop HTTP load-testing studio for macOS, Windows, and Linux.
 - Follow the repository's [AGENTS.md](../../AGENTS.md): small correct changes, explicit boundaries, reliability before abstractions, and working increments.
 - Preserve Nuxt 4, Vue Composition API, TypeScript, Tailwind 4, shadcn-vue/Reka UI, Valibot, theme tokens, and the existing native titlebar. Nuxt UI is superseded by the existing component stack.
@@ -153,6 +153,8 @@ These eight milestones replace the original five broad phases. Each milestone de
 - No advanced workloads, thresholds, saved configurations, or every-request persistence.
 
 ### 3. Live monitoring and first usable release
+
+- Implemented. Detailed scope, decisions, and local verification evidence: [[plans/12-live-monitoring]].
 
 - Add the request editor, execution controls, aggregated events, uPlot charts, progress, error display, and final results view.
 - Charts show interval request rate, response latency, HTTP failure rate, and VUs; cards show totals, duration, and state. Update at one second by default.
