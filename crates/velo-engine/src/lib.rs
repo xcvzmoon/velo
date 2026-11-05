@@ -1,4 +1,14 @@
-//! Desktop-independent entry point for Velo's native engine.
+//! Desktop-independent HTTP load engine with bounded constant-VU execution.
+
+mod config;
+mod metrics;
+mod runner;
+
+pub use config::{
+    NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
+};
+pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
+pub use runner::{RunManager, RunSnapshot, RunState};
 
 /// Returns the engine's build identity without executing network requests.
 ///

@@ -1,0 +1,389 @@
+use std::time::Duration;
+
+use reqwest::{Client, Method, Url, header};
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+/// Named request value. Duplicate query parameters and headers retain their order.
+///
+/// # Examples
+/// ```
+/// use velo_engine::NameValue;
+/// let header = NameValue { name: "accept".into(), value: "application/json".into() };
+/// assert_eq!(header.name, "accept");
+/// ```
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct NameValue {
+    /// Header or query parameter name.
+    pub name: String,
+    /// Header or query parameter value; never included in run reports.
+    pub value: String,
+}
+
+/// Supported logical request methods.
+///
+/// # Examples
+/// ```
+/// let method: velo_engine::RequestMethod = serde_json::from_str("\"POST\"")?;
+/// assert!(matches!(method, velo_engine::RequestMethod::POST));
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, TS)]
+pub enum RequestMethod {
+    /// Fetch a response without a request body.
+    #[default]
+    GET,
+    /// Submit an optional text or JSON body.
+    POST,
+}
+
+/// Request payload. JSON is validated before execution and sent unchanged.
+///
+/// # Examples
+/// ```
+/// let body = velo_engine::RequestBody::Json(r#"{"enabled":true}"#.into());
+/// let encoded = serde_json::to_value(body)?;
+/// assert_eq!(encoded["kind"], "json");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum RequestBody {
+    /// No payload.
+    #[default]
+    None,
+    /// UTF-8 text, with a default text/plain content type.
+    Text(String),
+    /// UTF-8 JSON, with a default application/json content type.
+    Json(String),
+}
+
+/// Explicit local allocation budgets, adjustable before starting a run.
+///
+/// Defaults allow 256 workers and an 8-MiB request-data budget across the
+/// template and VU request clones. Shared bodies are conservatively counted per VU. They
+/// are allocation safeguards, not a measured capacity claim. HTTP transport and
+/// runtime overhead also consume memory outside these request-data budgets.
+///
+/// # Examples
+/// ```
+/// let budget = velo_engine::ResourceBudget { max_vus: 500, ..Default::default() };
+/// assert_eq!(budget.max_request_bytes, 8 * 1024 * 1024);
+/// ```
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceBudget {
+    /// Maximum number of simultaneously owned VU tasks; must be positive.
+    pub max_vus: u32,
+    /// Maximum normalized request bytes across the template and VU clones,
+    /// including per-pair overhead. This is not a process-wide memory limit.
+    pub max_request_bytes: u32,
+}
+
+impl Default for ResourceBudget {
+    fn default() -> Self {
+        Self {
+            max_vus: 256,
+            max_request_bytes: 8 * 1024 * 1024,
+        }
+    }
+}
+
+/// Untrusted constant-VU input, validated once by [`crate::RunManager::prepare`]
+/// or [`crate::RunManager::start`]. Durations are integer milliseconds.
+///
+/// # Examples
+/// ```
+/// use velo_engine::RunConfig;
+/// let config = RunConfig { url: "http://127.0.0.1:8080/health".into(), ..RunConfig::default() };
+/// assert_eq!(config.timeout_ms, 30_000);
+/// ```
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RunConfig {
+    /// Absolute HTTP(S) URL without embedded credentials or a fragment.
+    pub url: String,
+    /// GET or POST.
+    pub method: RequestMethod,
+    /// Custom headers; Host, Content-Length, and Transfer-Encoding are reserved.
+    #[ts(type = "NameValue[]")]
+    pub headers: Vec<NameValue>,
+    /// Additional query pairs appended to the URL, including duplicate names.
+    #[ts(type = "NameValue[]")]
+    pub query: Vec<NameValue>,
+    /// Optional POST body.
+    pub body: RequestBody,
+    /// Sequential workers sharing one connection pool; must be positive.
+    pub vus: u32,
+    /// Scheduling duration; must be positive.
+    pub duration_ms: u32,
+    /// Full response timeout, including streamed body; 1–3,600,000 ms.
+    pub timeout_ms: u32,
+    /// Delay after an iteration finishes, before another starts; zero by default.
+    pub pacing_ms: u32,
+    /// Maximum drain time after stop or duration expiry; zero aborts immediately.
+    pub grace_ms: u32,
+    /// Explicit task and retained request-data limits.
+    pub budget: ResourceBudget,
+}
+
+impl Default for RunConfig {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            method: RequestMethod::GET,
+            headers: Vec::new(),
+            query: Vec::new(),
+            body: RequestBody::None,
+            vus: 1,
+            duration_ms: 10_000,
+            timeout_ms: 30_000,
+            pacing_ms: 0,
+            grace_ms: 5_000,
+            budget: ResourceBudget::default(),
+        }
+    }
+}
+
+/// Safe, stable application failure. Input values and HTTP error details are omitted.
+///
+/// # Examples
+/// ```
+/// let error = velo_engine::RunManager::prepare(Default::default()).unwrap_err();
+/// assert_eq!(error.code, "INVALID_RUN_CONFIG");
+/// assert_eq!(error.field.as_deref(), Some("url"));
+/// ```
+#[derive(Clone, Debug, Deserialize, Serialize, TS, thiserror::Error)]
+#[error("{code}: {message}")]
+pub struct RunError {
+    /// Stable machine-readable code.
+    pub code: String,
+    /// Safe explanation suitable for display.
+    pub message: String,
+    /// Invalid configuration field, when applicable.
+    pub field: Option<String>,
+}
+
+impl RunError {
+    pub(crate) fn new(code: &str, message: &str, field: Option<&str>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+            field: field.map(str::to_owned),
+        }
+    }
+}
+
+/// Validated confirmation details; preparing a run sends no HTTP traffic.
+///
+/// # Examples
+/// ```
+/// let config = velo_engine::RunConfig {
+///     url: "https://example.com/private?token=secret".into(),
+///     ..Default::default()
+/// };
+/// let confirmation = velo_engine::RunManager::prepare(config)?;
+/// assert_eq!(confirmation.origin, "https://example.com");
+/// # Ok::<(), velo_engine::RunError>(())
+/// ```
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct RunConfirmation {
+    /// Target scheme, host, and port; excludes path, credentials, and query.
+    pub origin: String,
+    /// Requested workers.
+    pub vus: u32,
+    /// Requested scheduling duration in milliseconds.
+    pub duration_ms: u32,
+    /// Explicit allocation budgets.
+    pub budget: ResourceBudget,
+    /// Stable warning codes. HIGH_VU_COUNT applies at 100 or more VUs.
+    #[ts(type = "string[]")]
+    pub warnings: Vec<String>,
+}
+
+pub(crate) struct ValidatedConfig {
+    pub confirmation: RunConfirmation,
+    pub request: reqwest::Request,
+    pub client: Client,
+    pub duration: Duration,
+    pub pacing: Duration,
+    pub grace: Duration,
+}
+
+pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
+    let invalid = |message, field| RunError::new("INVALID_RUN_CONFIG", message, Some(field));
+    if config.vus == 0 || config.vus > config.budget.max_vus {
+        return Err(RunError::new(
+            "VU_BUDGET_EXCEEDED",
+            "Choose a positive VU count within the configured worker budget.",
+            Some("vus"),
+        ));
+    }
+    if config.duration_ms == 0 {
+        return Err(invalid(
+            "Scheduling duration must be positive.",
+            "duration_ms",
+        ));
+    }
+    if !(1..=3_600_000).contains(&config.timeout_ms) {
+        return Err(invalid(
+            "Timeout must be between 1 ms and one hour.",
+            "timeout_ms",
+        ));
+    }
+
+    let mut size = config.url.len();
+    for pair in config.headers.iter().chain(&config.query) {
+        size = size
+            .saturating_add(std::mem::size_of::<NameValue>())
+            .saturating_add(pair.name.len())
+            .saturating_add(pair.value.len());
+    }
+    let body_size = match &config.body {
+        RequestBody::None => 0,
+        RequestBody::Text(value) | RequestBody::Json(value) => value.len(),
+    };
+    size = size.saturating_add(body_size);
+    if size > config.budget.max_request_bytes as usize || config.budget.max_request_bytes == 0 {
+        return Err(RunError::new(
+            "REQUEST_BUDGET_EXCEEDED",
+            "Request configuration exceeds its byte budget.",
+            Some("budget.max_request_bytes"),
+        ));
+    }
+
+    let mut url =
+        Url::parse(&config.url).map_err(|_| invalid("Enter an absolute HTTP(S) URL.", "url"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err(invalid("Enter an absolute HTTP(S) URL.", "url"));
+    }
+    if !url.username().is_empty() || url.password().is_some() || url.fragment().is_some() {
+        return Err(invalid(
+            "URL credentials and fragments are not supported.",
+            "url",
+        ));
+    }
+    let origin = url.origin().ascii_serialization();
+    if !config.query.is_empty() {
+        let mut query = url.query_pairs_mut();
+        for NameValue { name, value } in &config.query {
+            query.append_pair(name, value);
+        }
+    }
+    let mut headers = header::HeaderMap::new();
+    for NameValue { name, value } in &config.headers {
+        let name = header::HeaderName::from_bytes(name.as_bytes())
+            .map_err(|_| invalid("Invalid HTTP header name.", "headers"))?;
+        if matches!(
+            name,
+            header::HOST | header::CONTENT_LENGTH | header::TRANSFER_ENCODING
+        ) {
+            return Err(invalid(
+                "Host and body framing headers are managed by the client.",
+                "headers",
+            ));
+        }
+        let value = header::HeaderValue::from_str(value)
+            .map_err(|_| invalid("Invalid HTTP header value.", "headers"))?;
+        headers.try_append(name, value).map_err(|_| {
+            invalid(
+                "Too many HTTP headers for the transport representation.",
+                "headers",
+            )
+        })?;
+    }
+    let method = match config.method {
+        RequestMethod::GET => Method::GET,
+        RequestMethod::POST => Method::POST,
+    };
+    if method == Method::GET && !matches!(config.body, RequestBody::None) {
+        return Err(invalid("GET requests cannot contain a body.", "body"));
+    }
+    let client = Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .retry(reqwest::retry::never())
+        .no_proxy()
+        .no_gzip()
+        .no_brotli()
+        .no_deflate()
+        .no_zstd()
+        .pool_max_idle_per_host(config.vus as usize)
+        .timeout(Duration::from_millis(config.timeout_ms.into()))
+        .build()
+        .map_err(|_| {
+            RunError::new(
+                "HTTP_CLIENT_INIT_FAILED",
+                "HTTP client initialization failed.",
+                None,
+            )
+        })?;
+    if !headers.contains_key(header::CONTENT_TYPE) {
+        let content_type = match &config.body {
+            RequestBody::Text(_) => Some("text/plain; charset=utf-8"),
+            RequestBody::Json(_) => Some("application/json"),
+            RequestBody::None => None,
+        };
+        if let Some(content_type) = content_type {
+            headers
+                .try_insert(
+                    header::CONTENT_TYPE,
+                    header::HeaderValue::from_static(content_type),
+                )
+                .map_err(|_| {
+                    invalid(
+                        "Too many HTTP headers for the transport representation.",
+                        "headers",
+                    )
+                })?;
+        }
+    }
+    let mut request = client.request(method, url).headers(headers);
+    match config.body {
+        RequestBody::None => {}
+        RequestBody::Text(value) => {
+            request = request.body(value);
+        }
+        RequestBody::Json(value) => {
+            serde_json::from_str::<serde_json::Value>(&value)
+                .map_err(|_| invalid("Enter a valid JSON body.", "body"))?;
+            request = request.body(value);
+        }
+    }
+    let request = request
+        .build()
+        .map_err(|_| invalid("Invalid HTTP request settings.", "headers"))?;
+    let mut request_bytes = request.url().as_str().len().saturating_add(body_size);
+    for (name, value) in request.headers() {
+        request_bytes = request_bytes
+            .saturating_add(std::mem::size_of::<NameValue>())
+            .saturating_add(name.as_str().len())
+            .saturating_add(value.len());
+    }
+    let retained_bytes = request_bytes.saturating_mul(config.vus as usize + 1);
+    if retained_bytes > config.budget.max_request_bytes as usize {
+        return Err(RunError::new(
+            "REQUEST_BUDGET_EXCEEDED",
+            "Normalized request data and VU clones exceed the byte budget.",
+            Some("budget.max_request_bytes"),
+        ));
+    }
+    Ok(ValidatedConfig {
+        confirmation: RunConfirmation {
+            origin,
+            vus: config.vus,
+            duration_ms: config.duration_ms,
+            budget: config.budget,
+            warnings: if config.vus >= 100 {
+                vec!["HIGH_VU_COUNT".into()]
+            } else {
+                Vec::new()
+            },
+        },
+        request,
+        client,
+        duration: Duration::from_millis(config.duration_ms.into()),
+        pacing: Duration::from_millis(config.pacing_ms.into()),
+        grace: Duration::from_millis(config.grace_ms.into()),
+    })
+}
