@@ -393,3 +393,200 @@ describe('final thresholds', () => {
     ).toBe(false);
   });
 });
+
+describe('HTTP request options', () => {
+  it.each(['PUT', 'PATCH', 'DELETE', 'OPTIONS'])('sends ordered form fields with %s', (method) => {
+    const pairs = [
+      {
+        name: 'tag',
+        value: 'first',
+      },
+      {
+        name: 'tag',
+        value: 'second',
+      },
+    ];
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+
+      method,
+
+      bodyKind: 'form',
+
+      formPairs: pairs,
+
+      authKind: 'bearer',
+
+      authToken: 'private-token',
+
+      authPassword: 'unused',
+
+      protocol: 'http2',
+
+      max_redirects: '2',
+    });
+    expect(result.body).toEqual({
+      kind: 'form',
+      value: pairs,
+    });
+    expect(result.auth).toEqual({
+      kind: 'bearer',
+      token: 'private-token',
+    });
+    expect(result.protocol).toBe('http2');
+    expect(result.max_redirects).toBe(2);
+    expect(result).not.toHaveProperty('authPassword');
+  });
+
+  it('constructs file and text parts without sending inactive fields', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+
+      bodyKind: 'multipart',
+
+      authKind: 'basic',
+
+      authUsername: 'user',
+
+      authPassword: 'private-password',
+
+      multipartParts: [
+        {
+          kind: 'text',
+          name: 'tag',
+          value: 'one',
+          path: '',
+          filename: '',
+          content_type: '',
+        },
+        {
+          kind: 'file',
+
+          name: 'upload',
+
+          value: 'unused',
+
+          path: '/tmp/upload.txt',
+
+          filename: 'public.txt',
+
+          content_type: 'text/plain',
+        },
+      ],
+    });
+    expect(result.body).toEqual({
+      kind: 'multipart',
+
+      value: [
+        {
+          kind: 'text',
+          name: 'tag',
+          value: 'one',
+        },
+        {
+          kind: 'file',
+
+          name: 'upload',
+
+          path: '/tmp/upload.txt',
+
+          filename: 'public.txt',
+
+          content_type: 'text/plain',
+        },
+      ],
+    });
+    expect(result.auth).toEqual({
+      kind: 'basic',
+      username: 'user',
+      password: 'private-password',
+    });
+  });
+
+  it.each([
+    { method: 'HEAD' },
+    {
+      authKind: 'bearer',
+      authToken: '',
+    },
+    {
+      authKind: 'bearer',
+      authToken: 'line\nbreak',
+    },
+    {
+      authKind: 'basic',
+      authUsername: 'user:name',
+    },
+    {
+      authKind: 'basic',
+      authPassword: 'line\rbreak',
+    },
+    {
+      authKind: 'bearer',
+
+      authToken: 'private-token',
+
+      headers: [
+        {
+          name: 'authorization',
+          value: 'conflict',
+        },
+      ],
+    },
+    { max_redirects: -1 },
+    { max_redirects: 4_294_967_296 },
+    { max_redirects: 1.5 },
+    { protocol: 'unsupported' },
+    {
+      bodyKind: 'multipart',
+
+      multipartParts: [
+        {
+          kind: 'file',
+
+          name: 'upload',
+
+          value: '',
+
+          path: '',
+
+          filename: 'upload.txt',
+
+          content_type: 'text/plain',
+        },
+      ],
+    },
+    {
+      bodyKind: 'multipart',
+      headers: [
+        {
+          name: 'Content-Type',
+          value: 'multipart/form-data',
+        },
+      ],
+    },
+  ])('rejects invalid settings %j', (change) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        ...change,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('allows HEAD without a body and discards inactive credentials', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+
+      method: 'HEAD',
+
+      bodyKind: 'none',
+
+      authToken: 'unused',
+
+      authPassword: 'unused',
+    });
+    expect(result.auth).toEqual({ kind: 'none' });
+    expect(result.body).toEqual({ kind: 'none' });
+  });
+});
