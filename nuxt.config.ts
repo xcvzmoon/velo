@@ -33,7 +33,14 @@ export default defineNuxtConfig({
       },
     },
     optimizeDeps: {
-      include: ['class-variance-authority', 'cn', 'reka-ui'],
+      include: [
+        '@formisch/vue',
+        '@tauri-apps/api/core',
+        'class-variance-authority',
+        'cn',
+        'reka-ui',
+        'valibot',
+      ],
     },
     plugins: [tailwindcss()],
   },
@@ -54,6 +61,12 @@ export default defineNuxtConfig({
   },
   dir: {
     modules: 'app/modules',
+  },
+  hooks: {
+    'prepare:types'({ nodeTsConfig }) {
+      nodeTsConfig.include ??= [];
+      nodeTsConfig.include.push('../scripts/**/*.ts', '../tests/**/*.ts');
+    },
   },
   ssr: false,
   ignore: ['**/src-tauri/**'],
