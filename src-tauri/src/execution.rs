@@ -238,6 +238,18 @@ mod tests {
         assert_eq!(confirmation["workload"]["stages"][0]["target_vus"], 2);
         assert_eq!(summary["desired_vus"], 0);
         assert_eq!(summary["retiring_vus"], 0);
+        let mut arrival = config.clone();
+        arrival.pacing_ms = 0;
+        arrival.workload = velo_engine::Workload::Arrival {
+            rate: 50,
+            capacity: 3,
+            duration_ms: 1_000,
+        };
+        let confirmation = invoke(&window, "prepare_run", json!({ "config": arrival })).unwrap();
+        assert_eq!(confirmation["vus"], 3);
+        assert_eq!(confirmation["workload"]["kind"], "arrival");
+        assert_eq!(confirmation["workload"]["rate"], 50);
+        assert_eq!(confirmation["workload"]["capacity"], 3);
         let mut sequence = 0_u64;
         loop {
             let update = received.recv_timeout(Duration::from_secs(2)).unwrap();

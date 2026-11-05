@@ -84,6 +84,8 @@ pub struct RunSnapshot {
     pub active_vus: u32,
     /// Maximum concurrently owned VU workers.
     pub max_vus: u32,
+    /// Arrival scheduling counters; zero for VU workloads. Drops exclude HTTP failures.
+    pub arrival: ArrivalSnapshot,
     /// Cumulative counters, rates, and separate duration populations.
     pub metrics: MetricsSnapshot,
     /// Stable internal failure code, without infrastructure or target details.
@@ -125,9 +127,40 @@ pub struct RunUpdate {
     pub response_latency: LatencySnapshot,
 }
 
+/// Arrival admission accounting, independent of HTTP request outcomes.
+///
+/// After cleanup, offered equals started requests plus both drop reasons. Counters
+/// are decimal strings on IPC. No pending iteration queue or per-slot history exists.
+///
+/// # Examples
+/// ```
+/// let scheduling = velo_engine::ArrivalSnapshot::default();
+/// assert_eq!(scheduling.offered, 0);
+/// ```
+#[derive(Clone, Debug, Default, Serialize, TS)]
+pub struct ArrivalSnapshot {
+    /// Deadlines reached while scheduling was open, including dropped iterations.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub offered: u64,
+    /// Current slots rejected because all concurrency capacity was owned.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub capacity_drops: u64,
+    /// Expired slots skipped after a delayed scheduler wake; never replayed.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub missed_deadlines: u64,
+    /// Maximum wake delay against the next unprocessed deadline, in microseconds.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub max_lateness_us: u64,
+}
+
 struct Progress {
     state: RunState,
     metrics: Metrics,
+    arrival: ArrivalSnapshot,
     sequence: u64,
     sampled_us: u64,
     started: Option<Instant>,
@@ -185,6 +218,7 @@ impl Run {
             active_vus: progress.active_vus,
             max_vus: progress.max_vus,
             metrics: progress.metrics.snapshot(elapsed),
+            arrival: progress.arrival.clone(),
             failure_code: progress.failure_code.clone(),
         }
     }
@@ -340,6 +374,7 @@ impl RunManager {
             progress: Mutex::new(Progress {
                 state: RunState::Starting,
                 metrics: Metrics::new(),
+                arrival: ArrivalSnapshot::default(),
                 sequence: 0,
                 sampled_us: 0,
                 started: None,
@@ -506,7 +541,14 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
     let mut workers = JoinSet::new();
     let mut controls: Vec<WorkerControl> = Vec::new();
     let mut failed = false;
-    loop {
+    let arrival_rate = match config.confirmation.workload {
+        crate::Workload::Arrival { rate, .. } => Some(rate),
+        _ => None,
+    };
+    if let Some(rate) = arrival_rate {
+        failed = schedule_arrivals(&run, &config, &mut workers, started, rate).await;
+    }
+    while arrival_rate.is_none() {
         let now = Instant::now();
         if run.stop.is_cancelled() || now >= deadline {
             break;
@@ -623,6 +665,122 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
     };
 }
 
+fn arrival_due(elapsed: Duration, rate: u32, duration: Duration) -> u64 {
+    let total = (duration.as_nanos() * u128::from(rate)).div_ceil(1_000_000_000);
+    let reached = elapsed.as_nanos() * u128::from(rate) / 1_000_000_000 + 1;
+    reached.min(total) as u64
+}
+
+fn arrival_offset(index: u64, rate: u32) -> Duration {
+    Duration::from_nanos((u128::from(index) * 1_000_000_000).div_ceil(u128::from(rate)) as u64)
+}
+
+async fn schedule_arrivals(
+    run: &Arc<Run>,
+    config: &Arc<ValidatedConfig>,
+    workers: &mut JoinSet<()>,
+    started: Instant,
+    rate: u32,
+) -> bool {
+    let deadline = started + config.duration;
+    let mut processed = 0;
+    loop {
+        while let Some(result) = workers.try_join_next() {
+            if result.is_err() {
+                return true;
+            }
+        }
+        let next = started + arrival_offset(processed, rate);
+        tokio::select! {
+            biased;
+            _ = run.stop.cancelled() => break,
+            _ = tokio::time::sleep_until(next.min(deadline)) => {},
+            result = workers.join_next(), if !workers.is_empty() => {
+                if result.is_some_and(|result| result.is_err()) {
+                    return true;
+                }
+                continue;
+            }
+        }
+        let mut progress = run.measured_lock();
+        let now = Instant::now();
+        let end = progress.scheduling_end.unwrap_or(now).min(deadline);
+        let due = arrival_due(
+            end.saturating_duration_since(started),
+            rate,
+            config.duration,
+        );
+        let count = due.saturating_sub(processed);
+        if count == 0 {
+            if progress.state != RunState::Running || now >= deadline {
+                break;
+            }
+            continue;
+        }
+        progress.arrival.offered += count;
+        progress.arrival.max_lateness_us = progress
+            .arrival
+            .max_lateness_us
+            .max(now.saturating_duration_since(next).as_micros() as u64);
+        processed = due;
+        if progress.state != RunState::Running || now >= deadline {
+            progress.arrival.missed_deadlines += count;
+            break;
+        }
+        progress.desired_vus = config.confirmation.vus;
+        progress.arrival.missed_deadlines += count - 1;
+        if workers.len() >= config.confirmation.vus as usize {
+            progress.arrival.capacity_drops += 1;
+            continue;
+        }
+        progress.metrics.admission();
+        progress.active_vus += 1;
+        progress.max_vus = progress.max_vus.max(progress.active_vus);
+        let worker = Worker {
+            run: run.clone(),
+            retire: CancellationToken::new(),
+            finished: CancellationToken::new(),
+        };
+        let attempt = Attempt {
+            run: run.clone(),
+            started: now,
+            bytes: 0,
+            outcome: Outcome::Cancelled,
+            elapsed: None,
+        };
+        workers.spawn(execute_arrival(worker, config.clone(), attempt));
+    }
+    let mut progress = run.lock();
+    let end = progress
+        .scheduling_end
+        .unwrap_or_else(Instant::now)
+        .min(deadline);
+    let due = arrival_due(
+        end.saturating_duration_since(started),
+        rate,
+        config.duration,
+    );
+    let remaining = due.saturating_sub(processed);
+    progress.arrival.offered += remaining;
+    progress.arrival.missed_deadlines += remaining;
+    false
+}
+
+async fn execute_arrival(_worker: Worker, config: Arc<ValidatedConfig>, mut attempt: Attempt) {
+    let request = config
+        .request
+        .try_clone()
+        .expect("validated buffered request is cloneable");
+    attempt.started = Instant::now();
+    let result = consume_response(&config.client, request, &mut attempt.bytes).await;
+    attempt.elapsed = Some(attempt.started.elapsed());
+    attempt.outcome = match result {
+        Ok(success) => Outcome::Response(success),
+        Err(error) if error.is_timeout() => Outcome::Timeout,
+        Err(_) => Outcome::Transport,
+    };
+}
+
 struct WorkerControl {
     id: tokio::task::Id,
     retire: CancellationToken,
@@ -727,6 +885,64 @@ async fn consume_response(
 mod tests {
     use super::*;
     use crate::{RampStage, Workload};
+
+    #[test]
+    fn arrival_deadlines_keep_fractional_rates_and_duration_endpoint_exact() {
+        let duration = Duration::from_secs(1);
+        assert_eq!(arrival_due(Duration::ZERO, 3, duration), 1);
+        assert_eq!(
+            arrival_due(Duration::from_nanos(333_333_333), 3, duration),
+            1
+        );
+        assert_eq!(
+            arrival_due(Duration::from_nanos(333_333_334), 3, duration),
+            2
+        );
+        assert_eq!(arrival_offset(1, 3), Duration::from_nanos(333_333_334));
+        assert_eq!(arrival_due(duration, 3, duration), 3);
+        assert_eq!(
+            arrival_due(Duration::from_millis(999), 1_000, duration),
+            1_000
+        );
+        assert_eq!(
+            arrival_due(duration, u32::MAX, duration),
+            u64::from(u32::MAX)
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn arrival_delayed_scheduler_skips_slots_without_replay() {
+        let manager = RunManager::default();
+        let input = RunConfig {
+            url: "http://127.0.0.1:1/".into(),
+            workload: Workload::Arrival {
+                rate: 100,
+                capacity: 4,
+                duration_ms: 1_000,
+            },
+            grace_ms: 0,
+            ..RunConfig::default()
+        };
+        manager.start(input, true).await.unwrap();
+        tokio::task::yield_now().await;
+        let before = manager.current().await.unwrap();
+        tokio::time::advance(Duration::from_millis(500)).await;
+        tokio::task::yield_now().await;
+        let delayed = manager.current().await.unwrap();
+        assert!(delayed.metrics.counters.started <= before.metrics.counters.started + 1);
+        assert!(delayed.arrival.missed_deadlines >= 49);
+        assert!(delayed.arrival.max_lateness_us >= 490_000);
+        manager.shutdown().await;
+        let summary = manager.current().await.unwrap();
+        assert_eq!(
+            summary.arrival.offered,
+            summary.metrics.counters.started
+                + summary.arrival.capacity_drops
+                + summary.arrival.missed_deadlines
+        );
+        assert_eq!(summary.active_vus, 0);
+        assert_eq!(summary.metrics.counters.in_flight, 0);
+    }
 
     #[tokio::test(start_paused = true)]
     async fn zero_worker_stages_keep_scheduling_until_completion() {

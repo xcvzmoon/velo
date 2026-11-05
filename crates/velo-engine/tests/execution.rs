@@ -1020,3 +1020,111 @@ async fn retirement_interrupts_pacing_without_another_iteration() {
     manager.shutdown().await;
     server.close().await;
 }
+
+#[tokio::test]
+async fn arrival_overload_bounds_tasks_and_reconciles_drops_without_http_failures() {
+    let server = Server::raw(b"", true).await;
+    let manager = RunManager::default();
+    let input = RunConfig {
+        workload: Workload::Arrival {
+            rate: 1_000,
+            capacity: 3,
+            duration_ms: 250,
+        },
+        pacing_ms: 0,
+        grace_ms: 0,
+        ..config(server.url.clone())
+    };
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Completed);
+    assert_eq!(summary.arrival.offered, 250);
+    assert_eq!(summary.metrics.counters.started, 3);
+    assert_eq!(summary.metrics.counters.cancelled, 3);
+    assert_eq!(summary.max_vus, 3);
+    assert!(summary.arrival.capacity_drops > 0);
+    assert_eq!(
+        summary.arrival.offered,
+        summary.metrics.counters.started
+            + summary.arrival.capacity_drops
+            + summary.arrival.missed_deadlines
+    );
+    assert_eq!(summary.metrics.http_failure_rate, None);
+    let wire = serde_json::to_value(&summary).unwrap();
+    assert_eq!(wire["arrival"]["offered"], "250");
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn arrival_fast_target_stop_and_repeated_runs_keep_accounting() {
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    let input = RunConfig {
+        workload: Workload::Arrival {
+            rate: 20,
+            capacity: 4,
+            duration_ms: 500,
+        },
+        pacing_ms: 0,
+        ..config(server.url.clone())
+    };
+    manager.start(input.clone(), true).await.unwrap();
+    let completed = terminal(&manager).await;
+    assert_eq!(completed.arrival.offered, 10);
+    assert!(completed.metrics.counters.successes >= 8);
+    assert_eq!(completed.arrival.capacity_drops, 0);
+    assert_eq!(
+        completed.arrival.offered,
+        completed.metrics.counters.started + completed.arrival.missed_deadlines
+    );
+    let started = manager.start(input, true).await.unwrap();
+    sleep(Duration::from_millis(125)).await;
+    manager.stop(&started.run_id).await.unwrap();
+    manager.shutdown().await;
+    let partial = manager.current().await.unwrap();
+    reconcile(&partial);
+    assert_eq!(partial.state, RunState::Cancelled);
+    assert!(partial.arrival.offered < 10);
+    assert_eq!(
+        partial.arrival.offered,
+        partial.metrics.counters.started
+            + partial.arrival.capacity_drops
+            + partial.arrival.missed_deadlines
+    );
+    server.close().await;
+}
+
+#[test]
+fn arrival_validation_rejects_invalid_inputs_and_reports_rate_warning() {
+    for (rate, capacity, duration_ms, pacing_ms) in [
+        (0, 1, 100, 0),
+        (1, 0, 100, 0),
+        (1, 257, 100, 0),
+        (1, 1, 0, 0),
+        (1, 1, 100, 1),
+    ] {
+        let input = RunConfig {
+            url: "http://127.0.0.1:1/".into(),
+            workload: Workload::Arrival {
+                rate,
+                capacity,
+                duration_ms,
+            },
+            pacing_ms,
+            ..RunConfig::default()
+        };
+        assert!(RunManager::prepare(input).is_err());
+    }
+    let confirmation = RunManager::prepare(RunConfig {
+        url: "http://127.0.0.1:1/".into(),
+        workload: Workload::Arrival {
+            rate: 1_000,
+            capacity: 1,
+            duration_ms: 1,
+        },
+        ..RunConfig::default()
+    })
+    .unwrap();
+    assert_eq!(confirmation.warnings, vec!["HIGH_ARRIVAL_RATE"]);
+}

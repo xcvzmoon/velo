@@ -77,6 +77,21 @@ export type Workload =
       duration_ms: number;
     }
   | {
+      kind: 'arrival';
+      /**
+       * Positive target iterations per second; independent of response speed.
+       */
+      rate: number;
+      /**
+       * Maximum simultaneously owned single-request tasks; must be positive.
+       */
+      capacity: number;
+      /**
+       * Positive scheduling duration in milliseconds.
+       */
+      duration_ms: number;
+    }
+  | {
       kind: 'ramping';
       /**
        * Initial worker count; zero is allowed.
@@ -109,7 +124,7 @@ export type RunConfig = {
    */
   body: RequestBody;
   /**
-   * Constant or staged VU schedule, validated before worker allocation.
+   * Constant, staged, or arrival schedule, validated before worker allocation.
    */
   workload: Workload;
   /**
@@ -165,7 +180,7 @@ export type RunConfirmation = {
    */
   budget: ResourceBudget;
   /**
-   * Stable warning codes. HIGH_VU_COUNT applies at 100 or more VUs.
+   * HIGH_VU_COUNT warns at 100 workers; HIGH_ARRIVAL_RATE at 1,000 iterations/s.
    */
   warnings: string[];
 };
@@ -316,6 +331,24 @@ export type MetricsSnapshot = {
    */
   max_in_flight: string;
 };
+export type ArrivalSnapshot = {
+  /**
+   * Deadlines reached while scheduling was open, including dropped iterations.
+   */
+  offered: string;
+  /**
+   * Current slots rejected because all concurrency capacity was owned.
+   */
+  capacity_drops: string;
+  /**
+   * Expired slots skipped after a delayed scheduler wake; never replayed.
+   */
+  missed_deadlines: string;
+  /**
+   * Maximum wake delay against the next unprocessed deadline, in microseconds.
+   */
+  max_lateness_us: string;
+};
 export type RunSnapshot = {
   /**
    * Monotonically increasing application-instance identifier, encoded as decimal.
@@ -357,6 +390,10 @@ export type RunSnapshot = {
    * Maximum concurrently owned VU workers.
    */
   max_vus: number;
+  /**
+   * Arrival scheduling counters; zero for VU workloads. Drops exclude HTTP failures.
+   */
+  arrival: ArrivalSnapshot;
   /**
    * Cumulative counters, rates, and separate duration populations.
    */
