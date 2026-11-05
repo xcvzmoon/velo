@@ -223,6 +223,9 @@ fn add(counter: &mut u64, amount: u64, overflow: &mut bool) {
 pub(crate) struct Metrics {
     counters: Counters,
     response: Distribution,
+    interval_response: Distribution,
+    interval_requests: u64,
+    interval_failures: u64,
     transport: Distribution,
     timeout: Distribution,
     wait_us: u64,
@@ -236,6 +239,9 @@ impl Metrics {
         Self {
             counters: Counters::default(),
             response: Distribution::new(),
+            interval_response: Distribution::new(),
+            interval_requests: 0,
+            interval_failures: 0,
             transport: Distribution::new(),
             timeout: Distribution::new(),
             wait_us: 0,
@@ -274,6 +280,7 @@ impl Metrics {
                     add(&mut counters.failed_iterations, 1, &mut self.overflow);
                 }
                 self.response.record(elapsed, &mut self.overflow);
+                self.interval_response.record(elapsed, &mut self.overflow);
             }
             Outcome::Transport => {
                 add(&mut counters.transport_failures, 1, &mut self.overflow);
@@ -289,7 +296,20 @@ impl Metrics {
         }
         if !matches!(outcome, Outcome::Cancelled) {
             add(&mut counters.completed_iterations, 1, &mut self.overflow);
+            add(&mut self.interval_requests, 1, &mut self.overflow);
+            if !matches!(outcome, Outcome::Response(true)) {
+                add(&mut self.interval_failures, 1, &mut self.overflow);
+            }
         }
+    }
+
+    pub fn take_interval(&mut self) -> (LatencySnapshot, u64, u64) {
+        let latency = self.interval_response.snapshot();
+        self.interval_response.histogram.reset();
+        self.interval_response.out_of_range = 0;
+        let requests = std::mem::take(&mut self.interval_requests);
+        let failures = std::mem::take(&mut self.interval_failures);
+        (latency, requests, failures)
     }
 
     pub fn snapshot(&self, elapsed: Duration) -> MetricsSnapshot {
@@ -363,6 +383,36 @@ mod tests {
         let value = serde_json::to_value(metrics.snapshot(Duration::ZERO)).unwrap();
         assert_eq!(value["counters"]["started"], "9007199254740993");
         assert_eq!(value["counters"]["response_body_bytes"], "84");
+    }
+
+    #[test]
+    fn interval_populations_reset_without_changing_cumulative_accounting() {
+        let mut metrics = Metrics::new();
+        for outcome in [
+            Outcome::Response(true),
+            Outcome::Response(false),
+            Outcome::Transport,
+            Outcome::Timeout,
+            Outcome::Cancelled,
+        ] {
+            metrics.admission();
+            metrics.observe(outcome, Duration::from_micros(25), 0);
+        }
+        let (latency, requests, failures) = metrics.take_interval();
+        assert_eq!(requests, 4);
+        assert_eq!(failures, 3);
+        assert_eq!(latency.samples, 2);
+        assert_eq!(latency.p95_us, Some(25));
+        let (empty, requests, failures) = metrics.take_interval();
+        assert_eq!(requests, 0);
+        assert_eq!(failures, 0);
+        assert_eq!(empty.samples, 0);
+        assert!(empty.p95_us.is_none());
+        let cumulative = metrics.snapshot(Duration::from_secs(1));
+        assert_eq!(cumulative.counters.started, 5);
+        assert_eq!(cumulative.counters.completed_iterations, 4);
+        assert_eq!(cumulative.response_latency.samples, 2);
+        assert_eq!(cumulative.http_failure_rate, Some(0.75));
     }
 
     #[test]

@@ -8,7 +8,7 @@ pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
-pub use runner::{RunManager, RunSnapshot, RunState};
+pub use runner::{RunManager, RunSnapshot, RunState, RunUpdate};
 
 /// Returns the engine's build identity without executing network requests.
 ///

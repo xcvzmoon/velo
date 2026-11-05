@@ -647,3 +647,58 @@ async fn pacing_does_not_queue_iterations_and_stop_can_drain_successfully() {
     manager.shutdown().await;
     server.close().await;
 }
+
+#[tokio::test]
+async fn aggregate_intervals_preserve_totals_and_reject_replaced_runs() {
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    let config = RunConfig {
+        url: server.url.clone(),
+        vus: 2,
+        duration_ms: 30_000,
+        pacing_ms: 1,
+        grace_ms: 100,
+        ..RunConfig::default()
+    };
+    let run = manager.start(config.clone(), true).await.unwrap();
+    assert!(manager.sample("old").await.is_none());
+    sleep(Duration::from_millis(60)).await;
+    let first = manager.sample(&run.run_id).await.unwrap();
+    assert_eq!(first.sequence, "1");
+    assert!(first.interval_us > 0);
+    assert!(first.interval_requests > 0);
+    assert_eq!(first.interval_failures, 0);
+    assert_eq!(first.response_latency.samples, first.interval_requests);
+    manager.stop(&run.run_id).await.unwrap();
+    manager.shutdown().await;
+    let second = manager.sample(&run.run_id).await.unwrap();
+    assert_eq!(second.sequence, "2");
+    assert_eq!(second.snapshot.state, RunState::Cancelled);
+    assert_eq!(second.snapshot.active_vus, 0);
+    assert_eq!(second.snapshot.metrics.counters.in_flight, 0);
+    assert_eq!(
+        first.interval_requests + second.interval_requests,
+        second.snapshot.metrics.counters.completed_iterations
+    );
+    assert_eq!(
+        first.response_latency.samples + second.response_latency.samples,
+        second.snapshot.metrics.response_latency.samples
+    );
+    assert_eq!(
+        first.interval_us + second.interval_us,
+        second.snapshot.actual_us
+    );
+    let empty = manager.sample(&run.run_id).await.unwrap();
+    assert_eq!(empty.interval_requests, 0);
+    assert_eq!(empty.response_latency.samples, 0);
+    assert_eq!(
+        empty.snapshot.metrics.counters.started,
+        second.snapshot.metrics.counters.started
+    );
+    assert_eq!(empty.interval_us, 0);
+    let next = manager.start(config, true).await.unwrap();
+    assert!(manager.sample(&run.run_id).await.is_none());
+    assert_eq!(manager.sample(&next.run_id).await.unwrap().sequence, "1");
+    manager.shutdown().await;
+    server.close().await;
+}
