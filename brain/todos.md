@@ -2,7 +2,7 @@
 
 <!-- next-id: 18 -->
 
-Roadmap and approved contracts: [[plans/velo-roadmap]]. Phases 1–4 are implemented and verified locally on macOS. Milestones 5–8 remain unstarted.
+Roadmap and approved contracts: [[plans/velo-roadmap]]. Phases 1–5 are implemented and verified locally on macOS. Milestones 6–8 remain unstarted.
 
 ## Phase 1 foundation
 
@@ -22,7 +22,7 @@ Roadmap and approved contracts: [[plans/velo-roadmap]]. Phases 1–4 are impleme
 11. [x] Deliver milestone 2: validated GET/POST constant-VU engine, bounded metrics, start/stop, cancellation, resource budgets, final summaries, and local-server integration tests. Detailed tasks and evidence: [[plans/11-constant-vu-engine]]. Depends on #10. [[plans/velo-roadmap#2. Minimum constant-VU engine]]
 12. [x] Deliver milestone 3: request editor, aggregate events, bounded uPlot charts, execution controls, final results, event recovery, and first usable release validation. Detailed tasks and evidence: [[plans/12-live-monitoring]]. Depends on #11. [[plans/velo-roadmap#3. Live monitoring and first usable release]]
 13. [x] Deliver milestone 4: staged VU ramps, graceful retirement, desired/actual VU metrics, deterministic scheduling tests, and slow-response cleanup checks. Detailed tasks and evidence: [[plans/13-ramping-vus]]. Depends on #12. [[plans/velo-roadmap#4. Ramping VUs]]
-14. [ ] Deliver milestone 5: bounded arrival-rate scheduling, missed-deadline/capacity drop reasons, lateness and saturation reporting, and overload tests proving no backlog or catch-up bursts. Expand before starting. Depends on #13. [[plans/velo-roadmap#5. Constant arrival rate]]
+14. [x] Deliver milestone 5: bounded arrival-rate scheduling, missed-deadline/capacity drop reasons, lateness and saturation reporting, and overload tests proving no backlog or catch-up bursts. Detailed decisions and evidence: [[plans/14-arrival-rate]]. Depends on #13. [[plans/velo-roadmap#5. Constant arrival rate]]
 15. [ ] Deliver milestone 6 in separate increments: thresholds, remaining methods, authentication controls, form bodies, multipart/files, and protocol/redirect options. Verify each increment with local-server tests. Expand before starting; assertions remain out of scope. Depends on #14. [[plans/velo-roadmap#6. Thresholds and remaining HTTP options]]
 16. [ ] Deliver milestone 7: SQLite configurations/history/summaries/time series, explicit OS-stored credentials, bounded persistence, visible chart compaction, and selected-run comparisons. Choose and document storage/retention defaults and secret-field handling before implementation. Expand before starting. Depends on #15. [[plans/velo-roadmap#7. Persistence, credentials, history, and comparisons]]
 17. [ ] Deliver milestone 8: Windows/Linux CI, builds, packaging, and interactive verification after the product works on macOS; cross-platform release hardening, installation/launch evidence, resource stability checks, reproducible benchmarks, and evidence-backed capacity documentation. Expand before starting. Depends on #16. [[plans/velo-roadmap#8. Release hardening and benchmarks]]

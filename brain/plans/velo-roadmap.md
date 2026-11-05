@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Approved through the project interview on 2026-11-05. Phases 1–4 are implemented and verified locally on macOS; milestones 5–8 remain unstarted.
+- Approved through the project interview on 2026-11-05. Phases 1–5 are implemented and verified locally on macOS; milestones 6–8 remain unstarted.
 - Build a local, offline-capable desktop HTTP load-testing studio for macOS, Windows, and Linux.
 - Follow the repository's [AGENTS.md](../../AGENTS.md): small correct changes, explicit boundaries, reliability before abstractions, and working increments.
 - Preserve Nuxt 4, Vue Composition API, TypeScript, Tailwind 4, shadcn-vue/Reka UI, Valibot, theme tokens, and the existing native titlebar. Nuxt UI is superseded by the existing component stack.
@@ -170,6 +170,7 @@ These eight milestones replace the original five broad phases. Each milestone de
 
 ### 5. Constant arrival rate
 
+- Implemented. Detailed decisions and local verification evidence: [[plans/14-arrival-rate]].
 - Add target iteration rate, explicit concurrency capacity, deadline scheduling, dropped-iteration reasons, lateness, and saturation warnings.
 - Gate: local-server overload tests prove bounded tasks/memory, no backlog, no catch-up bursts, correct drop accounting, and cleanup. Separate inability to offer load from target HTTP failures.
 - Document offered versus achieved rates and scheduler timing tolerances.
