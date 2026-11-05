@@ -35,7 +35,41 @@ Do not preserve backward compatibility unless the user or repository contract re
 - Keep callbacks as arrow functions, such as `items.map((item) => item.id)`.
 - When only one or two non-conflicting properties are used from an iterated value, prefer parameter destructuring.
 - Prefer functions over classes. Leave correct existing classes in place unless changing the design is necessary.
-- Use `import type` for imports used only as types.
+- When auto-imports are enabled and cover a symbol in the current file, use the symbol directly without an explicit import. Check the project's configuration and generated declarations; do not assume every symbol or file is covered. See the Nuxt and Vue reference for framework-specific guidance.
+- Use `import type` for types that still require an explicit import.
+
+## HTML and component markup
+
+- Keep tag delimiters readable in HTML, JSX/TSX, Vue templates, and other component markup. Keep `<` with the tag name and `</` with the closing tag name.
+- Keep the opening tag's `>` on the same line when its attributes fit. When attributes span multiple lines, put `>` or `/>` on its own line, aligned with the opening tag.
+- Never move an opening tag's `>` onto the next line alongside a child element, as in `><a>`, or split a closing tag's `>` onto another line.
+- When nesting elements across multiple lines, indent children one level and put the parent's closing tag on its own line, aligned with its opening tag. Compact inline markup is fine when it fits cleanly.
+
+Avoid:
+
+```text
+<p class="description"
+  ><a href="/about"></a></p>
+```
+
+Use:
+
+```html
+<p class="description">
+  <a href="/about"></a>
+</p>
+```
+
+For components with multiline props:
+
+```text
+<Card
+  title="Account"
+  description="Manage your profile"
+>
+  <ProfileForm />
+</Card>
+```
 
 ## Types and naming
 
