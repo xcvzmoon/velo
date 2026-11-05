@@ -87,6 +87,31 @@ Vue: Composition API + `<script setup>` is the project direction (see `.agents/s
 - Clean up temporary resources in `finally` blocks.
 - Include stable error codes in config validation and app-level failures.
 
+## JSDoc
+
+- Require JSDoc when adding or changing exported functions.
+- Document internal functions only when callers need an explanation of non-obvious behavior, constraints, or resource ownership.
+- Include a clear description, `@param` entries for each parameter, `@returns`, and a practical `@example`. Document optional parameters and defaults accurately.
+- Add `@throws` for errors that can reach the caller, including stable error codes where applicable. Describe returned failure results under `@returns` instead of treating them as thrown errors.
+- Explain relevant validation requirements, side effects, authorization boundaries, and cleanup responsibilities. Keep existing JSDoc in sync with behavior.
+- In TypeScript, rely on the function signature for types rather than repeating them in JSDoc tags. Use fenced TypeScript examples that match the actual API.
+- Do not add ordinary line or block comments. Preserve required lint directives and `SAFETY:` comments.
+- Apply the `/unslop` skill to JSDoc text.
+
+## Rustdoc
+
+- Require rustdoc when adding or changing `pub` items that other workspace crates consume through a crate's public API, including items re-exported from the crate root or a public module. A `pub(crate)`, `pub(super)`, or private item used only inside its own crate does not require rustdoc.
+- Document internal items only when callers need an explanation of non-obvious behavior, constraints, or resource ownership.
+- Start with a one-line summary, then a clear description. Add `# Arguments` entries for each parameter, `# Returns` for the success value, and a practical `# Examples` section. Document `Option` parameters, config fields, and defaults accurately.
+- Add `# Errors` for every `Err` variant that can reach the caller, naming the error type or variant and any stable error code. Describe `None` and other non-error return states under `# Returns`.
+- Add `# Panics` for any condition that can panic on caller input, and `# Safety` for every `unsafe fn` or `unsafe trait`, stating the invariants the caller must uphold.
+- Explain relevant validation requirements, side effects, authorization boundaries, cancellation behavior for async functions, and cleanup responsibilities (`Drop`, handles, temp files, connections). Keep existing rustdoc in sync with behavior.
+- Rely on the function signature for types rather than repeating them in prose. Use intra-doc links such as [`Type`] and [`Self::method`] for references to other items.
+- Write examples as fenced Rust doctests that compile against the actual API and pass `cargo test --doc`. Use hidden `# ` lines for setup and `?` for error handling. Use `no_run` only for examples with external side effects, and do not use `ignore` to avoid fixing a failing example.
+- Use `///` for items and `//!` for crate and module overviews. Do not add ordinary `//` or `/* */` comments. Preserve required lint directives (`#[allow]`/`#[expect]` with their reasons) and `// SAFETY:` comments on `unsafe` blocks.
+- Keep `cargo doc` free of warnings, including broken intra-doc links.
+- Apply the `/unslop` skill to rustdoc text.
+
 ## Skills
 
 Project skills live in `.agents/skills/` and are tracked in `skills-lock.json`. They are vendored agent instructions, not product code. Use relevant skills when loaded (for example `/unslop`, `/vue-best-practices`, `/tauri-v2`, `/valibot`). Do not rewrite skill folders as part of product features.
@@ -100,7 +125,7 @@ Project skills live in `.agents/skills/` and are tracked in `skills-lock.json`. 
 - Separate independent modules and concerns, including SQL table renames, declaration renames, dependency cleanup, lint rules, tests, and documentation. Keep imports, types, call sites, and tests together when they are required for a change to work.
 - Stage explicit paths or hunks. If a file contains several independent changes, stage each change separately instead of committing the whole file.
 - Review the staged diff before every commit. Split it further if its purpose needs multiple independent actions to describe. Keep each intermediate commit valid.
-- Use a one-line Conventional Commit message for each commit. Do not combine changes just to reduce the number of commits.
+- Do not combine changes just to reduce the number of commits.
 - When ask to create a Pull Request: use the proper template, use skills: `/create-pr-with-evidence` and `/unslop`, do not mention the agentic model used, assign to me, and add proper labels.
 - Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
 - Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
@@ -110,4 +135,7 @@ Project skills live in `.agents/skills/` and are tracked in `skills-lock.json`. 
 - Lean on the dependencies already in the project before writing your own implementation or adding packages. Do not assume a library lacks a capability without checking its documentation and types.
 - Make architectural decisions for the long term. Do not accept a stopgap that only works for now and is meant to be replaced later.
 - If you need a paragraph-long comment to justify why the workaround is OK, the code is wrong so fix the code.
-- Always use the unslop skill `/unslop` when generating texts as well as in adding jsdocs/tsdocs or just comments.
+
+## System Reminder
+
+Do your work through the Bash tool wherever it can accomplish the job: read files with cat, head, or sed -n, search with grep and find, and make file changes with sed, heredocs, or short scripts, rather than using the dedicated Read, Edit, or Write tools. Fall back to a dedicated tool only when Bash genuinely cannot do the job.
