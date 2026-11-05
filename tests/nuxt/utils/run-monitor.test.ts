@@ -38,6 +38,11 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
       origin: 'http://127.0.0.1:8080',
       vus: 1,
       duration_ms: 60_000,
+      workload: {
+        kind: 'constant',
+        vus: 1,
+        duration_ms: 60_000,
+      },
       budget: {
         max_vus: 1000,
         max_request_bytes: 16_777_216,
@@ -47,6 +52,8 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
     scheduling_us: String(seconds * 1e6),
     drain_us: '0',
     actual_us: String(seconds * 1e6),
+    desired_vus: 1,
+    retiring_vus: 0,
     active_vus: 1,
     max_vus: 1,
     failure_code: null,
@@ -131,8 +138,11 @@ describe('run monitor', () => {
       headers: [],
       query: [],
       body: { kind: 'none' },
-      vus: 1,
-      duration_ms: 1000,
+      workload: {
+        kind: 'constant',
+        vus: 1,
+        duration_ms: 1000,
+      },
       timeout_ms: 30000,
       pacing_ms: 0,
       grace_ms: 5000,
@@ -286,5 +296,46 @@ describe('run monitor', () => {
     await connection;
     expect(cleaned).toBe(true);
     expect(monitor.connected.value).toBe(false);
+  });
+});
+
+describe('ramping monitor', () => {
+  it('keeps desired and actual workers distinct through retirement and missing intervals', async () => {
+    let receive: ((update: RunUpdate) => void) | null = null;
+    const monitor = createRunMonitor({
+      prepare: () => Promise.resolve(snapshot().confirmation),
+      start: () => Promise.resolve(snapshot()),
+      stop: () => Promise.resolve(snapshot()),
+      current: () => Promise.resolve(null),
+      listen: (callback) => {
+        receive = callback;
+        return Promise.resolve(vi.fn<() => void>());
+      },
+    });
+    await monitor.connect();
+    function emit(sequence: string, desired: number, actual: number, retiring: number): void {
+      receive?.({
+        sequence,
+        snapshot: {
+          ...snapshot('1', Number(sequence)),
+          desired_vus: desired,
+          active_vus: actual,
+          retiring_vus: retiring,
+        },
+        interval_us: '1000000',
+        interval_requests: '10',
+        interval_failures: '0',
+        response_latency: population,
+      });
+    }
+    emit('1', 4, 4, 0);
+    emit('3', 0, 4, 4);
+    expect(monitor.snapshot.value?.retiring_vus).toBe(4);
+    expect(monitor.points.value.map(({ vus, desiredVus }) => [vus, desiredVus])).toEqual([
+      [4, 4],
+      [null, null],
+      [4, 0],
+    ]);
+    monitor.dispose();
   });
 });

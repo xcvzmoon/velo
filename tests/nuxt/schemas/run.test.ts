@@ -23,7 +23,10 @@ const input = {
   ],
   bodyKind: 'json',
   bodyValue: '{"enabled":true}',
+  workloadKind: 'constant',
   vus: '2',
+  start_vus: '0',
+  stages: [],
   duration_ms: '1000',
   timeout_ms: '30000',
   pacing_ms: '0',
@@ -43,8 +46,11 @@ describe('request editor schema', () => {
         kind: 'json',
         value: input.bodyValue,
       },
-      vus: 2,
-      duration_ms: 1000,
+      workload: {
+        kind: 'constant',
+        vus: 2,
+        duration_ms: 1000,
+      },
       timeout_ms: 30_000,
       pacing_ms: 0,
       grace_ms: 5000,
@@ -139,5 +145,133 @@ describe('request editor schema', () => {
     });
     expect(invalid.success).toBe(false);
     expect(invalid.issues?.[0]?.path?.[0]?.key).toBe('bodyValue');
+  });
+});
+
+describe('ramping workload editor', () => {
+  it('converts zero starting VUs and ordered ramp/hold/zero stages without inactive constant settings', () => {
+    const output = v.parse(requestEditorSchema, {
+      ...input,
+      workloadKind: 'ramping',
+      vus: '',
+      duration_ms: '',
+      start_vus: '0',
+      stages: [
+        {
+          duration_ms: '1000',
+          target_vus: '10',
+        },
+        {
+          duration_ms: '2000',
+          target_vus: '10',
+        },
+        {
+          duration_ms: '1000',
+          target_vus: '0',
+        },
+      ],
+    });
+    expect(output.workload).toEqual({
+      kind: 'ramping',
+      start_vus: 0,
+      stages: [
+        {
+          duration_ms: 1000,
+          target_vus: 10,
+        },
+        {
+          duration_ms: 2000,
+          target_vus: 10,
+        },
+        {
+          duration_ms: 1000,
+          target_vus: 0,
+        },
+      ],
+    });
+    expect(output).not.toHaveProperty('vus');
+    expect(output).not.toHaveProperty('duration_ms');
+  });
+
+  it.each([
+    { stages: [] },
+    {
+      stages: [
+        {
+          duration_ms: 0,
+          target_vus: 1,
+        },
+      ],
+    },
+    {
+      stages: [
+        {
+          duration_ms: 1000,
+          target_vus: -1,
+        },
+      ],
+    },
+    {
+      stages: [
+        {
+          duration_ms: 1000,
+          target_vus: 1.5,
+        },
+      ],
+    },
+    {
+      stages: [
+        {
+          duration_ms: 1000,
+          target_vus: 257,
+        },
+      ],
+    },
+    { start_vus: 257 },
+    { start_vus: -1 },
+    {
+      stages: [
+        {
+          duration_ms: 4_294_967_295,
+          target_vus: 0,
+        },
+        {
+          duration_ms: 1,
+          target_vus: 0,
+        },
+      ],
+    },
+  ])('rejects invalid ramp settings %j', (change) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        workloadKind: 'ramping',
+        stages: [
+          {
+            duration_ms: '1000',
+            target_vus: '0',
+          },
+        ],
+        ...change,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('ignores unfinished stage edits when switching back to a constant workload', () => {
+    const output = v.parse(requestEditorSchema, {
+      ...input,
+      start_vus: '',
+      stages: [
+        {
+          duration_ms: '',
+          target_vus: '-5',
+        },
+      ],
+    });
+    expect(output.workload).toEqual({
+      kind: 'constant',
+      vus: 2,
+      duration_ms: 1000,
+    });
   });
 });

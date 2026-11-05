@@ -12,16 +12,6 @@
 
   const numericFields = [
     {
-      name: 'vus',
-      label: 'Virtual users',
-      min: 1,
-    },
-    {
-      name: 'duration_ms',
-      label: 'Scheduling duration (ms)',
-      min: 1,
-    },
-    {
       name: 'timeout_ms',
       label: 'Request timeout (ms)',
       min: 1,
@@ -73,7 +63,15 @@
       query: [],
       bodyKind: 'none',
       bodyValue: '',
+      workloadKind: 'constant',
       vus: 1,
+      start_vus: 0,
+      stages: [
+        {
+          duration_ms: 10_000,
+          target_vus: 10,
+        },
+      ],
       duration_ms: 10_000,
       timeout_ms: 30_000,
       pacing_ms: 0,
@@ -101,8 +99,8 @@
     </h2>
 
     <p class="text-muted-foreground mt-2 text-sm leading-relaxed">
-      Repeat one request with constant virtual users. Each user waits for its response before
-      sending another request. Redirects and automatic retries are disabled.
+      Repeat one request with constant or ramping virtual users. Each user waits for its response
+      before sending another request. Redirects and automatic retries are disabled.
     </p>
 
     <FormischForm
@@ -376,6 +374,11 @@
 
         <div class="space-y-4 border-t pt-6">
           <h3 class="text-sm font-medium">Workload and local resource budgets</h3>
+
+          <RunWorkloadEditor
+            :form="form"
+            :disabled="disabled"
+          />
 
           <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <FormischField

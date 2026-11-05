@@ -7,6 +7,9 @@
   const latency = computed<(number | null)[]>(() => points.value.map((point) => point.latency));
   const failures = computed<(number | null)[]>(() => points.value.map((point) => point.failures));
   const vus = computed<(number | null)[]>(() => points.value.map((point) => point.vus));
+  const desiredVus = computed<(number | null)[]>(() =>
+    points.value.map((point) => point.desiredVus),
+  );
   const progress = computed<number>(() =>
     snapshot.value
       ? Math.min(
@@ -81,8 +84,15 @@
       </div>
 
       <div class="rounded-lg border p-4">
-        <dt class="text-muted-foreground text-xs">Active / maximum VUs</dt>
-        <dd class="mt-2 font-mono text-xl">{{ snapshot.active_vus }} / {{ snapshot.max_vus }}</dd>
+        <dt class="text-muted-foreground text-xs">Desired / actual VUs</dt>
+
+        <dd class="mt-2 font-mono text-xl">
+          {{ snapshot.desired_vus }} / {{ snapshot.active_vus }}
+        </dd>
+
+        <p class="text-muted-foreground mt-2 text-xs">
+          {{ snapshot.retiring_vus }} retiring · {{ snapshot.max_vus }} peak actual
+        </p>
       </div>
 
       <div class="rounded-lg border p-4">
@@ -147,7 +157,8 @@
       <RunChart
         :seconds="seconds"
         :values="vus"
-        title="Active virtual users"
+        :comparison-values="desiredVus"
+        title="Desired and actual virtual users"
         unit="VUs"
       />
     </div>
@@ -160,7 +171,8 @@
       }}
       Charts retain the latest 600 points.
       {{ gaps ? 'Some intervals were missed; gaps are shown.' : 'No event gaps detected.' }}
-      Empty response populations have no percentile. Request rates exclude cancellations.
+      Actual VUs include retiring users; slow retirees may defer a later ramp-up within the worker
+      budget. Empty response populations have no percentile. Request rates exclude cancellations.
     </p>
   </section>
 </template>

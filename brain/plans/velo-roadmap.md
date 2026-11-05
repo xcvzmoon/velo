@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Approved through the project interview on 2026-11-05. Phases 1–3 are implemented and verified locally on macOS; milestones 4–8 remain unstarted.
+- Approved through the project interview on 2026-11-05. Phases 1–4 are implemented and verified locally on macOS; milestones 5–8 remain unstarted.
 - Build a local, offline-capable desktop HTTP load-testing studio for macOS, Windows, and Linux.
 - Follow the repository's [AGENTS.md](../../AGENTS.md): small correct changes, explicit boundaries, reliability before abstractions, and working increments.
 - Preserve Nuxt 4, Vue Composition API, TypeScript, Tailwind 4, shadcn-vue/Reka UI, Valibot, theme tokens, and the existing native titlebar. Nuxt UI is superseded by the existing component stack.
@@ -164,6 +164,7 @@ These eight milestones replace the original five broad phases. Each milestone de
 
 ### 4. Ramping VUs
 
+- Implemented. Detailed decisions and local verification evidence: [[plans/13-ramping-vus]].
 - Add staged workloads, stage validation, monotonic interpolation, retiring-worker ownership, and desired/actual VU display.
 - Gate: deterministic tests cover ramp-up, ramp-down, zero-VU stages, boundaries, cancellation mid-stage, and cleanup under slow responses. No abrupt cancellation solely to reach a lower target.
 

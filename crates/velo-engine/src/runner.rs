@@ -76,6 +76,10 @@ pub struct RunSnapshot {
     #[serde(serialize_with = "decimal")]
     #[ts(type = "string")]
     pub actual_us: u64,
+    /// Desired workers at the last scheduler reconciliation; zero during drain.
+    pub desired_vus: u32,
+    /// Workers finishing their current request before retirement.
+    pub retiring_vus: u32,
     /// Currently owned VU workers; zero after cleanup.
     pub active_vus: u32,
     /// Maximum concurrently owned VU workers.
@@ -130,6 +134,8 @@ struct Progress {
     deadline: Option<Instant>,
     scheduling_end: Option<Instant>,
     finished: Option<Instant>,
+    desired_vus: u32,
+    retiring_vus: u32,
     active_vus: u32,
     max_vus: u32,
     failure_code: Option<String>,
@@ -174,6 +180,8 @@ impl Run {
             scheduling_us,
             drain_us: actual_us - scheduling_us,
             actual_us,
+            desired_vus: progress.desired_vus,
+            retiring_vus: progress.retiring_vus,
             active_vus: progress.active_vus,
             max_vus: progress.max_vus,
             metrics: progress.metrics.snapshot(elapsed),
@@ -185,6 +193,7 @@ impl Run {
         let mut progress = self.lock();
         if !progress.state.is_terminal() {
             progress.state = RunState::Stopping;
+            progress.desired_vus = 0;
             let now = Instant::now();
             let end = progress.deadline.map_or(now, |deadline| now.min(deadline));
             progress.scheduling_end.get_or_insert(end);
@@ -337,6 +346,8 @@ impl RunManager {
                 deadline: None,
                 scheduling_end: None,
                 finished: None,
+                desired_vus: 0,
+                retiring_vus: 0,
                 active_vus: 0,
                 max_vus: 0,
                 failure_code: None,
@@ -493,34 +504,92 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
     }
     let config = Arc::new(config);
     let mut workers = JoinSet::new();
-    for _ in 0..config.confirmation.vus {
-        let mut progress = run.lock();
-        if progress.state != RunState::Running || Instant::now() >= deadline {
-            break;
-        }
-        progress.active_vus += 1;
-        progress.max_vus = progress.max_vus.max(progress.active_vus);
-        let worker = Worker { run: run.clone() };
-        workers.spawn(execute_worker(worker, config.clone(), deadline));
-    }
+    let mut controls: Vec<WorkerControl> = Vec::new();
     let mut failed = false;
     loop {
+        let now = Instant::now();
+        if run.stop.is_cancelled() || now >= deadline {
+            break;
+        }
+        let (desired, next) = config
+            .schedule
+            .position(now.saturating_duration_since(started));
+        {
+            let mut progress = run.lock();
+            if progress.state != RunState::Running {
+                break;
+            }
+            progress.desired_vus = desired;
+            let accepting = controls
+                .iter()
+                .filter(|control| {
+                    !control.retire.is_cancelled() && !control.finished.is_cancelled()
+                })
+                .count();
+            let mut excess = accepting.saturating_sub(desired as usize);
+            for control in controls.iter().rev() {
+                if excess == 0 {
+                    break;
+                }
+                if !control.retire.is_cancelled() && !control.finished.is_cancelled() {
+                    control.retire.cancel();
+                    progress.retiring_vus += 1;
+                    excess -= 1;
+                }
+            }
+        }
+        let accepting = controls
+            .iter()
+            .filter(|control| !control.retire.is_cancelled() && !control.finished.is_cancelled())
+            .count();
+        let available = (config.confirmation.vus as usize).saturating_sub(controls.len());
+        let additions = (desired as usize).saturating_sub(accepting).min(available);
+        for _ in 0..additions.min(64) {
+            let mut progress = run.lock();
+            if progress.state != RunState::Running || Instant::now() >= deadline {
+                break;
+            }
+            let retire = CancellationToken::new();
+            let finished = CancellationToken::new();
+            progress.active_vus += 1;
+            progress.max_vus = progress.max_vus.max(progress.active_vus);
+            let worker = Worker {
+                run: run.clone(),
+                retire: retire.clone(),
+                finished: finished.clone(),
+            };
+            let handle = workers.spawn(execute_worker(worker, config.clone(), deadline));
+            controls.push(WorkerControl {
+                id: handle.id(),
+                retire,
+                finished,
+            });
+        }
+        if additions > 64 {
+            tokio::task::yield_now().await;
+            continue;
+        }
         tokio::select! {
             biased;
             _ = run.stop.cancelled() => break,
-            _ = tokio::time::sleep_until(deadline) => break,
-            result = workers.join_next(), if !workers.is_empty() => {
-                if result.is_some_and(|result| result.is_err()) {
-                    failed = true;
-                    break;
+            _ = tokio::time::sleep_until(started + next) => {},
+            result = workers.join_next_with_id(), if !workers.is_empty() => {
+                match result {
+                    Some(Ok((id, ()))) => {
+                        if let Some(index) = controls.iter().position(|control| control.id == id) {
+                            controls.swap_remove(index);
+                        }
+                    }
+                    Some(Err(_)) => { failed = true; break; }
+                    None => {}
                 }
-                if workers.is_empty() { break; }
             }
         }
     }
     let drain_start = {
         let mut progress = run.lock();
         progress.state = RunState::Stopping;
+        progress.desired_vus = 0;
         let end = Instant::now().min(deadline);
         *progress.scheduling_end.get_or_insert(end)
     };
@@ -554,13 +623,26 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
     };
 }
 
+struct WorkerControl {
+    id: tokio::task::Id,
+    retire: CancellationToken,
+    finished: CancellationToken,
+}
+
 struct Worker {
     run: Arc<Run>,
+    retire: CancellationToken,
+    finished: CancellationToken,
 }
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        self.run.lock().active_vus -= 1;
+        let mut progress = self.run.lock();
+        progress.active_vus -= 1;
+        if self.retire.is_cancelled() {
+            progress.retiring_vus -= 1;
+        }
+        self.finished.cancel();
     }
 }
 
@@ -591,7 +673,10 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             .expect("validated buffered request is cloneable");
         {
             let mut progress = worker.run.measured_lock();
-            if progress.state != RunState::Running || Instant::now() >= deadline {
+            if progress.state != RunState::Running
+                || worker.retire.is_cancelled()
+                || Instant::now() >= deadline
+            {
                 break;
             }
             progress.metrics.admission();
@@ -617,6 +702,7 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             tokio::select! {
                 biased;
                 _ = worker.run.stop.cancelled() => break,
+                _ = worker.retire.cancelled() => break,
                 _ = tokio::time::sleep_until(deadline) => break,
                 _ = tokio::time::sleep(config.pacing) => {}
             }
@@ -635,4 +721,81 @@ async fn consume_response(
         *bytes = bytes.saturating_add(chunk.len() as u64);
     }
     Ok(success)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{RampStage, Workload};
+
+    #[tokio::test(start_paused = true)]
+    async fn zero_worker_stages_keep_scheduling_until_completion() {
+        let manager = RunManager::default();
+        let config = RunConfig {
+            url: "http://127.0.0.1:1/".into(),
+            workload: Workload::Ramping {
+                start_vus: 0,
+                stages: vec![
+                    RampStage {
+                        duration_ms: 1_000,
+                        target_vus: 0,
+                    },
+                    RampStage {
+                        duration_ms: 2_000,
+                        target_vus: 0,
+                    },
+                ],
+            },
+            ..RunConfig::default()
+        };
+        manager.start(config, true).await.unwrap();
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_secs(1)).await;
+        tokio::task::yield_now().await;
+        let current = manager.current().await.unwrap();
+        assert_eq!(current.state, RunState::Running);
+        assert_eq!(current.active_vus, 0);
+        assert_eq!(current.metrics.counters.started, 0);
+        tokio::time::advance(Duration::from_secs(2)).await;
+        tokio::task::yield_now().await;
+        let summary = manager.current().await.unwrap();
+        assert_eq!(summary.state, RunState::Completed);
+        assert_eq!(summary.scheduling_us, 3_000_000);
+        assert_eq!(summary.active_vus, 0);
+        manager.shutdown().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stop_during_initial_zero_stage_cancels_future_ramp() {
+        let manager = RunManager::default();
+        let config = RunConfig {
+            url: "http://127.0.0.1:1/".into(),
+            workload: Workload::Ramping {
+                start_vus: 0,
+                stages: vec![
+                    RampStage {
+                        duration_ms: 1_000,
+                        target_vus: 0,
+                    },
+                    RampStage {
+                        duration_ms: 1_000,
+                        target_vus: 4,
+                    },
+                ],
+            },
+            ..RunConfig::default()
+        };
+        let started = manager.start(config, true).await.unwrap();
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(500)).await;
+        manager.stop(&started.run_id).await.unwrap();
+        manager.shutdown().await;
+        let summary = manager.current().await.unwrap();
+        assert_eq!(summary.state, RunState::Cancelled);
+        assert_eq!(summary.scheduling_us, 500_000);
+        assert_eq!(summary.desired_vus, 0);
+        assert_eq!(summary.active_vus, 0);
+        assert_eq!(summary.retiring_vus, 0);
+        assert_eq!(summary.metrics.counters.started, 0);
+    }
 }

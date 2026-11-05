@@ -23,10 +23,43 @@ export type ResourceBudget = {
   max_vus: number;
   /**
    * Maximum normalized request bytes across the template and VU clones,
-   * including per-pair overhead. This is not a process-wide memory limit.
+   * including pair overhead and the stage schedule. This is not a process-wide memory limit.
    */
   max_request_bytes: number;
 };
+export type RampStage = {
+  /**
+   * Positive stage duration in milliseconds.
+   */
+  duration_ms: number;
+  /**
+   * Desired workers at the stage endpoint; zero is allowed.
+   */
+  target_vus: number;
+};
+export type Workload =
+  | {
+      kind: 'constant';
+      /**
+       * Sequential worker count.
+       */
+      vus: number;
+      /**
+       * Scheduling duration in milliseconds.
+       */
+      duration_ms: number;
+    }
+  | {
+      kind: 'ramping';
+      /**
+       * Initial worker count; zero is allowed.
+       */
+      start_vus: number;
+      /**
+       * Nonempty stage schedule; total duration must fit a positive u32 in milliseconds.
+       */
+      stages: RampStage[];
+    };
 export type RunConfig = {
   /**
    * Absolute HTTP(S) URL without embedded credentials or a fragment.
@@ -49,13 +82,9 @@ export type RunConfig = {
    */
   body: RequestBody;
   /**
-   * Sequential workers sharing one connection pool; must be positive.
+   * Constant or staged VU schedule, validated before worker allocation.
    */
-  vus: number;
-  /**
-   * Scheduling duration; must be positive.
-   */
-  duration_ms: number;
+  workload: Workload;
   /**
    * Full response timeout, including streamed body; 1–3,600,000 ms.
    */
@@ -93,13 +122,17 @@ export type RunConfirmation = {
    */
   origin: string;
   /**
-   * Requested workers.
+   * Peak requested workers, including the starting count.
    */
   vus: number;
   /**
    * Requested scheduling duration in milliseconds.
    */
   duration_ms: number;
+  /**
+   * Native-validated schedule shown during authorization review.
+   */
+  workload: Workload;
   /**
    * Explicit allocation budgets.
    */
@@ -281,6 +314,14 @@ export type RunSnapshot = {
    * Scheduling plus drain duration, in microseconds as a decimal string.
    */
   actual_us: string;
+  /**
+   * Desired workers at the last scheduler reconciliation; zero during drain.
+   */
+  desired_vus: number;
+  /**
+   * Workers finishing their current request before retirement.
+   */
+  retiring_vus: number;
   /**
    * Currently owned VU workers; zero after cleanup.
    */

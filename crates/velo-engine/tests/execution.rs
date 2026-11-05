@@ -19,13 +19,14 @@ use axum::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
-    sync::Mutex,
+    sync::{Mutex, Semaphore},
     task::{JoinHandle, JoinSet},
     time::{Instant, sleep, timeout},
 };
 use tokio_util::sync::CancellationToken;
 use velo_engine::{
-    NameValue, RequestBody, RequestMethod, RunConfig, RunManager, RunSnapshot, RunState,
+    NameValue, RampStage, RequestBody, RequestMethod, RunConfig, RunManager, RunSnapshot, RunState,
+    Workload,
 };
 
 #[derive(Clone, Debug)]
@@ -37,11 +38,23 @@ struct Received {
     body: Vec<u8>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct Target {
     received: Arc<Mutex<Option<Received>>>,
     requests: Arc<AtomicUsize>,
     connections: Arc<Mutex<HashSet<SocketAddr>>>,
+    gate: Arc<Semaphore>,
+}
+
+impl Default for Target {
+    fn default() -> Self {
+        Self {
+            received: Arc::default(),
+            requests: Arc::default(),
+            connections: Arc::default(),
+            gate: Arc::new(Semaphore::new(0)),
+        }
+    }
 }
 
 struct Server {
@@ -139,6 +152,9 @@ async fn handle(
         body: to_bytes(body, 1024 * 1024).await.unwrap().to_vec(),
     };
     *target.received.lock().await = Some(received);
+    if path == "/held" {
+        target.gate.acquire().await.unwrap().forget();
+    }
     if path == "/slow" {
         sleep(Duration::from_millis(80)).await;
     }
@@ -159,7 +175,10 @@ async fn handle(
 fn config(url: String) -> RunConfig {
     RunConfig {
         url,
-        duration_ms: 150,
+        workload: Workload::Constant {
+            vus: 1,
+            duration_ms: 150,
+        },
         grace_ms: 100,
         pacing_ms: 5,
         ..RunConfig::default()
@@ -205,6 +224,8 @@ fn reconcile(snapshot: &RunSnapshot) {
     assert_eq!(counters.in_flight, 0);
     assert_eq!(snapshot.active_vus, 0);
     assert!(snapshot.metrics.max_in_flight <= snapshot.confirmation.vus.into());
+    assert_eq!(snapshot.desired_vus, 0);
+    assert_eq!(snapshot.retiring_vus, 0);
     assert_eq!(
         snapshot.actual_us,
         snapshot.scheduling_us + snapshot.drain_us
@@ -380,8 +401,10 @@ async fn stalled_target_is_bounded_cancelled_and_joined_without_backlog() {
     let server = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nabc", true).await;
     let manager = RunManager::default();
     let mut input = config(server.url.clone());
-    input.vus = 16;
-    input.duration_ms = 30_000;
+    input.workload = Workload::Constant {
+        vus: 16,
+        duration_ms: 30_000,
+    };
     input.grace_ms = 20;
     manager.start(input.clone(), true).await.unwrap();
     timeout(Duration::from_secs(2), async {
@@ -430,7 +453,10 @@ async fn stalled_target_is_bounded_cancelled_and_joined_without_backlog() {
         frozen
     );
     assert_eq!(manager.stop(&id).await.unwrap().state, RunState::Cancelled);
-    input.duration_ms = 30;
+    input.workload = Workload::Constant {
+        vus: 16,
+        duration_ms: 30,
+    };
     manager.start(input, true).await.unwrap();
     let repeated = terminal(&manager).await;
     assert_eq!(repeated.state, RunState::Completed);
@@ -465,7 +491,10 @@ async fn duration_stops_admission_and_drain_keeps_completed_responses() {
     let (server, target) = Server::start().await;
     let manager = RunManager::default();
     let mut input = config(format!("{}/slow", server.url));
-    input.duration_ms = 20;
+    input.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 20,
+    };
     input.grace_ms = 200;
     manager.start(input, true).await.unwrap();
     let summary = terminal(&manager).await;
@@ -492,7 +521,10 @@ async fn validation_confirmation_and_authorization_never_send_traffic() {
         "AUTHORIZATION_REQUIRED"
     );
     let mut high = base.clone();
-    high.vus = 100;
+    high.workload = Workload::Constant {
+        vus: 100,
+        duration_ms: 150,
+    };
     assert_eq!(
         RunManager::prepare(high).unwrap().warnings,
         ["HIGH_VU_COUNT"]
@@ -510,7 +542,10 @@ async fn validation_confirmation_and_authorization_never_send_traffic() {
     }
     for vus in [0, 257] {
         let mut input = base.clone();
-        input.vus = vus;
+        input.workload = Workload::Constant {
+            vus,
+            duration_ms: 150,
+        };
         invalid.push((input, "VU_BUDGET_EXCEEDED"));
     }
     for timeout_ms in [0, 3_600_001] {
@@ -533,7 +568,10 @@ async fn validation_confirmation_and_authorization_never_send_traffic() {
         invalid.push((input, "INVALID_RUN_CONFIG"));
     }
     let mut input = base.clone();
-    input.duration_ms = 0;
+    input.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 0,
+    };
     invalid.push((input, "INVALID_RUN_CONFIG"));
     let mut input = base.clone();
     input.budget.max_request_bytes = 1;
@@ -553,7 +591,10 @@ async fn validation_confirmation_and_authorization_never_send_traffic() {
     assert!(manager.current().await.is_none());
     assert_eq!(target.requests.load(Ordering::SeqCst), 0);
     let mut oversized = base.clone();
-    oversized.vus = 10;
+    oversized.workload = Workload::Constant {
+        vus: 10,
+        duration_ms: 150,
+    };
     oversized.budget.max_request_bytes = 1_000;
     oversized.method = RequestMethod::POST;
     oversized.body = RequestBody::Text("a".repeat(100));
@@ -562,7 +603,10 @@ async fn validation_confirmation_and_authorization_never_send_traffic() {
         "REQUEST_BUDGET_EXCEEDED"
     );
     let mut adjustable = base;
-    adjustable.vus = 257;
+    adjustable.workload = Workload::Constant {
+        vus: 257,
+        duration_ms: 150,
+    };
     adjustable.budget.max_vus = 257;
     assert_eq!(RunManager::prepare(adjustable).unwrap().vus, 257);
     server.close().await;
@@ -627,7 +671,10 @@ async fn pacing_does_not_queue_iterations_and_stop_can_drain_successfully() {
     assert_eq!(target.requests.load(Ordering::SeqCst), 1);
 
     let mut input = config(format!("{}/slow", server.url));
-    input.duration_ms = 10_000;
+    input.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 10_000,
+    };
     input.grace_ms = 200;
     let accepted = manager.start(input, true).await.unwrap();
     timeout(Duration::from_secs(1), async {
@@ -654,8 +701,10 @@ async fn aggregate_intervals_preserve_totals_and_reject_replaced_runs() {
     let manager = RunManager::default();
     let config = RunConfig {
         url: server.url.clone(),
-        vus: 2,
-        duration_ms: 30_000,
+        workload: Workload::Constant {
+            vus: 2,
+            duration_ms: 30_000,
+        },
         pacing_ms: 1,
         grace_ms: 100,
         ..RunConfig::default()
@@ -699,6 +748,275 @@ async fn aggregate_intervals_preserve_totals_and_reject_replaced_runs() {
     let next = manager.start(config, true).await.unwrap();
     assert!(manager.sample(&run.run_id).await.is_none());
     assert_eq!(manager.sample(&next.run_id).await.unwrap().sequence, "1");
+    manager.shutdown().await;
+    server.close().await;
+}
+
+async fn wait_for_run(
+    manager: &RunManager,
+    condition: impl Fn(&RunSnapshot) -> bool,
+) -> RunSnapshot {
+    timeout(Duration::from_secs(4), async {
+        loop {
+            let current = manager.current().await.unwrap();
+            if condition(&current) {
+                return current;
+            }
+            sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn ramp_down_finishes_held_responses_without_cancelling_or_readmitting_retirees() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let input = RunConfig {
+        url: format!("{}/held", server.url),
+        workload: Workload::Ramping {
+            start_vus: 4,
+            stages: vec![
+                RampStage {
+                    duration_ms: 200,
+                    target_vus: 0,
+                },
+                RampStage {
+                    duration_ms: 3_000,
+                    target_vus: 0,
+                },
+            ],
+        },
+        grace_ms: 0,
+        ..RunConfig::default()
+    };
+    let accepted = manager.start(input, true).await.unwrap();
+    let retired = wait_for_run(&manager, |snapshot| {
+        snapshot.desired_vus == 0 && snapshot.retiring_vus == 4
+    })
+    .await;
+    assert_eq!(retired.active_vus, 4);
+    assert_eq!(retired.metrics.counters.started, 4);
+    assert_eq!(retired.metrics.counters.cancelled, 0);
+    assert_eq!(retired.metrics.counters.in_flight, 4);
+    target.gate.add_permits(4);
+    let idle = wait_for_run(&manager, |snapshot| snapshot.active_vus == 0).await;
+    assert_eq!(idle.state, RunState::Running);
+    assert_eq!(idle.metrics.counters.responses, 4);
+    assert_eq!(idle.metrics.counters.cancelled, 0);
+    assert_eq!(idle.retiring_vus, 0);
+    assert_eq!(target.requests.load(Ordering::SeqCst), 4);
+    manager.stop(&accepted.run_id).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Cancelled);
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn later_ramp_up_waits_for_retirees_and_stop_joins_all_workers() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let input = RunConfig {
+        url: format!("{}/held", server.url),
+        workload: Workload::Ramping {
+            start_vus: 4,
+            stages: vec![
+                RampStage {
+                    duration_ms: 200,
+                    target_vus: 0,
+                },
+                RampStage {
+                    duration_ms: 100,
+                    target_vus: 4,
+                },
+                RampStage {
+                    duration_ms: 3_000,
+                    target_vus: 4,
+                },
+            ],
+        },
+        grace_ms: 0,
+        ..RunConfig::default()
+    };
+    let accepted = manager.start(input, true).await.unwrap();
+    let blocked = wait_for_run(&manager, |snapshot| {
+        snapshot.desired_vus == 4 && snapshot.retiring_vus == 4
+    })
+    .await;
+    assert_eq!(blocked.active_vus, 4);
+    assert_eq!(blocked.metrics.counters.started, 4);
+    assert_eq!(blocked.max_vus, 4);
+    target.gate.add_permits(4);
+    let replaced = wait_for_run(&manager, |snapshot| snapshot.metrics.counters.started == 8).await;
+    assert_eq!(replaced.metrics.counters.responses, 4);
+    assert_eq!(replaced.retiring_vus, 0);
+    assert_eq!(replaced.active_vus, 4);
+    assert_eq!(replaced.max_vus, 4);
+    manager.stop(&accepted.run_id).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Cancelled);
+    assert_eq!(summary.metrics.counters.responses, 4);
+    assert_eq!(summary.metrics.counters.cancelled, 4);
+    assert_eq!(summary.metrics.counters.started, 8);
+    manager.shutdown().await;
+    target.gate.add_permits(8);
+    server.close().await;
+}
+
+#[test]
+fn ramp_validation_rejects_invalid_schedules_and_counts_peak_load() {
+    for (start_vus, stages, code) in [
+        (0, vec![], "INVALID_RUN_CONFIG"),
+        (
+            0,
+            vec![RampStage {
+                duration_ms: 0,
+                target_vus: 1,
+            }],
+            "INVALID_RUN_CONFIG",
+        ),
+        (
+            0,
+            vec![
+                RampStage {
+                    duration_ms: u32::MAX,
+                    target_vus: 0,
+                },
+                RampStage {
+                    duration_ms: 1,
+                    target_vus: 0,
+                },
+            ],
+            "INVALID_RUN_CONFIG",
+        ),
+        (
+            257,
+            vec![RampStage {
+                duration_ms: 1,
+                target_vus: 0,
+            }],
+            "VU_BUDGET_EXCEEDED",
+        ),
+        (
+            0,
+            vec![RampStage {
+                duration_ms: 1,
+                target_vus: 257,
+            }],
+            "VU_BUDGET_EXCEEDED",
+        ),
+    ] {
+        let input = RunConfig {
+            url: "http://127.0.0.1:1/".into(),
+            workload: Workload::Ramping { start_vus, stages },
+            ..RunConfig::default()
+        };
+        assert_eq!(RunManager::prepare(input).unwrap_err().code, code);
+    }
+    let input = RunConfig {
+        url: "http://127.0.0.1:1/".into(),
+        workload: Workload::Ramping {
+            start_vus: 0,
+            stages: vec![
+                RampStage {
+                    duration_ms: 500,
+                    target_vus: 100,
+                },
+                RampStage {
+                    duration_ms: 500,
+                    target_vus: 0,
+                },
+            ],
+        },
+        ..RunConfig::default()
+    };
+    let confirmation = RunManager::prepare(input.clone()).unwrap();
+    assert_eq!(confirmation.vus, 100);
+    assert_eq!(confirmation.duration_ms, 1_000);
+    assert_eq!(confirmation.warnings, ["HIGH_VU_COUNT"]);
+    let mut constrained = input;
+    constrained.budget.max_request_bytes = 100;
+    assert_eq!(
+        RunManager::prepare(constrained).unwrap_err().code,
+        "REQUEST_BUDGET_EXCEEDED"
+    );
+}
+
+#[tokio::test]
+async fn ramp_from_zero_completes_and_drains_slow_responses_then_runs_again() {
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    let input = RunConfig {
+        url: format!("{}/slow", server.url),
+        workload: Workload::Ramping {
+            start_vus: 0,
+            stages: vec![
+                RampStage {
+                    duration_ms: 200,
+                    target_vus: 4,
+                },
+                RampStage {
+                    duration_ms: 200,
+                    target_vus: 0,
+                },
+            ],
+        },
+        grace_ms: 200,
+        ..RunConfig::default()
+    };
+    let first = manager.start(input.clone(), true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Completed);
+    assert!(summary.metrics.counters.responses > 0);
+    assert_eq!(summary.metrics.counters.cancelled, 0);
+    assert!(summary.max_vus <= 4);
+    let second = manager.start(input, true).await.unwrap();
+    assert_ne!(first.run_id, second.run_id);
+    manager.stop(&second.run_id).await.unwrap();
+    manager.shutdown().await;
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Cancelled);
+    server.close().await;
+}
+
+#[tokio::test]
+async fn retirement_interrupts_pacing_without_another_iteration() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let input = RunConfig {
+        url: server.url.clone(),
+        workload: Workload::Ramping {
+            start_vus: 4,
+            stages: vec![
+                RampStage {
+                    duration_ms: 200,
+                    target_vus: 0,
+                },
+                RampStage {
+                    duration_ms: 1_000,
+                    target_vus: 0,
+                },
+            ],
+        },
+        pacing_ms: 30_000,
+        ..RunConfig::default()
+    };
+    let accepted = manager.start(input, true).await.unwrap();
+    let retired = wait_for_run(&manager, |snapshot| {
+        snapshot.state == RunState::Running
+            && snapshot.scheduling_us >= 200_000
+            && snapshot.active_vus == 0
+    })
+    .await;
+    assert_eq!(retired.desired_vus, 0);
+    assert_eq!(retired.retiring_vus, 0);
+    assert_eq!(retired.metrics.counters.started, 4);
+    assert_eq!(retired.metrics.counters.responses, 4);
+    assert_eq!(retired.metrics.counters.cancelled, 0);
+    assert_eq!(target.requests.load(Ordering::SeqCst), 4);
+    manager.stop(&accepted.run_id).await.unwrap();
     manager.shutdown().await;
     server.close().await;
 }

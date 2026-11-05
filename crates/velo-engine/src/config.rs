@@ -4,6 +4,8 @@ use reqwest::{Client, Method, Url, header};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::workload::{Schedule, Workload};
+
 /// Named request value. Duplicate query parameters and headers retain their order.
 ///
 /// # Examples
@@ -62,7 +64,7 @@ pub enum RequestBody {
 /// Explicit local allocation budgets, adjustable before starting a run.
 ///
 /// Defaults allow 256 workers and an 8-MiB request-data budget across the
-/// template and VU request clones. Shared bodies are conservatively counted per VU. They
+/// template, VU request clones, and stage schedule. Shared bodies are conservatively counted per VU. They
 /// are allocation safeguards, not a measured capacity claim. HTTP transport and
 /// runtime overhead also consume memory outside these request-data budgets.
 ///
@@ -77,7 +79,7 @@ pub struct ResourceBudget {
     /// Maximum number of simultaneously owned VU tasks; must be positive.
     pub max_vus: u32,
     /// Maximum normalized request bytes across the template and VU clones,
-    /// including per-pair overhead. This is not a process-wide memory limit.
+    /// including pair overhead and the stage schedule. This is not a process-wide memory limit.
     pub max_request_bytes: u32,
 }
 
@@ -90,7 +92,7 @@ impl Default for ResourceBudget {
     }
 }
 
-/// Untrusted constant-VU input, validated once by [`crate::RunManager::prepare`]
+/// Untrusted request and workload input, validated once by [`crate::RunManager::prepare`]
 /// or [`crate::RunManager::start`]. Durations are integer milliseconds.
 ///
 /// # Examples
@@ -114,10 +116,8 @@ pub struct RunConfig {
     pub query: Vec<NameValue>,
     /// Optional POST body.
     pub body: RequestBody,
-    /// Sequential workers sharing one connection pool; must be positive.
-    pub vus: u32,
-    /// Scheduling duration; must be positive.
-    pub duration_ms: u32,
+    /// Constant or staged VU schedule, validated before worker allocation.
+    pub workload: Workload,
     /// Full response timeout, including streamed body; 1–3,600,000 ms.
     pub timeout_ms: u32,
     /// Delay after an iteration finishes, before another starts; zero by default.
@@ -136,8 +136,7 @@ impl Default for RunConfig {
             headers: Vec::new(),
             query: Vec::new(),
             body: RequestBody::None,
-            vus: 1,
-            duration_ms: 10_000,
+            workload: Workload::default(),
             timeout_ms: 30_000,
             pacing_ms: 0,
             grace_ms: 5_000,
@@ -191,10 +190,12 @@ impl RunError {
 pub struct RunConfirmation {
     /// Target scheme, host, and port; excludes path, credentials, and query.
     pub origin: String,
-    /// Requested workers.
+    /// Peak requested workers, including the starting count.
     pub vus: u32,
     /// Requested scheduling duration in milliseconds.
     pub duration_ms: u32,
+    /// Native-validated schedule shown during authorization review.
+    pub workload: Workload,
     /// Explicit allocation budgets.
     pub budget: ResourceBudget,
     /// Stable warning codes. HIGH_VU_COUNT applies at 100 or more VUs.
@@ -206,6 +207,7 @@ pub(crate) struct ValidatedConfig {
     pub confirmation: RunConfirmation,
     pub request: reqwest::Request,
     pub client: Client,
+    pub schedule: Schedule,
     pub duration: Duration,
     pub pacing: Duration,
     pub grace: Duration,
@@ -213,19 +215,11 @@ pub(crate) struct ValidatedConfig {
 
 pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let invalid = |message, field| RunError::new("INVALID_RUN_CONFIG", message, Some(field));
-    if config.vus == 0 || config.vus > config.budget.max_vus {
-        return Err(RunError::new(
-            "VU_BUDGET_EXCEEDED",
-            "Choose a positive VU count within the configured worker budget.",
-            Some("vus"),
-        ));
-    }
-    if config.duration_ms == 0 {
-        return Err(invalid(
-            "Scheduling duration must be positive.",
-            "duration_ms",
-        ));
-    }
+    let schedule = Schedule::new(
+        &config.workload,
+        config.budget.max_vus,
+        config.budget.max_request_bytes,
+    )?;
     if !(1..=3_600_000).contains(&config.timeout_ms) {
         return Err(invalid(
             "Timeout must be between 1 ms and one hour.",
@@ -233,7 +227,7 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         ));
     }
 
-    let mut size = config.url.len();
+    let mut size = config.url.len().saturating_add(schedule.retained_bytes());
     for pair in config.headers.iter().chain(&config.query) {
         size = size
             .saturating_add(std::mem::size_of::<NameValue>())
@@ -308,7 +302,7 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         .no_brotli()
         .no_deflate()
         .no_zstd()
-        .pool_max_idle_per_host(config.vus as usize)
+        .pool_max_idle_per_host(schedule.peak_vus as usize)
         .timeout(Duration::from_millis(config.timeout_ms.into()))
         .build()
         .map_err(|_| {
@@ -360,7 +354,9 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             .saturating_add(name.as_str().len())
             .saturating_add(value.len());
     }
-    let retained_bytes = request_bytes.saturating_mul(config.vus as usize + 1);
+    let retained_bytes = request_bytes
+        .saturating_mul(schedule.peak_vus as usize + 1)
+        .saturating_add(schedule.retained_bytes());
     if retained_bytes > config.budget.max_request_bytes as usize {
         return Err(RunError::new(
             "REQUEST_BUDGET_EXCEEDED",
@@ -371,10 +367,11 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     Ok(ValidatedConfig {
         confirmation: RunConfirmation {
             origin,
-            vus: config.vus,
-            duration_ms: config.duration_ms,
+            vus: schedule.peak_vus,
+            duration_ms: schedule.duration_ms,
+            workload: config.workload,
             budget: config.budget,
-            warnings: if config.vus >= 100 {
+            warnings: if schedule.peak_vus >= 100 {
                 vec!["HIGH_VU_COUNT".into()]
             } else {
                 Vec::new()
@@ -382,7 +379,8 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         },
         request,
         client,
-        duration: Duration::from_millis(config.duration_ms.into()),
+        duration: Duration::from_millis(schedule.duration_ms.into()),
+        schedule,
         pacing: Duration::from_millis(config.pacing_ms.into()),
         grace: Duration::from_millis(config.grace_ms.into()),
     })

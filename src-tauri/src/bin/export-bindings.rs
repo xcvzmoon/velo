@@ -18,6 +18,8 @@ fn main() {
     println!("export {};", velo_engine::RequestMethod::decl(&config));
     println!("export {};", velo_engine::RequestBody::decl(&config));
     println!("export {};", velo_engine::ResourceBudget::decl(&config));
+    println!("export {};", velo_engine::RampStage::decl(&config));
+    println!("export {};", velo_engine::Workload::decl(&config));
     println!("export {};", velo_engine::RunConfig::decl(&config));
     println!("export {};", velo_engine::RunError::decl(&config));
     println!("export {};", velo_engine::RunConfirmation::decl(&config));

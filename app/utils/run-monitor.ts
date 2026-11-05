@@ -8,6 +8,7 @@ type ChartPoint = {
   latency: number | null;
   failures: number | null;
   vus: number | null;
+  desiredVus: number | null;
 };
 
 type RunTransport = {
@@ -149,6 +150,7 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
         latency: null,
         failures: null,
         vus: null,
+        desiredVus: null,
       });
     }
 
@@ -164,6 +166,7 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
           ? null
           : (failures / requests) * 100,
       vus: update.snapshot.active_vus,
+      desiredVus: update.snapshot.desired_vus,
     });
     points.value = nextPoints.slice(-pointLimit);
     sequence = nextSequence;

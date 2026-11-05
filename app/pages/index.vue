@@ -15,7 +15,7 @@
     <ShellEmptyState
       v-else
       title="Ready for your first run"
-      description="Configure a GET or POST request, choose a constant virtual-user workload, and monitor live response times and throughput."
+      description="Configure a GET or POST request, choose constant or ramping virtual users, and monitor live response times and throughput."
     >
       <Button
         variant="outline"
