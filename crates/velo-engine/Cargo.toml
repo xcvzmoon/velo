@@ -1,0 +1,6 @@
+[package]
+name = "velo-engine"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT"

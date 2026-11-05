@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:65432",
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm nuxt:dev --port 65432",
     "beforeBuildCommand": "pnpm nuxt:generate"
   },
   "app": {
@@ -23,21 +23,13 @@
         "trafficLightPosition": {
           "x": 13,
           "y": 21
-        }
+        },
+        "minWidth": 640,
+        "minHeight": 480
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "enable": true,
-        "scope": [
-          "/Applications/**",
-          "/System/Applications/**",
-          "/System/Library/CoreServices/**",
-          "$HOME/Applications/**",
-          "$HOME/Library/Caches/com.velo.dev/**"
-        ]
-      }
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
     },
     "macOSPrivateApi": true
   },

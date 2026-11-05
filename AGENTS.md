@@ -43,6 +43,13 @@ Vue: Composition API + `<script setup>` is the project direction (see `.agents/s
 - **`no-console`**: only `warn`/`error`/`info` allowed
 - **`no-non-null-assertion`** is a warning — avoid `!`; type-aware rules also catch most unsafe patterns
 
+## UI components and forms
+
+- Use shadcn-vue components whenever they provide the required control. Use Input, Label, Button, Textarea, Checkbox, and other matching components instead of raw HTML controls.
+- Prefer composed shadcn-vue controls over native variants. For example, use Select instead of a native `<select>` or shadcn-vue NativeSelect.
+- Use Formisch (`@formisch/vue`) for forms, including form state, validation, submission, and field errors. Use Valibot schemas with Formisch; do not build parallel manual form handling or add another form library.
+- Keep semantic HTML for layout and content where no shadcn-vue component applies.
+
 ## Editing Guidance
 
 - Make the smallest correct change.

@@ -20,6 +20,7 @@ export default defineConfig({
     functions: ['clsx', 'cn'],
     preserveWhitespace: true,
   },
+  htmlWhitespaceSensitivity: 'ignore',
   singleQuote: true,
   singleAttributePerLine: true,
   vueIndentScriptAndStyle: true,

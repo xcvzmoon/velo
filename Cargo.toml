@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/velo-engine", "src-tauri"]
+resolver = "3"
