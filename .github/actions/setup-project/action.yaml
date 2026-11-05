@@ -1,10 +1,11 @@
 name: Setup project
-description: Install Tauri build dependencies, pnpm, Node.js, and project packages.
+description: Install project toolchains and dependencies.
 
 runs:
   using: composite
   steps:
     - name: Install Tauri dependencies
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         sudo apt-get update
@@ -16,9 +17,20 @@ runs:
         version: '12.6.0'
         runtime: node@26
         cache: true
+        install: false
+
+    - name: Setup Rust
+      shell: bash
+      run: rustup show active-toolchain
 
     - name: Cache Rust dependencies
       uses: Swatinem/rust-cache@v2.9.2
       with:
         workspaces: '. -> target'
-        shared-key: tauri
+        shared-key: desktop
+        add-job-id-key: false
+        save-if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
