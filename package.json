@@ -1,6 +1,6 @@
 {
-  "name": "create-tauri-app-nuxt",
-  "description": "Create application using Tauri with Nuxt",
+  "name": "velo",
+  "description": "A lightweight, native API load-testing studio powered by Rust",
   "version": "0.0.0",
   "type": "module",
   "private": true,
