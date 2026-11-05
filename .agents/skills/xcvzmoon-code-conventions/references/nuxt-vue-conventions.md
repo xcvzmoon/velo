@@ -2,6 +2,16 @@
 
 Apply these conventions to Nuxt and Vue files. Preserve dependency order and framework-required hierarchy when it conflicts with the preferred visual order.
 
+## Auto-imports
+
+When auto-imports are enabled, use covered APIs, composables, utilities, and components directly. Do not add redundant explicit imports, including imports from `vue`, `#imports`, or component paths when the configured auto-import system already supplies them.
+
+Check the Nuxt configuration, registered modules, scanned directories, and generated declarations to confirm which symbols are available in the current file. Respect disabled auto-imports and differences between application, server, test, and standalone script contexts.
+
+Apply the same rule in Vue projects with configured auto-import plugins or dependencies. Verify the plugin configuration and its scope; Vue alone does not establish that auto-imports are enabled. Do not install or enable an auto-import plugin merely to avoid an import.
+
+Keep explicit imports for symbols outside the configured coverage, required side effects, or aliases needed to resolve naming conflicts. Use `import type` for types that require an explicit import.
+
 ## Reactive types
 
 Declare reactive values with explicit types. Apply this to `ref`, `shallowRef`, `reactive`, `computed`, and comparable reactive primitives:
@@ -9,7 +19,7 @@ Declare reactive values with explicit types. Apply this to `ref`, `shallowRef`, 
 ```ts
 const count = ref<number>(0);
 const selectedItem = shallowRef<Item | null>(null);
-const form = reactive<FormState>({ name: "" });
+const form = reactive<FormState>({ name: '' });
 const hasSelection = computed<boolean>(() => selectedItem.value !== null);
 ```
 

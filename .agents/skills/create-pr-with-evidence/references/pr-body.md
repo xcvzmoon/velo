@@ -1,5 +1,7 @@
 # Pull Request Body Template
 
+Start with one paragraph of two or three complete sentences describing the problem or capability, resulting behavior, and why the change is needed. Put it before Summary.
+
 Use this template as a decision guide. Keep `Summary` and `Verification`. Add other sections only when they improve the review. Do not invent content to fill a section.
 
 ## Summary
