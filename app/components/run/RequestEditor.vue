@@ -67,6 +67,7 @@
       headers: [],
       query: [],
       bodyKind: 'none',
+      formPairs: [],
       bodyValue: '',
       workloadKind: 'constant',
       rate: 10,
@@ -310,84 +311,10 @@
           :disabled="disabled"
         />
 
-        <div class="space-y-4">
-          <FormischField
-            v-slot="field"
-            :of="form"
-            :path="['bodyKind']"
-          >
-            <div class="space-y-2">
-              <Label for="request-body-kind">Body format</Label>
-
-              <Select
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-              >
-                <SelectTrigger
-                  :aria-invalid="Boolean(field.errors)"
-                  id="request-body-kind"
-                  aria-describedby="request-body-kind-error"
-                  class="w-full sm:w-48"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="none">No body</SelectItem>
-                  <SelectItem value="text">Plain text</SelectItem>
-                  <SelectItem value="json">JSON</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <p
-                v-if="field.errors"
-                id="request-body-kind-error"
-                class="text-destructive text-xs"
-                role="alert"
-              >
-                {{ field.errors[0] }}
-              </p>
-            </div>
-          </FormischField>
-
-          <FormischField
-            v-slot="field"
-            :of="form"
-            :path="['bodyValue']"
-          >
-            <div class="space-y-2">
-              <Label for="request-body">Request body</Label>
-
-              <Textarea
-                v-model="field.input"
-                v-bind="field.props"
-                :aria-invalid="Boolean(field.errors)"
-                id="request-body"
-                aria-describedby="request-body-help request-body-error"
-                class="min-h-28 font-mono text-xs"
-                autocomplete="off"
-                spellcheck="false"
-              />
-
-              <p
-                id="request-body-help"
-                class="text-muted-foreground text-xs"
-              >
-                Select plain text or JSON to send this content. No body discards the content.
-              </p>
-
-              <p
-                v-if="field.errors"
-                id="request-body-error"
-                class="text-destructive text-xs"
-                role="alert"
-              >
-                {{ field.errors[0] }}
-              </p>
-            </div>
-          </FormischField>
-        </div>
+        <RunBodyEditor
+          :form="form"
+          :disabled="disabled"
+        />
 
         <div class="space-y-4 border-t pt-6">
           <h3 class="text-sm font-medium">Workload and local resource budgets</h3>

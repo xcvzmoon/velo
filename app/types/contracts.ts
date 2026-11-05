@@ -62,7 +62,8 @@ export type RequestAuth =
 export type RequestBody =
   | { kind: 'none' }
   | { kind: 'text'; value: string }
-  | { kind: 'json'; value: string };
+  | { kind: 'json'; value: string }
+  | { kind: 'form'; value: NameValue[] };
 export type ResourceBudget = {
   /**
    * Maximum number of simultaneously owned VU tasks; must be positive.

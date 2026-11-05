@@ -69,6 +69,8 @@ pub enum RequestBody {
     Text(String),
     /// UTF-8 JSON, with a default application/json content type.
     Json(String),
+    /// URL-encoded pairs; duplicate names retain their order.
+    Form(#[ts(type = "NameValue[]")] Vec<NameValue>),
 }
 
 /// Explicit local allocation budgets, adjustable before starting a run.
@@ -270,6 +272,11 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let body_size = match &config.body {
         RequestBody::None => 0,
         RequestBody::Text(value) | RequestBody::Json(value) => value.len(),
+        RequestBody::Form(pairs) => pairs.iter().fold(0_usize, |size, pair| {
+            size.saturating_add(std::mem::size_of::<NameValue>())
+                .saturating_add(pair.name.len())
+                .saturating_add(pair.value.len())
+        }),
     };
     size = size
         .saturating_add(body_size)
@@ -367,6 +374,7 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         let content_type = match &config.body {
             RequestBody::Text(_) => Some("text/plain; charset=utf-8"),
             RequestBody::Json(_) => Some("application/json"),
+            RequestBody::Form(_) => Some("application/x-www-form-urlencoded"),
             RequestBody::None => None,
         };
         if let Some(content_type) = content_type {
@@ -387,6 +395,13 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     request = crate::http_options::authenticate(request, &config.auth)?;
     match config.body {
         RequestBody::None => {}
+        RequestBody::Form(pairs) => {
+            let pairs: Vec<_> = pairs
+                .into_iter()
+                .map(|pair| (pair.name, pair.value))
+                .collect();
+            request = request.form(&pairs);
+        }
         RequestBody::Text(value) => {
             request = request.body(value);
         }
@@ -399,7 +414,15 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let request = request
         .build()
         .map_err(|_| invalid("Invalid HTTP request settings.", "headers"))?;
-    let mut request_bytes = request.url().as_str().len().saturating_add(body_size);
+    let normalized_body_bytes = request
+        .body()
+        .and_then(reqwest::Body::as_bytes)
+        .map_or(0, <[u8]>::len);
+    let mut request_bytes = request
+        .url()
+        .as_str()
+        .len()
+        .saturating_add(body_size.max(normalized_body_bytes));
     for (name, value) in request.headers() {
         request_bytes = request_bytes
             .saturating_add(std::mem::size_of::<NameValue>())

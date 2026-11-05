@@ -292,7 +292,7 @@ async fn get_post_query_headers_json_and_text_are_constructed() {
                     Some("text/plain; charset=utf-8")
                 );
             }
-            RequestBody::None => unreachable!(),
+            RequestBody::None | RequestBody::Form(_) => unreachable!(),
         }
     }
     input.headers.push(NameValue {
@@ -1233,11 +1233,25 @@ async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_t
         let mut input = config(format!("{}/echo", server.url));
         input.auth = auth;
         input.method = RequestMethod::POST;
-        input.body = RequestBody::Text("payload".into());
+        input.body = RequestBody::Form(vec![
+            NameValue {
+                name: "tag".into(),
+                value: "a & b".into(),
+            },
+            NameValue {
+                name: "tag".into(),
+                value: "日本".into(),
+            },
+        ]);
         manager.start(input, true).await.unwrap();
         let summary = terminal(&manager).await;
         let received = target.received.lock().await.clone().unwrap();
         assert_eq!(received.authorization.as_deref(), Some(expected));
+        assert_eq!(
+            received.content_type.as_deref(),
+            Some("application/x-www-form-urlencoded")
+        );
+        assert_eq!(received.body, b"tag=a+%26+b&tag=%E6%97%A5%E6%9C%AC");
         assert!(
             !serde_json::to_string(&summary)
                 .unwrap()

@@ -27,6 +27,7 @@ const input = {
   ],
   thresholds: [],
   bodyKind: 'json',
+  formPairs: [],
   bodyValue: '{"enabled":true}',
   workloadKind: 'constant',
   rate: '10',

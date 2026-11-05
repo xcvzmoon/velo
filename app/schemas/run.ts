@@ -90,7 +90,13 @@ const requestFieldsSchema = v.object({
       value: v.string(),
     }),
   ),
-  bodyKind: v.picklist(['none', 'text', 'json']),
+  bodyKind: v.picklist(['none', 'text', 'json', 'form']),
+  formPairs: v.array(
+    v.object({
+      name: v.string(),
+      value: v.string(),
+    }),
+  ),
   bodyValue: v.string(),
   timeout_ms: v.pipe(
     positiveIntegerSchema,
@@ -221,6 +227,7 @@ export const requestEditorSchema = v.pipe(
     ({
       bodyKind,
       bodyValue,
+      formPairs,
       authKind,
       authToken,
       authUsername,
@@ -272,10 +279,15 @@ export const requestEditorSchema = v.pipe(
       body:
         bodyKind === 'none'
           ? { kind: 'none' }
-          : {
-              kind: bodyKind,
-              value: bodyValue,
-            },
+          : bodyKind === 'form'
+            ? {
+                kind: 'form',
+                value: formPairs,
+              }
+            : {
+                kind: bodyKind,
+                value: bodyValue,
+              },
       budget: { max_vus, max_request_bytes },
     }),
   ),
