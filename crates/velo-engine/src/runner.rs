@@ -88,6 +88,9 @@ pub struct RunSnapshot {
     pub arrival: ArrivalSnapshot,
     /// Cumulative counters, rates, and separate duration populations.
     pub metrics: MetricsSnapshot,
+    /// Final threshold outcomes; empty while active or when no rules are configured.
+    #[ts(type = "ThresholdResult[]")]
+    pub thresholds: Vec<crate::ThresholdResult>,
     /// Stable internal failure code, without infrastructure or target details.
     pub failure_code: Option<String>,
 }
@@ -177,6 +180,7 @@ struct Progress {
 struct Run {
     id: String,
     confirmation: RunConfirmation,
+    thresholds: Vec<crate::Threshold>,
     stop: CancellationToken,
     progress: Mutex<Progress>,
 }
@@ -206,7 +210,14 @@ impl Run {
         let elapsed = now.saturating_duration_since(start);
         let scheduling_us = end.saturating_duration_since(start).as_micros() as u64;
         let actual_us = elapsed.as_micros() as u64;
+        let metrics = progress.metrics.snapshot(elapsed);
+        let thresholds = if progress.state.is_terminal() {
+            crate::threshold::evaluate(&self.thresholds, &metrics)
+        } else {
+            Vec::new()
+        };
         RunSnapshot {
+            thresholds,
             run_id: self.id.clone(),
             state: progress.state,
             confirmation: self.confirmation.clone(),
@@ -217,7 +228,7 @@ impl Run {
             retiring_vus: progress.retiring_vus,
             active_vus: progress.active_vus,
             max_vus: progress.max_vus,
-            metrics: progress.metrics.snapshot(elapsed),
+            metrics,
             arrival: progress.arrival.clone(),
             failure_code: progress.failure_code.clone(),
         }
@@ -290,8 +301,10 @@ impl RunManager {
     ///
     /// # Errors
     /// Returns [`RunError`] with INVALID_RUN_CONFIG, VU_BUDGET_EXCEEDED,
-    /// REQUEST_BUDGET_EXCEEDED, or HTTP_CLIENT_INIT_FAILED on invalid input or
-    /// unavailable HTTP initialization. Input secrets are omitted.
+    /// REQUEST_BUDGET_EXCEEDED, UPLOAD_FILE_UNAVAILABLE, or HTTP_CLIENT_INIT_FAILED
+    /// on invalid input, unavailable files, or HTTP initialization failure. Input
+    /// secrets are omitted. Multipart preparation opens and closes files to validate
+    /// readability; call this synchronous API from a blocking thread for file inputs.
     ///
     /// # Examples
     /// ```
@@ -313,11 +326,14 @@ impl RunManager {
     ///
     /// # Returns
     /// The accepted run's initial authoritative snapshot. Only the most recent
-    /// run is retained. Cancelling this future before acceptance starts no work.
+    /// run is retained. Cancelling this future before acceptance starts no HTTP work.
+    /// In-progress blocking file validation may finish afterward and closes its files.
+    /// Owned streaming readers are cancelled and joined before terminal publication.
     ///
     /// # Errors
     /// Returns [`RunError`] with AUTHORIZATION_REQUIRED, RUN_ALREADY_ACTIVE,
-    /// RUN_ID_EXHAUSTED, or validation/initialization codes from [`Self::prepare`].
+    /// RUN_ID_EXHAUSTED, RUN_PREPARATION_FAILED if blocking preparation cannot finish,
+    /// or validation/initialization codes from [`Self::prepare`].
     ///
     /// # Panics
     /// Panics if accepted outside a running Tokio runtime.
@@ -345,7 +361,19 @@ impl RunManager {
                 None,
             ));
         }
-        let config = validate(config)?;
+        let config = if matches!(&config.body, crate::RequestBody::Multipart(_)) {
+            tokio::task::spawn_blocking(move || validate(config))
+                .await
+                .map_err(|_| {
+                    RunError::new(
+                        "RUN_PREPARATION_FAILED",
+                        "Request preparation could not complete.",
+                        None,
+                    )
+                })??
+        } else {
+            validate(config)?
+        };
         let mut state = self.state.lock().await;
         if let Some(current) = &mut state.current {
             if !current.run.lock().state.is_terminal() {
@@ -370,6 +398,7 @@ impl RunManager {
         let run = Arc::new(Run {
             id: id.to_string(),
             confirmation: config.confirmation.clone(),
+            thresholds: config.thresholds.clone(),
             stop: CancellationToken::new(),
             progress: Mutex::new(Progress {
                 state: RunState::Starting,
@@ -653,6 +682,12 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
             failed |= !error.is_cancelled();
         }
     }
+    config.upload_stop.cancel();
+    let mut uploads = config.uploads.lock().await;
+    while let Some(result) = uploads.join_next().await {
+        failed |= result.is_err();
+    }
+    drop(uploads);
     let mut progress = run.lock();
     progress.finished = Some(Instant::now());
     progress.state = if failed {
@@ -767,16 +802,12 @@ async fn schedule_arrivals(
 }
 
 async fn execute_arrival(_worker: Worker, config: Arc<ValidatedConfig>, mut attempt: Attempt) {
-    let request = config
-        .request
-        .try_clone()
-        .expect("validated buffered request is cloneable");
     attempt.started = Instant::now();
-    let result = consume_response(&config.client, request, &mut attempt.bytes).await;
+    let result = crate::transport::execute(&config, &mut attempt.bytes).await;
     attempt.elapsed = Some(attempt.started.elapsed());
     attempt.outcome = match result {
         Ok(success) => Outcome::Response(success),
-        Err(error) if error.is_timeout() => Outcome::Timeout,
+        Err(crate::transport::Failure::Timeout) => Outcome::Timeout,
         Err(_) => Outcome::Transport,
     };
 }
@@ -825,10 +856,6 @@ impl Drop for Attempt {
 
 async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: Instant) {
     loop {
-        let request = config
-            .request
-            .try_clone()
-            .expect("validated buffered request is cloneable");
         {
             let mut progress = worker.run.measured_lock();
             if progress.state != RunState::Running
@@ -846,11 +873,11 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             outcome: Outcome::Cancelled,
             elapsed: None,
         };
-        let result = consume_response(&config.client, request, &mut attempt.bytes).await;
+        let result = crate::transport::execute(&config, &mut attempt.bytes).await;
         attempt.elapsed = Some(attempt.started.elapsed());
         attempt.outcome = match result {
             Ok(success) => Outcome::Response(success),
-            Err(error) if error.is_timeout() => Outcome::Timeout,
+            Err(crate::transport::Failure::Timeout) => Outcome::Timeout,
             Err(_) => Outcome::Transport,
         };
         drop(attempt);
@@ -866,19 +893,6 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             }
         }
     }
-}
-
-async fn consume_response(
-    client: &reqwest::Client,
-    request: reqwest::Request,
-    bytes: &mut u64,
-) -> Result<bool, reqwest::Error> {
-    let mut response = client.execute(request).await?;
-    let success = (200..400).contains(&response.status().as_u16());
-    while let Some(chunk) = response.chunk().await? {
-        *bytes = bytes.saturating_add(chunk.len() as u64);
-    }
-    Ok(success)
 }
 
 #[cfg(test)]

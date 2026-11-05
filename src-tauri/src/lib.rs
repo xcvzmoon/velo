@@ -2,6 +2,7 @@ mod diagnostic;
 mod execution;
 #[cfg(target_os = "macos")]
 mod macos_exit;
+mod uploads;
 
 use std::sync::{Arc, atomic::Ordering};
 
@@ -38,6 +39,7 @@ pub fn run() {
             execution::start_run,
             execution::stop_run,
             execution::current_run,
+            uploads::select_upload_file,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

@@ -11,10 +11,18 @@ fn main() {
     let config = ts_rs::Config::default();
     println!("export {};", velo_engine::NameValue::decl(&config));
     println!("export {};", velo_engine::RequestMethod::decl(&config));
+    println!("export {};", velo_engine::RequestAuth::decl(&config));
+    println!("export {};", velo_engine::HttpProtocol::decl(&config));
+    println!("export {};", velo_engine::MultipartPart::decl(&config));
     println!("export {};", velo_engine::RequestBody::decl(&config));
     println!("export {};", velo_engine::ResourceBudget::decl(&config));
     println!("export {};", velo_engine::RampStage::decl(&config));
     println!("export {};", velo_engine::Workload::decl(&config));
+    println!("export {};", velo_engine::ThresholdMetric::decl(&config));
+    println!("export {};", velo_engine::ThresholdOperator::decl(&config));
+    println!("export {};", velo_engine::Threshold::decl(&config));
+    println!("export {};", velo_engine::ThresholdStatus::decl(&config));
+    println!("export {};", velo_engine::ThresholdResult::decl(&config));
     println!("export {};", velo_engine::RunConfig::decl(&config));
     println!("export {};", velo_engine::RunError::decl(&config));
     println!("export {};", velo_engine::RunConfirmation::decl(&config));

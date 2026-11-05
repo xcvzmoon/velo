@@ -38,6 +38,16 @@ pub enum RequestMethod {
     GET,
     /// Submit an optional text or JSON body.
     POST,
+    /// Replace a resource with an optional body.
+    PUT,
+    /// Modify a resource with an optional body.
+    PATCH,
+    /// Delete a resource with an optional body.
+    DELETE,
+    /// Fetch headers without a request or response body.
+    HEAD,
+    /// Query supported communication options, with an optional body.
+    OPTIONS,
 }
 
 /// Request payload. JSON is validated before execution and sent unchanged.
@@ -59,14 +69,19 @@ pub enum RequestBody {
     Text(String),
     /// UTF-8 JSON, with a default application/json content type.
     Json(String),
+    /// URL-encoded pairs; duplicate names retain their order.
+    Form(#[ts(type = "NameValue[]")] Vec<NameValue>),
+    /// Ordered text and streamed file parts. Files must remain unchanged during a run.
+    Multipart(#[ts(type = "MultipartPart[]")] Vec<crate::MultipartPart>),
 }
 
 /// Explicit local allocation budgets, adjustable before starting a run.
 ///
 /// Defaults allow 256 workers and an 8-MiB request-data budget across the
-/// template, VU request clones, and stage schedule. Shared bodies are conservatively counted per VU. They
-/// are allocation safeguards, not a measured capacity claim. HTTP transport and
-/// runtime overhead also consume memory outside these request-data budgets.
+/// template, VU request clones, stage schedule, and threshold rules. Shared bodies
+/// are conservatively counted per VU. These are allocation safeguards, not a measured
+/// capacity claim. Streaming uploads reserve two 16-KiB buffers per file per VU.
+/// HTTP transport and runtime overhead also consume memory outside these budgets.
 ///
 /// # Examples
 /// ```
@@ -79,7 +94,8 @@ pub struct ResourceBudget {
     /// Maximum number of simultaneously owned VU tasks; must be positive.
     pub max_vus: u32,
     /// Maximum normalized request bytes across the template and VU clones,
-    /// including pair overhead and the stage schedule. This is not a process-wide memory limit.
+    /// including pair overhead, the stage schedule, threshold rules, and upload buffers.
+    /// This is not a process-wide memory limit.
     pub max_request_bytes: u32,
 }
 
@@ -106,7 +122,7 @@ impl Default for ResourceBudget {
 pub struct RunConfig {
     /// Absolute HTTP(S) URL without embedded credentials or a fragment.
     pub url: String,
-    /// GET or POST.
+    /// Logical HTTP method. GET and HEAD reject request bodies.
     pub method: RequestMethod,
     /// Custom headers; Host, Content-Length, and Transfer-Encoding are reserved.
     #[ts(type = "NameValue[]")]
@@ -114,8 +130,15 @@ pub struct RunConfig {
     /// Additional query pairs appended to the URL, including duplicate names.
     #[ts(type = "NameValue[]")]
     pub query: Vec<NameValue>,
-    /// Optional POST body.
+    /// Optional body for methods other than GET and HEAD.
     pub body: RequestBody,
+    /// Explicit authentication; custom Authorization headers cannot be combined with it.
+    pub auth: crate::RequestAuth,
+    /// Negotiated HTTP by default; HTTP/2 forces h2, including prior knowledge for cleartext.
+    pub protocol: crate::HttpProtocol,
+    /// Maximum redirects to follow; zero disables redirects. Cross-origin redirects and
+    /// HTTPS downgrades are rejected, keeping custom credentials and payloads on the target origin.
+    pub max_redirects: u32,
     /// Constant, staged, or arrival schedule, validated before worker allocation.
     pub workload: Workload,
     /// Full response timeout, including streamed body; 1–3,600,000 ms.
@@ -124,6 +147,9 @@ pub struct RunConfig {
     pub pacing_ms: u32,
     /// Maximum drain time after stop or duration expiry; zero aborts immediately.
     pub grace_ms: u32,
+    /// Final cumulative metric rules; empty by default.
+    #[ts(type = "Threshold[]")]
+    pub thresholds: Vec<crate::Threshold>,
     /// Explicit task and retained request-data limits.
     pub budget: ResourceBudget,
 }
@@ -136,10 +162,14 @@ impl Default for RunConfig {
             headers: Vec::new(),
             query: Vec::new(),
             body: RequestBody::None,
+            auth: crate::RequestAuth::None,
+            protocol: crate::HttpProtocol::Auto,
+            max_redirects: 0,
             workload: Workload::default(),
             timeout_ms: 30_000,
             pacing_ms: 0,
             grace_ms: 5_000,
+            thresholds: Vec::new(),
             budget: ResourceBudget::default(),
         }
     }
@@ -205,7 +235,13 @@ pub struct RunConfirmation {
 
 pub(crate) struct ValidatedConfig {
     pub confirmation: RunConfirmation,
+    pub thresholds: Vec<crate::Threshold>,
     pub request: reqwest::Request,
+    pub multipart: Option<Vec<crate::http_options::PreparedPart>>,
+    pub max_redirects: u32,
+    pub timeout: Duration,
+    pub uploads: tokio::sync::Mutex<tokio::task::JoinSet<()>>,
+    pub upload_stop: tokio_util::sync::CancellationToken,
     pub client: Client,
     pub schedule: Schedule,
     pub duration: Duration,
@@ -215,6 +251,11 @@ pub(crate) struct ValidatedConfig {
 
 pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let invalid = |message, field| RunError::new("INVALID_RUN_CONFIG", message, Some(field));
+    crate::threshold::validate(&config.thresholds)?;
+    let threshold_bytes = config
+        .thresholds
+        .len()
+        .saturating_mul(std::mem::size_of::<crate::Threshold>());
     let schedule = Schedule::new(
         &config.workload,
         config.budget.max_vus,
@@ -233,17 +274,19 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         ));
     }
 
-    let mut size = config.url.len().saturating_add(schedule.retained_bytes());
+    let mut size = config
+        .url
+        .len()
+        .saturating_add(schedule.retained_bytes())
+        .saturating_add(threshold_bytes);
     for pair in config.headers.iter().chain(&config.query) {
         size = size
             .saturating_add(std::mem::size_of::<NameValue>())
             .saturating_add(pair.name.len())
             .saturating_add(pair.value.len());
     }
-    let body_size = match &config.body {
-        RequestBody::None => 0,
-        RequestBody::Text(value) | RequestBody::Json(value) => value.len(),
-    };
+    let body_size = crate::http_options::body_size(&config.body);
+    size = size.saturating_add(crate::http_options::auth_size(&config.auth));
     size = size.saturating_add(body_size);
     if size > config.budget.max_request_bytes as usize || config.budget.max_request_bytes == 0 {
         return Err(RunError::new(
@@ -296,9 +339,33 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let method = match config.method {
         RequestMethod::GET => Method::GET,
         RequestMethod::POST => Method::POST,
+        RequestMethod::PUT => Method::PUT,
+        RequestMethod::PATCH => Method::PATCH,
+        RequestMethod::DELETE => Method::DELETE,
+        RequestMethod::HEAD => Method::HEAD,
+        RequestMethod::OPTIONS => Method::OPTIONS,
     };
-    if method == Method::GET && !matches!(config.body, RequestBody::None) {
-        return Err(invalid("GET requests cannot contain a body.", "body"));
+    if matches!(method, Method::GET | Method::HEAD) && !matches!(config.body, RequestBody::None) {
+        return Err(invalid(
+            "GET and HEAD requests cannot contain a body.",
+            "body",
+        ));
+    }
+    if !matches!(config.auth, crate::RequestAuth::None)
+        && headers.contains_key(header::AUTHORIZATION)
+    {
+        return Err(invalid(
+            "Choose authentication or a custom Authorization header, not both.",
+            "auth",
+        ));
+    }
+    if matches!(config.body, RequestBody::Multipart(_))
+        && headers.contains_key(header::CONTENT_TYPE)
+    {
+        return Err(invalid(
+            "Multipart Content-Type and boundary are managed by the client.",
+            "headers",
+        ));
     }
     let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -309,20 +376,26 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         .no_deflate()
         .no_zstd()
         .pool_max_idle_per_host(schedule.peak_vus as usize)
-        .timeout(Duration::from_millis(config.timeout_ms.into()))
-        .build()
-        .map_err(|_| {
-            RunError::new(
-                "HTTP_CLIENT_INIT_FAILED",
-                "HTTP client initialization failed.",
-                None,
-            )
-        })?;
+        .timeout(Duration::from_millis(config.timeout_ms.into()));
+    let client = match config.protocol {
+        crate::HttpProtocol::Auto => client,
+        crate::HttpProtocol::Http1 => client.http1_only(),
+        crate::HttpProtocol::Http2 => client.http2_prior_knowledge(),
+    }
+    .build()
+    .map_err(|_| {
+        RunError::new(
+            "HTTP_CLIENT_INIT_FAILED",
+            "HTTP client initialization failed.",
+            None,
+        )
+    })?;
     if !headers.contains_key(header::CONTENT_TYPE) {
         let content_type = match &config.body {
             RequestBody::Text(_) => Some("text/plain; charset=utf-8"),
             RequestBody::Json(_) => Some("application/json"),
-            RequestBody::None => None,
+            RequestBody::Form(_) => Some("application/x-www-form-urlencoded"),
+            RequestBody::None | RequestBody::Multipart(_) => None,
         };
         if let Some(content_type) = content_type {
             headers
@@ -339,8 +412,20 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         }
     }
     let mut request = client.request(method, url).headers(headers);
+    request = crate::http_options::authenticate(request, &config.auth)?;
+    let mut multipart = None;
     match config.body {
         RequestBody::None => {}
+        RequestBody::Form(pairs) => {
+            let pairs: Vec<_> = pairs
+                .into_iter()
+                .map(|pair| (pair.name, pair.value))
+                .collect();
+            request = request.form(&pairs);
+        }
+        RequestBody::Multipart(parts) => {
+            multipart = Some(crate::http_options::prepare_parts(parts)?);
+        }
         RequestBody::Text(value) => {
             request = request.body(value);
         }
@@ -353,16 +438,27 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let request = request
         .build()
         .map_err(|_| invalid("Invalid HTTP request settings.", "headers"))?;
-    let mut request_bytes = request.url().as_str().len().saturating_add(body_size);
+    let normalized_body_bytes = request
+        .body()
+        .and_then(reqwest::Body::as_bytes)
+        .map_or(0, <[u8]>::len);
+    let mut request_bytes = request
+        .url()
+        .as_str()
+        .len()
+        .saturating_add(body_size.max(normalized_body_bytes));
     for (name, value) in request.headers() {
         request_bytes = request_bytes
             .saturating_add(std::mem::size_of::<NameValue>())
             .saturating_add(name.as_str().len())
             .saturating_add(value.len());
     }
+    let upload_bytes = crate::http_options::upload_buffer_bytes(multipart.as_deref());
     let retained_bytes = request_bytes
         .saturating_mul(schedule.peak_vus as usize + 1)
-        .saturating_add(schedule.retained_bytes());
+        .saturating_add(schedule.retained_bytes())
+        .saturating_add(threshold_bytes)
+        .saturating_add(upload_bytes.saturating_mul(schedule.peak_vus as usize));
     if retained_bytes > config.budget.max_request_bytes as usize {
         return Err(RunError::new(
             "REQUEST_BUDGET_EXCEEDED",
@@ -388,6 +484,12 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
                 warnings
             },
         },
+        thresholds: config.thresholds,
+        multipart,
+        max_redirects: config.max_redirects,
+        timeout: Duration::from_millis(config.timeout_ms.into()),
+        uploads: tokio::sync::Mutex::new(tokio::task::JoinSet::new()),
+        upload_stop: tokio_util::sync::CancellationToken::new(),
         request,
         client,
         duration: Duration::from_millis(schedule.duration_ms.into()),

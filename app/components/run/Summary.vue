@@ -81,6 +81,60 @@
       </div>
     </dl>
 
+    <div
+      v-if="snapshot.thresholds.length"
+      class="overflow-x-auto"
+    >
+      <table class="w-full text-left text-xs">
+        <caption class="text-muted-foreground mb-3 text-left">
+          Final thresholds for {{ snapshot.state === 'completed' ? 'completed' : 'partial' }} work.
+          Comparisons use unrounded values. Insufficient data cannot pass.
+        </caption>
+
+        <thead>
+          <tr>
+            <th class="p-2">Metric / population</th>
+            <th class="p-2">Required</th>
+            <th class="p-2">Observed</th>
+            <th class="p-2">Result</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr
+            v-for="(result, index) in snapshot.thresholds"
+            :key="index"
+            class="border-t"
+          >
+            <th class="p-2 font-normal">
+              {{
+                result.rule.metric === 'response_p95_ms'
+                  ? 'Completed response p95 (ms)'
+                  : result.rule.metric === 'http_failure_percent'
+                    ? 'HTTP failure (%) / terminal attempts'
+                    : 'Terminal requests/s / actual duration'
+              }}
+            </th>
+
+            <td class="p-2 font-mono">
+              {{ result.rule.operator === 'less_than' ? '<' : '>' }} {{ result.rule.limit }}
+            </td>
+
+            <td class="p-2 font-mono">
+              {{ result.observed === null ? 'No data' : result.observed.toFixed(3) }}
+            </td>
+
+            <td
+              :class="result.status === 'passed' ? '' : 'text-destructive'"
+              class="p-2 capitalize"
+            >
+              {{ result.status.replaceAll('_', ' ') }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <RunArrivalMetrics :snapshot="snapshot" />
 
     <div class="overflow-x-auto">

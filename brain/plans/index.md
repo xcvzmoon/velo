@@ -5,3 +5,4 @@
 - [[plans/12-live-monitoring]]
 - [[plans/13-ramping-vus]]
 - [[plans/14-arrival-rate]]
+- [[plans/15-thresholds-http-options]]

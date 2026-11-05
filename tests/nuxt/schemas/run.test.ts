@@ -5,6 +5,14 @@ import { requestEditorSchema } from '../../../app/schemas/run';
 const input = {
   url: 'http://127.0.0.1:8080/items',
   method: 'POST',
+  authKind: 'none',
+  authToken: '',
+  authUsername: '',
+  authPassword: '',
+  protocol: 'auto',
+  max_redirects: 0,
+  formPairs: [],
+  multipartParts: [],
   headers: [
     {
       name: 'X-Request-Label',
@@ -21,6 +29,7 @@ const input = {
       value: 'second',
     },
   ],
+  thresholds: [],
   bodyKind: 'json',
   bodyValue: '{"enabled":true}',
   workloadKind: 'constant',
@@ -42,6 +51,10 @@ describe('request editor schema', () => {
     expect(v.parse(requestEditorSchema, input)).toEqual({
       url: input.url,
       method: 'POST',
+      auth: { kind: 'none' },
+      protocol: 'auto',
+      max_redirects: 0,
+      thresholds: [],
       headers: input.headers,
       query: input.query,
       body: {
@@ -311,5 +324,234 @@ describe('arrival workload editor', () => {
         ...change,
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('final thresholds', () => {
+  it('preserves strict operators and decimal limits in native units', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+      thresholds: [
+        {
+          metric: 'http_failure_percent',
+          operator: 'less_than',
+          limit: '1.25',
+        },
+      ],
+    });
+    expect(result.thresholds).toEqual([
+      {
+        metric: 'http_failure_percent',
+        operator: 'less_than',
+        limit: 1.25,
+      },
+    ]);
+  });
+
+  it.each([
+    {
+      metric: 'http_failure_percent',
+      operator: 'less_than',
+      limit: 101,
+    },
+    {
+      metric: 'response_p95_ms',
+      operator: 'less_than',
+      limit: 3_600_001,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: -1,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: '',
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: Infinity,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'greater_than',
+      limit: NaN,
+    },
+    {
+      metric: 'request_rate',
+      operator: 'equal',
+      limit: 1,
+    },
+  ])('rejects invalid rule %j', (rule) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        thresholds: [rule],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('HTTP request options', () => {
+  it.each(['PUT', 'PATCH', 'DELETE', 'OPTIONS'])('sends ordered form fields with %s', (method) => {
+    const pairs = [
+      {
+        name: 'tag',
+        value: 'first',
+      },
+      {
+        name: 'tag',
+        value: 'second',
+      },
+    ];
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+      method,
+      bodyKind: 'form',
+      formPairs: pairs,
+      authKind: 'bearer',
+      authToken: 'private-token',
+      authPassword: 'unused',
+      protocol: 'http2',
+      max_redirects: '2',
+    });
+    expect(result.body).toEqual({
+      kind: 'form',
+      value: pairs,
+    });
+    expect(result.auth).toEqual({
+      kind: 'bearer',
+      token: 'private-token',
+    });
+    expect(result.protocol).toBe('http2');
+    expect(result.max_redirects).toBe(2);
+    expect(result).not.toHaveProperty('authPassword');
+  });
+
+  it('constructs file and text parts without sending inactive fields', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+      bodyKind: 'multipart',
+      authKind: 'basic',
+      authUsername: 'user',
+      authPassword: 'private-password',
+      multipartParts: [
+        {
+          kind: 'text',
+          name: 'tag',
+          value: 'one',
+          path: '',
+          filename: '',
+          content_type: '',
+        },
+        {
+          kind: 'file',
+          name: 'upload',
+          value: 'unused',
+          path: '/tmp/upload.txt',
+          filename: 'public.txt',
+          content_type: 'text/plain',
+        },
+      ],
+    });
+    expect(result.body).toEqual({
+      kind: 'multipart',
+      value: [
+        {
+          kind: 'text',
+          name: 'tag',
+          value: 'one',
+        },
+        {
+          kind: 'file',
+          name: 'upload',
+          path: '/tmp/upload.txt',
+          filename: 'public.txt',
+          content_type: 'text/plain',
+        },
+      ],
+    });
+    expect(result.auth).toEqual({
+      kind: 'basic',
+      username: 'user',
+      password: 'private-password',
+    });
+  });
+
+  it.each([
+    { method: 'HEAD' },
+    {
+      authKind: 'bearer',
+      authToken: '',
+    },
+    {
+      authKind: 'bearer',
+      authToken: 'line\nbreak',
+    },
+    {
+      authKind: 'basic',
+      authUsername: 'user:name',
+    },
+    {
+      authKind: 'basic',
+      authPassword: 'line\rbreak',
+    },
+    {
+      authKind: 'bearer',
+      authToken: 'private-token',
+      headers: [
+        {
+          name: 'authorization',
+          value: 'conflict',
+        },
+      ],
+    },
+    { max_redirects: -1 },
+    { max_redirects: 4_294_967_296 },
+    { max_redirects: 1.5 },
+    { protocol: 'unsupported' },
+    {
+      bodyKind: 'multipart',
+      multipartParts: [
+        {
+          kind: 'file',
+          name: 'upload',
+          value: '',
+          path: '',
+          filename: 'upload.txt',
+          content_type: 'text/plain',
+        },
+      ],
+    },
+    {
+      bodyKind: 'multipart',
+      headers: [
+        {
+          name: 'Content-Type',
+          value: 'multipart/form-data',
+        },
+      ],
+    },
+  ])('rejects invalid settings %j', (change) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        ...change,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('allows HEAD without a body and discards inactive credentials', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+      method: 'HEAD',
+      bodyKind: 'none',
+      authToken: 'unused',
+      authPassword: 'unused',
+    });
+    expect(result.auth).toEqual({ kind: 'none' });
+    expect(result.body).toEqual({ kind: 'none' });
   });
 });

@@ -32,6 +32,7 @@ const population: LatencySnapshot = {
 
 function snapshot(runId = '1', seconds = 1): RunSnapshot {
   return {
+    thresholds: [],
     run_id: runId,
     state: 'running',
     confirmation: {
@@ -141,8 +142,12 @@ describe('run monitor', () => {
     const config: RunConfig = {
       url: 'http://127.0.0.1:8080/',
       method: 'GET',
+      auth: { kind: 'none' },
+      protocol: 'auto',
+      max_redirects: 0,
       headers: [],
       query: [],
+      thresholds: [],
       body: { kind: 'none' },
       workload: {
         kind: 'constant',

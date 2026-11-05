@@ -35,6 +35,8 @@ struct Received {
     uri: String,
     header: Option<String>,
     content_type: Option<String>,
+    authorization: Option<String>,
+    version: String,
     body: Vec<u8>,
 }
 
@@ -139,6 +141,11 @@ async fn handle(
     let path = request.uri().path().to_owned();
     let (parts, body) = request.into_parts();
     let received = Received {
+        authorization: parts
+            .headers
+            .get("authorization")
+            .map(|value| value.to_str().unwrap().into()),
+        version: format!("{:?}", parts.version),
         method: parts.method.to_string(),
         uri: parts.uri.to_string(),
         header: parts
@@ -152,6 +159,36 @@ async fn handle(
         body: to_bytes(body, 1024 * 1024).await.unwrap().to_vec(),
     };
     *target.received.lock().await = Some(received);
+    if let Some(status) = path.strip_prefix("/redirect/") {
+        let status = status.parse::<u16>().unwrap();
+        return Response::builder()
+            .status(status)
+            .header("location", "/echo")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
+    if path == "/loop" {
+        return Response::builder()
+            .status(302)
+            .header("location", "/loop")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
+    if path == "/cross-origin" {
+        return Response::builder()
+            .status(307)
+            .header("location", "http://127.0.0.1:1/secret")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
+    if path == "/delayed-redirect" {
+        sleep(Duration::from_millis(80)).await;
+        return Response::builder()
+            .status(307)
+            .header("location", "/slow")
+            .body(Body::from("hop"))
+            .unwrap();
+    }
     if path == "/held" {
         target.gate.acquire().await.unwrap().forget();
     }
@@ -287,7 +324,7 @@ async fn get_post_query_headers_json_and_text_are_constructed() {
                     Some("text/plain; charset=utf-8")
                 );
             }
-            RequestBody::None => unreachable!(),
+            RequestBody::None | RequestBody::Form(_) | RequestBody::Multipart(_) => unreachable!(),
         }
     }
     input.headers.push(NameValue {
@@ -1127,4 +1164,329 @@ fn arrival_validation_rejects_invalid_inputs_and_reports_rate_warning() {
     })
     .unwrap();
     assert_eq!(confirmation.warnings, vec!["HIGH_ARRIVAL_RATE"]);
+}
+
+#[tokio::test]
+async fn final_thresholds_use_terminal_populations_without_changing_http_outcomes() {
+    use velo_engine::{Threshold, ThresholdMetric, ThresholdOperator, ThresholdStatus};
+
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+    let mut settings = config(format!("{}/failure", server.url));
+    settings.thresholds = vec![
+        Threshold {
+            metric: ThresholdMetric::HttpFailurePercent,
+            operator: ThresholdOperator::LessThan,
+            limit: 100.0,
+        },
+        Threshold {
+            metric: ThresholdMetric::RequestRate,
+            operator: ThresholdOperator::GreaterThan,
+            limit: 0.0,
+        },
+    ];
+    let initial = manager.start(settings, true).await.unwrap();
+    assert!(initial.thresholds.is_empty());
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.state, RunState::Completed);
+    assert_eq!(summary.thresholds[0].observed, Some(100.0));
+    assert_eq!(summary.thresholds[0].status, ThresholdStatus::Failed);
+    assert_eq!(summary.thresholds[1].status, ThresholdStatus::Passed);
+    assert_eq!(
+        summary.metrics.counters.responses,
+        summary.metrics.counters.status_failures
+    );
+
+    let mut settings = config(server.url.clone());
+    settings.thresholds = vec![Threshold {
+        metric: ThresholdMetric::HttpFailurePercent,
+        operator: ThresholdOperator::LessThan,
+        limit: 1.0,
+    }];
+    let initial = manager.start(settings, true).await.unwrap();
+    manager.stop(&initial.run_id).await.unwrap();
+    let partial = terminal(&manager).await;
+    assert_eq!(partial.state, RunState::Cancelled);
+    assert_eq!(
+        partial.thresholds[0].status,
+        ThresholdStatus::InsufficientData
+    );
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_target() {
+    use velo_engine::{HttpProtocol, RequestAuth};
+
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    for method in [
+        RequestMethod::PUT,
+        RequestMethod::PATCH,
+        RequestMethod::DELETE,
+        RequestMethod::HEAD,
+        RequestMethod::OPTIONS,
+    ] {
+        let mut input = config(format!("{}/echo", server.url));
+        input.method = method;
+        input.body = if matches!(method, RequestMethod::HEAD) {
+            RequestBody::None
+        } else {
+            RequestBody::Text("payload".into())
+        };
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert!(summary.metrics.counters.successes > 0);
+        let received = target.received.lock().await.clone().unwrap();
+        assert_eq!(received.method, format!("{method:?}"));
+        if matches!(method, RequestMethod::HEAD) {
+            assert!(received.body.is_empty());
+            assert_eq!(summary.metrics.counters.response_body_bytes, 0);
+        } else {
+            assert_eq!(received.body, b"payload");
+        }
+    }
+    for (auth, expected) in [
+        (
+            RequestAuth::Bearer {
+                token: "private-token".into(),
+            },
+            "Bearer private-token",
+        ),
+        (
+            RequestAuth::Basic {
+                username: "user".into(),
+                password: "pass".into(),
+            },
+            "Basic dXNlcjpwYXNz",
+        ),
+    ] {
+        let mut input = config(format!("{}/echo", server.url));
+        input.auth = auth;
+        input.method = RequestMethod::POST;
+        input.body = RequestBody::Form(vec![
+            NameValue {
+                name: "tag".into(),
+                value: "a & b".into(),
+            },
+            NameValue {
+                name: "tag".into(),
+                value: "日本".into(),
+            },
+        ]);
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        let received = target.received.lock().await.clone().unwrap();
+        assert_eq!(received.authorization.as_deref(), Some(expected));
+        assert_eq!(
+            received.content_type.as_deref(),
+            Some("application/x-www-form-urlencoded")
+        );
+        assert_eq!(received.body, b"tag=a+%26+b&tag=%E6%97%A5%E6%9C%AC");
+        assert!(
+            !serde_json::to_string(&summary)
+                .unwrap()
+                .contains("private-token")
+        );
+        assert!(
+            !serde_json::to_string(&summary)
+                .unwrap()
+                .contains("dXNlcjpwYXNz")
+        );
+    }
+    for (protocol, version) in [
+        (HttpProtocol::Auto, "HTTP/1.1"),
+        (HttpProtocol::Http1, "HTTP/1.1"),
+        (HttpProtocol::Http2, "HTTP/2.0"),
+    ] {
+        let mut input = config(server.url.clone());
+        input.protocol = protocol;
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert!(summary.metrics.counters.successes > 0);
+        assert_eq!(
+            target.received.lock().await.as_ref().unwrap().version,
+            version
+        );
+    }
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn redirects_count_payloads_preserve_or_rewrite_methods_and_enforce_limits_and_deadlines() {
+    use velo_engine::RequestAuth;
+
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    for status in [301, 302, 303, 307, 308] {
+        let mut input = config(format!("{}/redirect/{status}", server.url));
+        input.method = RequestMethod::POST;
+        input.body = RequestBody::Text("private-body".into());
+        input.auth = RequestAuth::Bearer {
+            token: "private-token".into(),
+        };
+        input.max_redirects = 1;
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert_eq!(
+            summary.metrics.counters.response_body_bytes,
+            summary.metrics.counters.responses * 10
+        );
+        let received = target.received.lock().await.clone().unwrap();
+        assert_eq!(received.uri, "/echo");
+        assert_eq!(
+            received.authorization.as_deref(),
+            Some("Bearer private-token")
+        );
+        if status < 307 {
+            assert_eq!(received.method, "GET");
+            assert!(received.body.is_empty());
+            assert!(received.content_type.is_none());
+        } else {
+            assert_eq!(received.method, "POST");
+            assert_eq!(received.body, b"private-body");
+        }
+    }
+    for path in ["loop", "cross-origin"] {
+        let mut input = config(format!("{}/{path}", server.url));
+        input.max_redirects = 2;
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert_eq!(summary.metrics.counters.responses, 0);
+        assert!(summary.metrics.counters.transport_failures > 0);
+        assert_eq!(
+            summary.metrics.counters.response_body_bytes,
+            summary.metrics.counters.transport_failures * if path == "loop" { 9 } else { 3 }
+        );
+    }
+    let mut input = config(format!("{}/delayed-redirect", server.url));
+    input.max_redirects = 1;
+    input.timeout_ms = 120;
+    input.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 30,
+    };
+    input.grace_ms = 300;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.metrics.counters.timeouts, 1);
+    assert_eq!(summary.metrics.counters.response_body_bytes, 3);
+    manager.shutdown().await;
+    server.close().await;
+}
+
+#[tokio::test]
+async fn multipart_streams_files_replays_redirects_and_closes_files_after_cancellation() {
+    use std::io::Write;
+    use velo_engine::MultipartPart;
+
+    let mut file = tempfile::NamedTempFile::new().unwrap();
+    file.write_all(&vec![b'x'; 64 * 1024]).unwrap();
+    file.flush().unwrap();
+    let path = file.path().to_str().unwrap().to_owned();
+    let parts = vec![
+        MultipartPart::Text {
+            name: "tag".into(),
+            value: "one".into(),
+        },
+        MultipartPart::Text {
+            name: "tag".into(),
+            value: "two".into(),
+        },
+        MultipartPart::File {
+            name: "upload".into(),
+            path: path.clone(),
+            filename: "public.txt".into(),
+            content_type: "text/plain".into(),
+        },
+    ];
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    for endpoint in ["echo", "redirect/307", "redirect/308"] {
+        let mut input = config(format!("{}/{endpoint}", server.url));
+        input.method = RequestMethod::POST;
+        input.body = RequestBody::Multipart(parts.clone());
+        input.max_redirects = 1;
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert!(summary.metrics.counters.successes > 0);
+        let received = target.received.lock().await.clone().unwrap();
+        assert!(
+            received
+                .content_type
+                .unwrap()
+                .starts_with("multipart/form-data; boundary=")
+        );
+        let body = String::from_utf8(received.body).unwrap();
+        assert!(body.contains("filename=\"public.txt\""));
+        assert!(!body.contains(&path));
+        assert!(body.contains(&"x".repeat(64 * 1024)));
+        assert!(body.find("one").unwrap() < body.find("two").unwrap());
+        assert!(!serde_json::to_string(&summary).unwrap().contains(&path));
+    }
+    server.close().await;
+    file.as_file().set_len(128 * 1024 * 1024).unwrap();
+    let stalled = Server::raw(b"", true).await;
+    let mut input = config(stalled.url.clone());
+    input.method = RequestMethod::POST;
+    input.body = RequestBody::Multipart(parts);
+    input.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 30_000,
+    };
+    input.grace_ms = 0;
+    let accepted = manager.start(input, true).await.unwrap();
+    wait_for_run(&manager, |snapshot| {
+        snapshot.metrics.counters.in_flight == 1
+    })
+    .await;
+    sleep(Duration::from_millis(50)).await;
+    manager.stop(&accepted.run_id).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.metrics.counters.cancelled, 1);
+    manager.shutdown().await;
+    stalled.close().await;
+    #[cfg(target_os = "macos")]
+    {
+        let output = std::process::Command::new("/usr/sbin/lsof")
+            .args(["-a", "-p", &std::process::id().to_string(), "-Fn", "--"])
+            .arg(std::fs::canonicalize(&path).unwrap())
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let output = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(
+            output.lines().filter(|line| line.starts_with('n')).count(),
+            1,
+            "only the test-owned temporary file handle remains"
+        );
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let canonical = std::fs::canonicalize(&path).unwrap();
+        let mut open = 0;
+        for entry in std::fs::read_dir("/proc/self/fd").unwrap() {
+            if std::fs::read_link(entry.unwrap().path()).ok().as_ref() == Some(&canonical) {
+                open += 1;
+            }
+        }
+        assert_eq!(open, 1, "only the test-owned temporary file handle remains");
+    }
+}
+
+#[tokio::test]
+async fn forced_http2_rejects_http1_without_falling_back() {
+    let server = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", false).await;
+    let manager = RunManager::default();
+    let mut input = config(server.url.clone());
+    input.protocol = velo_engine::HttpProtocol::Http2;
+    input.timeout_ms = 100;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.metrics.counters.responses, 0);
+    assert!(summary.metrics.counters.transport_failures > 0);
+    manager.shutdown().await;
+    server.close().await;
 }

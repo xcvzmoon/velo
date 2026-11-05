@@ -38,11 +38,65 @@ export type NameValue = {
    */
   value: string;
 };
-export type RequestMethod = 'GET' | 'POST';
+export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
+export type RequestAuth =
+  | { kind: 'none' }
+  | {
+      kind: 'bearer';
+      /**
+       * Secret token, never returned in run snapshots.
+       */
+      token: string;
+    }
+  | {
+      kind: 'basic';
+      /**
+       * User identifier; may be empty.
+       */
+      username: string;
+      /**
+       * Secret password; may be empty, but cannot contain control characters.
+       */
+      password: string;
+    };
+export type HttpProtocol = 'auto' | 'http1' | 'http2';
+export type MultipartPart =
+  | {
+      kind: 'text';
+      /**
+       * Multipart field name without control characters.
+       */
+      name: string;
+      /**
+       * UTF-8 content.
+       */
+      value: string;
+    }
+  | {
+      kind: 'file';
+      /**
+       * Multipart field name without control characters.
+       */
+      name: string;
+      /**
+       * Absolute local file path, never used as the transmitted filename.
+       */
+      path: string;
+      /**
+       * Transmitted filename; no path separators or control characters.
+       */
+      filename: string;
+      /**
+       * Valid MIME type; defaults in the editor to application/octet-stream.
+       */
+      content_type: string;
+    };
 export type RequestBody =
   | { kind: 'none' }
   | { kind: 'text'; value: string }
-  | { kind: 'json'; value: string };
+  | { kind: 'json'; value: string }
+  | { kind: 'form'; value: NameValue[] }
+  | { kind: 'multipart'; value: MultipartPart[] };
 export type ResourceBudget = {
   /**
    * Maximum number of simultaneously owned VU tasks; must be positive.
@@ -50,7 +104,8 @@ export type ResourceBudget = {
   max_vus: number;
   /**
    * Maximum normalized request bytes across the template and VU clones,
-   * including pair overhead and the stage schedule. This is not a process-wide memory limit.
+   * including pair overhead, the stage schedule, threshold rules, and upload buffers.
+   * This is not a process-wide memory limit.
    */
   max_request_bytes: number;
 };
@@ -102,13 +157,44 @@ export type Workload =
        */
       stages: RampStage[];
     };
+export type ThresholdMetric = 'response_p95_ms' | 'http_failure_percent' | 'request_rate';
+export type ThresholdOperator = 'less_than' | 'greater_than';
+export type Threshold = {
+  /**
+   * Population and unit to evaluate.
+   */
+  metric: ThresholdMetric;
+  /**
+   * Strict comparison against the limit.
+   */
+  operator: ThresholdOperator;
+  /**
+   * Maximum 100 for percentages and 3,600,000 for latency milliseconds.
+   */
+  limit: number;
+};
+export type ThresholdStatus = 'passed' | 'failed' | 'insufficient_data';
+export type ThresholdResult = {
+  /**
+   * Configured rule in its original order.
+   */
+  rule: Threshold;
+  /**
+   * Unrounded observed value in the rule's unit, or None for insufficient data.
+   */
+  observed: number | null;
+  /**
+   * Final comparison outcome.
+   */
+  status: ThresholdStatus;
+};
 export type RunConfig = {
   /**
    * Absolute HTTP(S) URL without embedded credentials or a fragment.
    */
   url: string;
   /**
-   * GET or POST.
+   * Logical HTTP method. GET and HEAD reject request bodies.
    */
   method: RequestMethod;
   /**
@@ -120,9 +206,22 @@ export type RunConfig = {
    */
   query: NameValue[];
   /**
-   * Optional POST body.
+   * Optional body for methods other than GET and HEAD.
    */
   body: RequestBody;
+  /**
+   * Explicit authentication; custom Authorization headers cannot be combined with it.
+   */
+  auth: RequestAuth;
+  /**
+   * Negotiated HTTP by default; HTTP/2 forces h2, including prior knowledge for cleartext.
+   */
+  protocol: HttpProtocol;
+  /**
+   * Maximum redirects to follow; zero disables redirects. Cross-origin redirects and
+   * HTTPS downgrades are rejected, keeping custom credentials and payloads on the target origin.
+   */
+  max_redirects: number;
   /**
    * Constant, staged, or arrival schedule, validated before worker allocation.
    */
@@ -139,6 +238,10 @@ export type RunConfig = {
    * Maximum drain time after stop or duration expiry; zero aborts immediately.
    */
   grace_ms: number;
+  /**
+   * Final cumulative metric rules; empty by default.
+   */
+  thresholds: Threshold[];
   /**
    * Explicit task and retained request-data limits.
    */
@@ -398,6 +501,10 @@ export type RunSnapshot = {
    * Cumulative counters, rates, and separate duration populations.
    */
   metrics: MetricsSnapshot;
+  /**
+   * Final threshold outcomes; empty while active or when no rules are configured.
+   */
+  thresholds: ThresholdResult[];
   /**
    * Stable internal failure code, without infrastructure or target details.
    */

@@ -17,6 +17,31 @@ const nonnegativeIntegerSchema = v.pipe(
   v.maxValue(4_294_967_295, 'The value exceeds the supported representation.'),
 );
 
+const thresholdSchema = v.pipe(
+  v.object({
+    metric: v.picklist(['response_p95_ms', 'http_failure_percent', 'request_rate']),
+    operator: v.picklist(['less_than', 'greater_than']),
+    limit: v.pipe(
+      v.union([v.pipe(v.string(), v.nonEmpty('Enter a limit.')), v.number()]),
+      v.toNumber(),
+      v.finite('Enter a finite limit.'),
+      v.minValue(0, 'Enter zero or a positive limit.'),
+    ),
+  }),
+  v.forward(
+    v.check(
+      ({ metric, limit }) =>
+        metric === 'http_failure_percent'
+          ? limit <= 100
+          : metric === 'response_p95_ms'
+            ? limit <= 3_600_000
+            : true,
+      'Percentages cannot exceed 100; latency cannot exceed one hour.',
+    ),
+    ['limit'],
+  ),
+);
+
 const requestFieldsSchema = v.object({
   url: v.pipe(
     v.string(),
@@ -37,7 +62,14 @@ const requestFieldsSchema = v.object({
       }
     }, 'Use HTTP(S) without URL credentials or a fragment.'),
   ),
-  method: v.picklist(['GET', 'POST']),
+  method: v.picklist(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']),
+  authKind: v.picklist(['none', 'bearer', 'basic']),
+  authToken: v.string(),
+  authUsername: v.string(),
+  authPassword: v.string(),
+  protocol: v.picklist(['auto', 'http1', 'http2']),
+  max_redirects: nonnegativeIntegerSchema,
+  thresholds: v.array(thresholdSchema),
   headers: v.array(
     v.object({
       name: v.pipe(
@@ -60,7 +92,23 @@ const requestFieldsSchema = v.object({
       value: v.string(),
     }),
   ),
-  bodyKind: v.picklist(['none', 'text', 'json']),
+  bodyKind: v.picklist(['none', 'text', 'json', 'form', 'multipart']),
+  formPairs: v.array(
+    v.object({
+      name: v.string(),
+      value: v.string(),
+    }),
+  ),
+  multipartParts: v.array(
+    v.object({
+      kind: v.picklist(['text', 'file']),
+      name: v.string(),
+      value: v.string(),
+      path: v.string(),
+      filename: v.string(),
+      content_type: v.string(),
+    }),
+  ),
   bodyValue: v.string(),
   timeout_ms: v.pipe(
     positiveIntegerSchema,
@@ -126,8 +174,8 @@ export const requestEditorSchema = v.pipe(
   requestEditorFieldsSchema,
   v.forward(
     v.check(
-      ({ method, bodyKind }) => method !== 'GET' || bodyKind === 'none',
-      'GET requests cannot contain a body.',
+      ({ method, bodyKind }) => !['GET', 'HEAD'].includes(method) || bodyKind === 'none',
+      'GET and HEAD requests cannot contain a body.',
     ),
     ['bodyKind'],
   ),
@@ -171,10 +219,51 @@ export const requestEditorSchema = v.pipe(
     }, 'Add at least one stage; total duration must not exceed 4,294,967,295 ms.'),
     ['stages'],
   ),
+  v.forward(
+    v.check(({ authKind, authToken, authUsername, authPassword, headers }) => {
+      if (authKind === 'none') {
+        return true;
+      }
+
+      if (headers.some(({ name }) => name.toLowerCase() === 'authorization')) {
+        return false;
+      }
+
+      return authKind === 'bearer'
+        ? /^[A-Za-z0-9._~+/-]+=*$/.test(authToken)
+        : !authUsername.includes(':') && !/\p{Cc}/u.test(authUsername + authPassword);
+    }, 'Enter valid credentials and remove conflicting Authorization headers.'),
+    ['authKind'],
+  ),
+  v.forward(
+    v.check(
+      ({ bodyKind, headers, multipartParts }) =>
+        bodyKind !== 'multipart' ||
+        (!headers.some(({ name }) => name.toLowerCase() === 'content-type') &&
+          multipartParts.every(
+            (part) =>
+              part.name.length > 0 &&
+              !/\p{Cc}/u.test(part.name) &&
+              (part.kind === 'text' ||
+                (part.path.length > 0 &&
+                  part.filename.length > 0 &&
+                  !/[\\/\p{Cc}]/u.test(part.filename) &&
+                  /^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/.test(part.content_type))),
+          )),
+      'Multipart needs valid names, selected files, filenames and MIME types; remove custom Content-Type headers.',
+    ),
+    ['bodyKind'],
+  ),
   v.transform(
     ({
       bodyKind,
       bodyValue,
+      formPairs,
+      multipartParts,
+      authKind,
+      authToken,
+      authUsername,
+      authPassword,
       max_vus,
       max_request_bytes,
       workloadKind,
@@ -187,6 +276,19 @@ export const requestEditorSchema = v.pipe(
       ...config
     }): RunConfig => ({
       ...config,
+      auth:
+        authKind === 'none'
+          ? { kind: 'none' }
+          : authKind === 'bearer'
+            ? {
+                kind: 'bearer',
+                token: authToken,
+              }
+            : {
+                kind: 'basic',
+                username: authUsername,
+                password: authPassword,
+              },
       workload:
         workloadKind === 'arrival'
           ? {
@@ -209,10 +311,34 @@ export const requestEditorSchema = v.pipe(
       body:
         bodyKind === 'none'
           ? { kind: 'none' }
-          : {
-              kind: bodyKind,
-              value: bodyValue,
-            },
+          : bodyKind === 'form'
+            ? {
+                kind: 'form',
+                value: formPairs,
+              }
+            : bodyKind === 'multipart'
+              ? {
+                  kind: 'multipart',
+                  value: multipartParts.map((part) =>
+                    part.kind === 'text'
+                      ? {
+                          kind: 'text',
+                          name: part.name,
+                          value: part.value,
+                        }
+                      : {
+                          kind: 'file',
+                          name: part.name,
+                          path: part.path,
+                          filename: part.filename,
+                          content_type: part.content_type,
+                        },
+                  ),
+                }
+              : {
+                  kind: bodyKind,
+                  value: bodyValue,
+                },
       budget: { max_vus, max_request_bytes },
     }),
   ),

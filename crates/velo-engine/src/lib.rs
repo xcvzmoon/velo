@@ -1,15 +1,22 @@
 //! Desktop-independent HTTP load engine with bounded virtual-user execution.
 
 mod config;
+mod http_options;
 mod metrics;
 mod runner;
+mod threshold;
+mod transport;
 mod workload;
 
 pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
+pub use http_options::{HttpProtocol, MultipartPart, RequestAuth};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
+pub use threshold::{
+    Threshold, ThresholdMetric, ThresholdOperator, ThresholdResult, ThresholdStatus,
+};
 pub use workload::{RampStage, Workload};
 
 /// Returns the engine's build identity without executing network requests.
