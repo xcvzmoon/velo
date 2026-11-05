@@ -23,12 +23,18 @@ pre-commit:
       glob:
         - 'src-tauri/*.rs'
         - 'src-tauri/**/*.rs'
+        - 'crates/**/*.rs'
+        - 'Cargo.{toml,lock}'
+        - 'crates/**/Cargo.toml'
       run: pnpm cargo:check
 
     - name: rust-lint
       glob:
         - 'src-tauri/*.rs'
         - 'src-tauri/**/*.rs'
+        - 'crates/**/*.rs'
+        - 'Cargo.{toml,lock}'
+        - 'crates/**/Cargo.toml'
         - 'src-tauri/Cargo.{toml,lock}'
       run: pnpm cargo:lint
 
