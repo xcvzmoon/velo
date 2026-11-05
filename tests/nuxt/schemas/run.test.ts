@@ -24,6 +24,8 @@ const input = {
   bodyKind: 'json',
   bodyValue: '{"enabled":true}',
   workloadKind: 'constant',
+  rate: '10',
+  capacity: '10',
   vus: '2',
   start_vus: '0',
   stages: [],
@@ -273,5 +275,41 @@ describe('ramping workload editor', () => {
       vus: 2,
       duration_ms: 1000,
     });
+  });
+});
+
+describe('arrival workload editor', () => {
+  it('converts rate and capacity while discarding inactive VU settings', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+      workloadKind: 'arrival',
+      vus: '',
+      start_vus: '',
+    });
+    expect(result.workload).toEqual({
+      kind: 'arrival',
+      rate: 10,
+      capacity: 10,
+      duration_ms: 1000,
+    });
+    expect(result).not.toHaveProperty('rate');
+  });
+
+  it.each([
+    { rate: 0 },
+    { rate: 1.5 },
+    { rate: '4294967296' },
+    { capacity: 0 },
+    { capacity: 257 },
+    { duration_ms: 0 },
+    { pacing_ms: 1 },
+  ])('rejects invalid arrival settings %j', (change) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        workloadKind: 'arrival',
+        ...change,
+      }).success,
+    ).toBe(false);
   });
 });

@@ -101,6 +101,8 @@
       </div>
     </dl>
 
+    <RunArrivalMetrics :snapshot="snapshot" />
+
     <p
       v-if="error"
       class="text-destructive text-sm"

@@ -116,7 +116,7 @@ pub struct RunConfig {
     pub query: Vec<NameValue>,
     /// Optional POST body.
     pub body: RequestBody,
-    /// Constant or staged VU schedule, validated before worker allocation.
+    /// Constant, staged, or arrival schedule, validated before worker allocation.
     pub workload: Workload,
     /// Full response timeout, including streamed body; 1–3,600,000 ms.
     pub timeout_ms: u32,
@@ -198,7 +198,7 @@ pub struct RunConfirmation {
     pub workload: Workload,
     /// Explicit allocation budgets.
     pub budget: ResourceBudget,
-    /// Stable warning codes. HIGH_VU_COUNT applies at 100 or more VUs.
+    /// HIGH_VU_COUNT warns at 100 workers; HIGH_ARRIVAL_RATE at 1,000 iterations/s.
     #[ts(type = "string[]")]
     pub warnings: Vec<String>,
 }
@@ -220,6 +220,12 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         config.budget.max_vus,
         config.budget.max_request_bytes,
     )?;
+    if matches!(config.workload, Workload::Arrival { .. }) && config.pacing_ms != 0 {
+        return Err(invalid(
+            "Arrival workloads require zero iteration pacing.",
+            "pacing_ms",
+        ));
+    }
     if !(1..=3_600_000).contains(&config.timeout_ms) {
         return Err(invalid(
             "Timeout must be between 1 ms and one hour.",
@@ -369,12 +375,17 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             origin,
             vus: schedule.peak_vus,
             duration_ms: schedule.duration_ms,
-            workload: config.workload,
+            workload: config.workload.clone(),
             budget: config.budget,
-            warnings: if schedule.peak_vus >= 100 {
-                vec!["HIGH_VU_COUNT".into()]
-            } else {
-                Vec::new()
+            warnings: {
+                let mut warnings = Vec::new();
+                if schedule.peak_vus >= 100 {
+                    warnings.push("HIGH_VU_COUNT".into());
+                }
+                if matches!(config.workload, Workload::Arrival { rate: 1000.., .. }) {
+                    warnings.push("HIGH_ARRIVAL_RATE".into());
+                }
+                warnings
             },
         },
         request,

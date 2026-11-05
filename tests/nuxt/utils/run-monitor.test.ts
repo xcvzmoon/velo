@@ -57,6 +57,12 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
     active_vus: 1,
     max_vus: 1,
     failure_code: null,
+    arrival: {
+      offered: '0',
+      capacity_drops: '0',
+      missed_deadlines: '0',
+      max_lateness_us: '0',
+    },
     metrics: {
       counters: {
         started: '9007199254740993',

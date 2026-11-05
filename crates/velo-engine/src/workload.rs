@@ -47,6 +47,15 @@ pub enum Workload {
         /// Scheduling duration in milliseconds.
         duration_ms: u32,
     },
+    /// Evenly spaced iterations with no pending-request backlog.
+    Arrival {
+        /// Positive target iterations per second; independent of response speed.
+        rate: u32,
+        /// Maximum simultaneously owned single-request tasks; must be positive.
+        capacity: u32,
+        /// Positive scheduling duration in milliseconds.
+        duration_ms: u32,
+    },
     /// Ordered linear transitions, including zero-worker stages.
     Ramping {
         /// Initial worker count; zero is allowed.
@@ -83,6 +92,24 @@ impl Schedule {
     pub fn new(workload: &Workload, budget: u32, byte_budget: u32) -> Result<Self, RunError> {
         let invalid = |message| RunError::new("INVALID_RUN_CONFIG", message, Some("workload"));
         let (start, stages) = match workload {
+            Workload::Arrival {
+                rate,
+                capacity,
+                duration_ms,
+            } => {
+                if *rate == 0 || *capacity == 0 {
+                    return Err(invalid(
+                        "Arrival rate and concurrency capacity must be positive.",
+                    ));
+                }
+                (
+                    *capacity,
+                    vec![RampStage {
+                        duration_ms: *duration_ms,
+                        target_vus: *capacity,
+                    }],
+                )
+            }
             Workload::Constant { vus, duration_ms } => {
                 if *vus == 0 {
                     return Err(RunError::new(

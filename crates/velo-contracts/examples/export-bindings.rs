@@ -22,6 +22,7 @@ fn main() {
     println!("export {};", velo_engine::Counters::decl(&config));
     println!("export {};", velo_engine::LatencySnapshot::decl(&config));
     println!("export {};", velo_engine::MetricsSnapshot::decl(&config));
+    println!("export {};", velo_engine::ArrivalSnapshot::decl(&config));
     println!("export {};", velo_engine::RunSnapshot::decl(&config));
     println!("export {};", velo_engine::RunUpdate::decl(&config));
 }

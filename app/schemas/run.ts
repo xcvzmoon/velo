@@ -83,7 +83,23 @@ const inactiveStagesSchema = v.array(
 const requestEditorFieldsSchema = v.variant('workloadKind', [
   v.object({
     ...requestFieldsSchema.entries,
+    workloadKind: v.literal('arrival'),
+    rate: positiveIntegerSchema,
+    capacity: positiveIntegerSchema,
+    vus: numericInputSchema,
+    duration_ms: positiveIntegerSchema,
+    start_vus: numericInputSchema,
+    stages: inactiveStagesSchema,
+    pacing_ms: v.pipe(
+      nonnegativeIntegerSchema,
+      v.maxValue(0, 'Arrival workloads require zero pacing.'),
+    ),
+  }),
+  v.object({
+    ...requestFieldsSchema.entries,
     workloadKind: v.literal('constant'),
+    rate: numericInputSchema,
+    capacity: numericInputSchema,
     vus: positiveIntegerSchema,
     duration_ms: positiveIntegerSchema,
     start_vus: numericInputSchema,
@@ -92,6 +108,8 @@ const requestEditorFieldsSchema = v.variant('workloadKind', [
   v.object({
     ...requestFieldsSchema.entries,
     workloadKind: v.literal('ramping'),
+    rate: numericInputSchema,
+    capacity: numericInputSchema,
     vus: numericInputSchema,
     duration_ms: numericInputSchema,
     start_vus: nonnegativeIntegerSchema,
@@ -123,17 +141,19 @@ export const requestEditorSchema = v.pipe(
   ),
   v.forward(
     v.check(
-      ({ workloadKind, vus, start_vus, stages, max_vus }) =>
-        workloadKind === 'constant'
-          ? vus <= max_vus
-          : start_vus <= max_vus && stages.every(({ target_vus }) => target_vus <= max_vus),
+      ({ workloadKind, vus, start_vus, stages, max_vus, capacity }) =>
+        workloadKind === 'arrival'
+          ? capacity <= max_vus
+          : workloadKind === 'constant'
+            ? vus <= max_vus
+            : start_vus <= max_vus && stages.every(({ target_vus }) => target_vus <= max_vus),
       'Peak VUs exceed the worker budget.',
     ),
     ['max_vus'],
   ),
   v.forward(
     v.check(({ workloadKind, stages }) => {
-      if (workloadKind === 'constant') {
+      if (workloadKind !== 'ramping') {
         return true;
       }
 
@@ -158,6 +178,8 @@ export const requestEditorSchema = v.pipe(
       max_vus,
       max_request_bytes,
       workloadKind,
+      rate,
+      capacity,
       vus,
       duration_ms,
       start_vus,
@@ -166,17 +188,24 @@ export const requestEditorSchema = v.pipe(
     }): RunConfig => ({
       ...config,
       workload:
-        workloadKind === 'constant'
+        workloadKind === 'arrival'
           ? {
-              kind: 'constant',
-              vus,
+              kind: 'arrival',
+              rate,
+              capacity,
               duration_ms,
             }
-          : {
-              kind: 'ramping',
-              start_vus,
-              stages,
-            },
+          : workloadKind === 'constant'
+            ? {
+                kind: 'constant',
+                vus,
+                duration_ms,
+              }
+            : {
+                kind: 'ramping',
+                start_vus,
+                stages,
+              },
       body:
         bodyKind === 'none'
           ? { kind: 'none' }

@@ -19,6 +19,21 @@
     },
   ] as const;
 
+  const arrivalFields = [
+    {
+      name: 'rate',
+      label: 'Target iterations per second',
+    },
+    {
+      name: 'capacity',
+      label: 'Concurrent request capacity',
+    },
+    {
+      name: 'duration_ms',
+      label: 'Scheduling duration (ms)',
+    },
+  ] as const;
+
   const stageFields = [
     {
       name: 'duration_ms',
@@ -60,16 +75,17 @@
           <SelectContent>
             <SelectItem value="constant">Constant VUs</SelectItem>
             <SelectItem value="ramping">Ramping VUs</SelectItem>
+            <SelectItem value="arrival">Constant arrival rate</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       <div
-        v-if="mode.input === 'constant'"
+        v-if="mode.input !== 'ramping'"
         class="grid gap-4 sm:grid-cols-2"
       >
         <FormischField
-          v-for="option in constantFields"
+          v-for="option in mode.input === 'arrival' ? arrivalFields : constantFields"
           :key="option.name"
           v-slot="field"
           :of="form"
@@ -101,8 +117,16 @@
         </FormischField>
       </div>
 
+      <p
+        v-if="mode.input === 'arrival'"
+        class="text-muted-foreground text-xs leading-relaxed"
+      >
+        Deadlines control admission; set iteration pacing to zero. Capacity limits concurrent
+        requests. Expired deadlines and requests above capacity are dropped without a queue.
+      </p>
+
       <div
-        v-else
+        v-if="mode.input === 'ramping'"
         class="space-y-5"
       >
         <FormischField
