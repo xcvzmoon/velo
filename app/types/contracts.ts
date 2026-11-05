@@ -39,6 +39,26 @@ export type NameValue = {
   value: string;
 };
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
+export type RequestAuth =
+  | { kind: 'none' }
+  | {
+      kind: 'bearer';
+      /**
+       * Secret token, never returned in run snapshots.
+       */
+      token: string;
+    }
+  | {
+      kind: 'basic';
+      /**
+       * User identifier; may be empty.
+       */
+      username: string;
+      /**
+       * Secret password; may be empty, but cannot contain control characters.
+       */
+      password: string;
+    };
 export type RequestBody =
   | { kind: 'none' }
   | { kind: 'text'; value: string }
@@ -154,6 +174,10 @@ export type RunConfig = {
    * Optional body for methods other than GET and HEAD.
    */
   body: RequestBody;
+  /**
+   * Explicit authentication; custom Authorization headers cannot be combined with it.
+   */
+  auth: RequestAuth;
   /**
    * Constant, staged, or arrival schedule, validated before worker allocation.
    */

@@ -11,6 +11,7 @@ fn main() {
     let config = ts_rs::Config::default();
     println!("export {};", velo_engine::NameValue::decl(&config));
     println!("export {};", velo_engine::RequestMethod::decl(&config));
+    println!("export {};", velo_engine::RequestAuth::decl(&config));
     println!("export {};", velo_engine::RequestBody::decl(&config));
     println!("export {};", velo_engine::ResourceBudget::decl(&config));
     println!("export {};", velo_engine::RampStage::decl(&config));

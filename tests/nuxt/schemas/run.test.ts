@@ -5,6 +5,10 @@ import { requestEditorSchema } from '../../../app/schemas/run';
 const input = {
   url: 'http://127.0.0.1:8080/items',
   method: 'POST',
+  authKind: 'none',
+  authToken: '',
+  authUsername: '',
+  authPassword: '',
   headers: [
     {
       name: 'X-Request-Label',
@@ -43,6 +47,7 @@ describe('request editor schema', () => {
     expect(v.parse(requestEditorSchema, input)).toEqual({
       url: input.url,
       method: 'POST',
+      auth: { kind: 'none' },
       thresholds: [],
       headers: input.headers,
       query: input.query,

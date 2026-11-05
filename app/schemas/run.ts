@@ -63,6 +63,10 @@ const requestFieldsSchema = v.object({
     }, 'Use HTTP(S) without URL credentials or a fragment.'),
   ),
   method: v.picklist(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']),
+  authKind: v.picklist(['none', 'bearer', 'basic']),
+  authToken: v.string(),
+  authUsername: v.string(),
+  authPassword: v.string(),
   thresholds: v.array(thresholdSchema),
   headers: v.array(
     v.object({
@@ -197,10 +201,30 @@ export const requestEditorSchema = v.pipe(
     }, 'Add at least one stage; total duration must not exceed 4,294,967,295 ms.'),
     ['stages'],
   ),
+  v.forward(
+    v.check(({ authKind, authToken, authUsername, authPassword, headers }) => {
+      if (authKind === 'none') {
+        return true;
+      }
+
+      if (headers.some(({ name }) => name.toLowerCase() === 'authorization')) {
+        return false;
+      }
+
+      return authKind === 'bearer'
+        ? /^[A-Za-z0-9._~+/-]+=*$/.test(authToken)
+        : !authUsername.includes(':') && !/\p{Cc}/u.test(authUsername + authPassword);
+    }, 'Enter valid credentials and remove conflicting Authorization headers.'),
+    ['authKind'],
+  ),
   v.transform(
     ({
       bodyKind,
       bodyValue,
+      authKind,
+      authToken,
+      authUsername,
+      authPassword,
       max_vus,
       max_request_bytes,
       workloadKind,
@@ -213,6 +237,19 @@ export const requestEditorSchema = v.pipe(
       ...config
     }): RunConfig => ({
       ...config,
+      auth:
+        authKind === 'none'
+          ? { kind: 'none' }
+          : authKind === 'bearer'
+            ? {
+                kind: 'bearer',
+                token: authToken,
+              }
+            : {
+                kind: 'basic',
+                username: authUsername,
+                password: authPassword,
+              },
       workload:
         workloadKind === 'arrival'
           ? {

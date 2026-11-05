@@ -126,6 +126,8 @@ pub struct RunConfig {
     pub query: Vec<NameValue>,
     /// Optional body for methods other than GET and HEAD.
     pub body: RequestBody,
+    /// Explicit authentication; custom Authorization headers cannot be combined with it.
+    pub auth: crate::RequestAuth,
     /// Constant, staged, or arrival schedule, validated before worker allocation.
     pub workload: Workload,
     /// Full response timeout, including streamed body; 1–3,600,000 ms.
@@ -149,6 +151,7 @@ impl Default for RunConfig {
             headers: Vec::new(),
             query: Vec::new(),
             body: RequestBody::None,
+            auth: crate::RequestAuth::None,
             workload: Workload::default(),
             timeout_ms: 30_000,
             pacing_ms: 0,
@@ -268,7 +271,9 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         RequestBody::None => 0,
         RequestBody::Text(value) | RequestBody::Json(value) => value.len(),
     };
-    size = size.saturating_add(body_size);
+    size = size
+        .saturating_add(body_size)
+        .saturating_add(crate::http_options::auth_size(&config.auth));
     if size > config.budget.max_request_bytes as usize || config.budget.max_request_bytes == 0 {
         return Err(RunError::new(
             "REQUEST_BUDGET_EXCEEDED",
@@ -332,6 +337,14 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             "body",
         ));
     }
+    if !matches!(config.auth, crate::RequestAuth::None)
+        && headers.contains_key(header::AUTHORIZATION)
+    {
+        return Err(invalid(
+            "Choose authentication or a custom Authorization header, not both.",
+            "auth",
+        ));
+    }
     let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .retry(reqwest::retry::never())
@@ -371,6 +384,7 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         }
     }
     let mut request = client.request(method, url).headers(headers);
+    request = crate::http_options::authenticate(request, &config.auth)?;
     match config.body {
         RequestBody::None => {}
         RequestBody::Text(value) => {

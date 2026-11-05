@@ -35,6 +35,7 @@ struct Received {
     uri: String,
     header: Option<String>,
     content_type: Option<String>,
+    authorization: Option<String>,
     body: Vec<u8>,
 }
 
@@ -139,6 +140,10 @@ async fn handle(
     let path = request.uri().path().to_owned();
     let (parts, body) = request.into_parts();
     let received = Received {
+        authorization: parts
+            .headers
+            .get("authorization")
+            .map(|value| value.to_str().unwrap().into()),
         method: parts.method.to_string(),
         uri: parts.uri.to_string(),
         header: parts
@@ -1180,6 +1185,8 @@ async fn final_thresholds_use_terminal_populations_without_changing_http_outcome
 
 #[tokio::test]
 async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_target() {
+    use velo_engine::RequestAuth;
+
     let (server, target) = Server::start().await;
     let manager = RunManager::default();
     for method in [
@@ -1207,6 +1214,40 @@ async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_t
         } else {
             assert_eq!(received.body, b"payload");
         }
+    }
+    for (auth, expected) in [
+        (
+            RequestAuth::Bearer {
+                token: "private-token".into(),
+            },
+            "Bearer private-token",
+        ),
+        (
+            RequestAuth::Basic {
+                username: "user".into(),
+                password: "pass".into(),
+            },
+            "Basic dXNlcjpwYXNz",
+        ),
+    ] {
+        let mut input = config(format!("{}/echo", server.url));
+        input.auth = auth;
+        input.method = RequestMethod::POST;
+        input.body = RequestBody::Text("payload".into());
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        let received = target.received.lock().await.clone().unwrap();
+        assert_eq!(received.authorization.as_deref(), Some(expected));
+        assert!(
+            !serde_json::to_string(&summary)
+                .unwrap()
+                .contains("private-token")
+        );
+        assert!(
+            !serde_json::to_string(&summary)
+                .unwrap()
+                .contains("dXNlcjpwYXNz")
+        );
     }
     manager.shutdown().await;
     server.close().await;

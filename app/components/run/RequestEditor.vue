@@ -59,6 +59,10 @@
     initialInput: {
       url: 'http://127.0.0.1:8080/',
       method: 'GET',
+      authKind: 'none',
+      authToken: '',
+      authUsername: '',
+      authPassword: '',
       thresholds: [],
       headers: [],
       query: [],
@@ -300,6 +304,11 @@
             </div>
           </div>
         </FormischFieldArray>
+
+        <RunHttpOptionsEditor
+          :form="form"
+          :disabled="disabled"
+        />
 
         <div class="space-y-4">
           <FormischField
