@@ -2,7 +2,7 @@
 
 Velo is a local desktop API load-testing studio built with Tauri 2, Nuxt 4, Vue 3, and an independent Rust engine crate.
 
-Configure GET/POST requests, run a constant VU, staged VU, or constant arrival-rate workload, monitor live aggregate charts, stop execution, and inspect the final summary. Runs survive navigation. The latest summary stays in memory until the next run or application exit; saved history and persistence are not available yet.
+Configure HTTP requests, run a constant VU, staged VU, or constant arrival-rate workload, monitor live aggregate charts, stop execution, and inspect the final summary. Optional final thresholds evaluate response p95, HTTP failure percentage, and request throughput. Runs survive navigation. The latest summary stays in memory until the next run or application exit; saved history and persistence are not available yet.
 
 ## Install and develop
 
@@ -34,7 +34,15 @@ The frontend uses Composition API, TypeScript, Tailwind 4, and the existing shad
 
 ## Virtual-user engine
 
-The independent engine validates GET/POST requests, custom headers, query pairs, and optional text/JSON POST bodies. Each VU executes sequential requests through a shared keep-alive pool. Timeout defaults to 30 seconds, pacing to zero, and drain grace to five seconds. Redirects, automatic retries, proxies, cookies, and automatic response decompression are disabled. TLS uses system certificate validation.
+The independent engine validates GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS requests, custom headers, query pairs, and text, JSON, URL-encoded, or multipart bodies. GET and HEAD reject request bodies. Each VU executes sequential requests through a shared keep-alive pool. Timeout defaults to 30 seconds, pacing to zero, and drain grace to five seconds. Redirects default to disabled; automatic retries, proxies, cookies, and automatic response decompression are disabled. TLS uses system certificate validation.
+
+Bearer and Basic credentials stay in memory and are excluded from run reports. Basic authentication is encoded, not encrypted; use HTTPS to protect credentials in transit. Dedicated authentication cannot be combined with a custom Authorization header. HTTP defaults to normal negotiation, with explicit HTTP/1.1-only and HTTP/2-only modes. Cleartext HTTP/2 requires prior knowledge; forced HTTP/2 never falls back to HTTP/1.1.
+
+The redirect limit defaults to zero. Enabled redirects follow only the original origin and reject HTTPS downgrades. This keeps credentials, custom headers, and request bodies on the authorized target. POST changes to GET on 301/302; 303 changes to GET except for HEAD; 307/308 preserve method and body. Redirect bodies contribute to response-byte totals, while counters still count one logical request. The full-request timeout covers all hops and upload setup together.
+
+URL-encoded and multipart fields retain duplicate names and order. Choose multipart files through the native selector; edit the transmitted filename and MIME type separately. Files must remain readable and unchanged during a run. Uploads stream through bounded channels with two 16-KiB buffers per file per concurrent VU charged to the request-data budget. Disk content is not loaded into memory as a whole. Readers are cancelled and joined before a terminal state is published; body-preserving redirects reopen files. File paths, credentials, and body content are excluded from run reports. Body-byte metrics count received response payloads, including redirects, and exclude uploaded bytes. No file or credential persistence is added.
+
+Configure final thresholds in the request editor using strict less-than or greater-than comparisons. Limits use milliseconds for response p95, percent for HTTP failures, and requests per second for throughput. Evaluation uses final cumulative measurements after cleanup, including drain in throughput duration. Equality fails. Empty populations, counter overflow, and incomplete latency histograms cannot pass. Cancelled and failed runs retain their partial context; threshold failures do not alter HTTP outcomes or execution state. Response percentiles remain approximate HDR measurements, and comparisons use unrounded native values.
 
 Native commands are `prepare_run`, `start_run`, `stop_run`, and `current_run`. Prepare returns a safe target origin, requested workload, explicit budgets, and high-load warning codes without HTTP traffic. Start requires `authorized: true`, returns a run ID immediately, and rejects overlapping runs. Stop requires that ID and closes admission before drain. Current returns `null` before the first run, then the latest current/final summary. A new accepted run replaces the previous summary. The editor prepares a safe workload confirmation before starting. Application exit asks for confirmation during an active run, blocks new starts, and awaits cleanup before closing.
 
