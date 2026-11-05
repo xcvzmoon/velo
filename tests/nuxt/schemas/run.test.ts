@@ -5,6 +5,7 @@ import { requestEditorSchema } from '../../../app/schemas/run';
 const input = {
   url: 'http://127.0.0.1:8080/items',
   method: 'POST',
+  protocol: 'auto',
   authKind: 'none',
   authToken: '',
   authUsername: '',
@@ -49,6 +50,7 @@ describe('request editor schema', () => {
     expect(v.parse(requestEditorSchema, input)).toEqual({
       url: input.url,
       method: 'POST',
+      protocol: 'auto',
       auth: { kind: 'none' },
       thresholds: [],
       headers: input.headers,

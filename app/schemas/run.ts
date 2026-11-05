@@ -67,6 +67,7 @@ const requestFieldsSchema = v.object({
   authToken: v.string(),
   authUsername: v.string(),
   authPassword: v.string(),
+  protocol: v.picklist(['auto', 'http1', 'http2']),
   thresholds: v.array(thresholdSchema),
   headers: v.array(
     v.object({

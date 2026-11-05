@@ -59,6 +59,7 @@ export type RequestAuth =
        */
       password: string;
     };
+export type HttpProtocol = 'auto' | 'http1' | 'http2';
 export type MultipartPart =
   | {
       kind: 'text';
@@ -212,6 +213,10 @@ export type RunConfig = {
    * Explicit authentication; custom Authorization headers cannot be combined with it.
    */
   auth: RequestAuth;
+  /**
+   * Negotiated HTTP by default; HTTP/2 forces h2, including prior knowledge for cleartext.
+   */
+  protocol: HttpProtocol;
   /**
    * Constant, staged, or arrival schedule, validated before worker allocation.
    */

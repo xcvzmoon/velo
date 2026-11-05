@@ -36,6 +36,7 @@ struct Received {
     header: Option<String>,
     content_type: Option<String>,
     authorization: Option<String>,
+    version: String,
     body: Vec<u8>,
 }
 
@@ -140,6 +141,7 @@ async fn handle(
     let path = request.uri().path().to_owned();
     let (parts, body) = request.into_parts();
     let received = Received {
+        version: format!("{:?}", parts.version),
         authorization: parts
             .headers
             .get("authorization")
@@ -1185,7 +1187,7 @@ async fn final_thresholds_use_terminal_populations_without_changing_http_outcome
 
 #[tokio::test]
 async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_target() {
-    use velo_engine::RequestAuth;
+    use velo_engine::{HttpProtocol, RequestAuth};
 
     let (server, target) = Server::start().await;
     let manager = RunManager::default();
@@ -1261,6 +1263,21 @@ async fn remaining_methods_authentication_forms_and_forced_protocols_reach_the_t
             !serde_json::to_string(&summary)
                 .unwrap()
                 .contains("dXNlcjpwYXNz")
+        );
+    }
+    for (protocol, version) in [
+        (HttpProtocol::Auto, "HTTP/1.1"),
+        (HttpProtocol::Http1, "HTTP/1.1"),
+        (HttpProtocol::Http2, "HTTP/2.0"),
+    ] {
+        let mut input = config(server.url.clone());
+        input.protocol = protocol;
+        manager.start(input, true).await.unwrap();
+        let summary = terminal(&manager).await;
+        assert!(summary.metrics.counters.successes > 0);
+        assert_eq!(
+            target.received.lock().await.as_ref().unwrap().version,
+            version
         );
     }
     manager.shutdown().await;
@@ -1363,4 +1380,19 @@ async fn multipart_streams_files_replays_redirects_and_closes_files_after_cancel
         }
         assert_eq!(open, 1, "only the test-owned temporary file handle remains");
     }
+}
+
+#[tokio::test]
+async fn forced_http2_rejects_http1_without_falling_back() {
+    let server = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n", false).await;
+    let manager = RunManager::default();
+    let mut input = config(server.url.clone());
+    input.protocol = velo_engine::HttpProtocol::Http2;
+    input.timeout_ms = 100;
+    manager.start(input, true).await.unwrap();
+    let summary = terminal(&manager).await;
+    assert_eq!(summary.metrics.counters.responses, 0);
+    assert!(summary.metrics.counters.transport_failures > 0);
+    manager.shutdown().await;
+    server.close().await;
 }

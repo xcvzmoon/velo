@@ -26,11 +26,11 @@
 
 <template>
   <div class="space-y-4 border-t pt-6">
-    <h3 class="text-sm font-medium">Authentication</h3>
+    <h3 class="text-sm font-medium">Authentication and transport</h3>
 
     <p class="text-muted-foreground text-xs leading-relaxed">
       Credentials stay in memory and are excluded from run reports. Use HTTPS to protect them in
-      transit. Dedicated credentials cannot be combined with a custom Authorization header.
+      transit. HTTP/2 requires server support and uses prior knowledge over cleartext.
     </p>
 
     <FormischField
@@ -104,5 +104,36 @@
         </div>
       </div>
     </FormischField>
+
+    <div class="grid gap-4 sm:grid-cols-2">
+      <FormischField
+        v-slot="field"
+        :of="form"
+        :path="['protocol']"
+      >
+        <div class="space-y-2">
+          <Label for="request-protocol">HTTP protocol</Label>
+
+          <Select
+            v-model="field.input"
+            :disabled="disabled"
+            :name="field.props.name"
+          >
+            <SelectTrigger
+              id="request-protocol"
+              class="w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+
+            <SelectContent>
+              <SelectItem value="auto">Negotiate HTTP/1.1 or HTTP/2</SelectItem>
+              <SelectItem value="http1">Require HTTP/1.1</SelectItem>
+              <SelectItem value="http2">Require HTTP/2</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </FormischField>
+    </div>
   </div>
 </template>

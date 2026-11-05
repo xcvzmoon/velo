@@ -43,6 +43,26 @@ impl std::fmt::Debug for RequestAuth {
     }
 }
 
+/// Connection protocol policy. Auto negotiates HTTP/1.1 or HTTP/2 over TLS.
+/// HTTP/2 uses prior knowledge for cleartext servers and requires h2 over TLS.
+///
+/// # Examples
+/// ```
+/// assert_eq!(serde_json::to_value(velo_engine::HttpProtocol::Http1)?, "http1");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum HttpProtocol {
+    /// Negotiate normally; cleartext defaults to HTTP/1.1.
+    #[default]
+    Auto,
+    /// Require HTTP/1.1.
+    Http1,
+    /// Require HTTP/2 without falling back to HTTP/1.1.
+    Http2,
+}
+
 /// One multipart field. File contents are streamed afresh for each logical attempt.
 /// Files must be regular, readable files with absolute paths and remain unchanged
 /// throughout the run. Paths and field values are omitted from run reports.

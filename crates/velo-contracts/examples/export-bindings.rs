@@ -12,6 +12,7 @@ fn main() {
     println!("export {};", velo_engine::NameValue::decl(&config));
     println!("export {};", velo_engine::RequestMethod::decl(&config));
     println!("export {};", velo_engine::RequestAuth::decl(&config));
+    println!("export {};", velo_engine::HttpProtocol::decl(&config));
     println!("export {};", velo_engine::MultipartPart::decl(&config));
     println!("export {};", velo_engine::RequestBody::decl(&config));
     println!("export {};", velo_engine::ResourceBudget::decl(&config));

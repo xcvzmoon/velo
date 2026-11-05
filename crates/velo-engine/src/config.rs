@@ -134,6 +134,8 @@ pub struct RunConfig {
     pub body: RequestBody,
     /// Explicit authentication; custom Authorization headers cannot be combined with it.
     pub auth: crate::RequestAuth,
+    /// Negotiated HTTP by default; HTTP/2 forces h2, including prior knowledge for cleartext.
+    pub protocol: crate::HttpProtocol,
     /// Constant, staged, or arrival schedule, validated before worker allocation.
     pub workload: Workload,
     /// Full response timeout, including streamed body; 1–3,600,000 ms.
@@ -158,6 +160,7 @@ impl Default for RunConfig {
             query: Vec::new(),
             body: RequestBody::None,
             auth: crate::RequestAuth::None,
+            protocol: crate::HttpProtocol::Auto,
             workload: Workload::default(),
             timeout_ms: 30_000,
             pacing_ms: 0,
@@ -369,14 +372,19 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         .no_zstd()
         .pool_max_idle_per_host(schedule.peak_vus as usize)
         .timeout(Duration::from_millis(config.timeout_ms.into()));
-    let client = client.build().map_err(|_| {
+    let client = match config.protocol {
+        crate::HttpProtocol::Auto => client,
+        crate::HttpProtocol::Http1 => client.http1_only(),
+        crate::HttpProtocol::Http2 => client.http2_prior_knowledge(),
+    }
+    .build()
+    .map_err(|_| {
         RunError::new(
             "HTTP_CLIENT_INIT_FAILED",
             "HTTP client initialization failed.",
             None,
         )
     })?;
-
     if !headers.contains_key(header::CONTENT_TYPE) {
         let content_type = match &config.body {
             RequestBody::Text(_) => Some("text/plain; charset=utf-8"),

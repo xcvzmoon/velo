@@ -59,6 +59,7 @@
     initialInput: {
       url: 'http://127.0.0.1:8080/',
       method: 'GET',
+      protocol: 'auto',
       authKind: 'none',
       authToken: '',
       authUsername: '',
