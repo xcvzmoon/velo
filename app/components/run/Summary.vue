@@ -81,6 +81,8 @@
       </div>
     </dl>
 
+    <RunArrivalMetrics :snapshot="snapshot" />
+
     <div class="overflow-x-auto">
       <table class="w-full text-left text-xs">
         <caption class="text-muted-foreground mb-3 text-left leading-relaxed">

@@ -64,6 +64,8 @@
       bodyKind: 'none',
       bodyValue: '',
       workloadKind: 'constant',
+      rate: 10,
+      capacity: 10,
       vus: 1,
       start_vus: 0,
       stages: [

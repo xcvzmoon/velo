@@ -79,8 +79,15 @@
           <dt class="text-muted-foreground">Workload</dt>
 
           <dd class="mt-1 font-mono">
-            {{ confirmation.workload.kind === 'ramping' ? 'Ramping, peak' : 'Constant' }}
-            {{ confirmation.vus }} VUs for {{ confirmation.duration_ms / 1000 }} s
+            <template v-if="confirmation.workload.kind === 'arrival'">
+              {{ confirmation.workload.rate }} iterations/s, capacity {{ confirmation.vus }} for
+              {{ confirmation.duration_ms / 1000 }} s
+            </template>
+
+            <template v-else>
+              {{ confirmation.workload.kind === 'ramping' ? 'Ramping, peak' : 'Constant' }}
+              {{ confirmation.vus }} VUs for {{ confirmation.duration_ms / 1000 }} s
+            </template>
           </dd>
         </div>
 
