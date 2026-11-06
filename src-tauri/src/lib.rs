@@ -4,6 +4,7 @@ mod execution;
 mod history;
 #[cfg(target_os = "macos")]
 mod macos_exit;
+mod panic_policy;
 mod storage;
 mod uploads;
 
@@ -27,12 +28,14 @@ use velo_engine::RunState;
 /// app_lib::run();
 /// ```
 ///
-/// # Panics
-/// Panics if the desktop runtime cannot initialize.
+/// # Abort
+/// Aborts on any programming panic, including desktop initialization failure.
+/// Panic payloads are omitted from diagnostics to protect request data.
 pub fn run() {
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .try_init();
+    panic_policy::install();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(execution::DesktopRuns::default()))

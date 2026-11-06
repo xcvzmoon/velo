@@ -6,7 +6,7 @@ use std::{
 use serde::Serialize;
 use tokio::{
     sync::Mutex as AsyncMutex,
-    task::{JoinHandle, JoinSet},
+    task::{JoinError, JoinHandle, JoinSet},
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
@@ -189,7 +189,7 @@ impl Run {
     fn lock(&self) -> MutexGuard<'_, Progress> {
         self.progress
             .lock()
-            .unwrap_or_else(|error| error.into_inner())
+            .expect("run progress was poisoned by a programming panic")
     }
 
     fn measured_lock(&self) -> MutexGuard<'_, Progress> {
@@ -268,7 +268,8 @@ struct ManagerState {
 ///
 /// Use from a Tokio runtime. Call [`Self::shutdown`] before runtime teardown to
 /// stop and join native work. Dropping the manager signals stop; only awaiting
-/// shutdown guarantees cleanup has completed before the caller proceeds.
+/// shutdown guarantees cleanup has completed before the caller proceeds. Poisoned
+/// run state is never reused after a programming panic.
 ///
 /// # Examples
 /// ```no_run
@@ -342,7 +343,8 @@ impl RunManager {
     /// or validation/initialization codes from [`Self::prepare`].
     ///
     /// # Panics
-    /// Panics if accepted outside a running Tokio runtime.
+    /// Panics if accepted outside a running Tokio runtime, if run progress was
+    /// poisoned, or if request preparation or prior cleanup encountered a programming panic.
     ///
     /// # Examples
     /// ```no_run
@@ -370,7 +372,10 @@ impl RunManager {
         let config = if matches!(&config.body, crate::RequestBody::Multipart(_)) {
             tokio::task::spawn_blocking(move || validate(config))
                 .await
-                .map_err(|_| {
+                .map_err(|error| {
+                    if error.is_panic() {
+                        std::panic::resume_unwind(error.into_panic());
+                    }
                     RunError::new(
                         "RUN_PREPARATION_FAILED",
                         "Request preparation could not complete.",
@@ -390,7 +395,7 @@ impl RunManager {
                 ));
             }
             if let Some(task) = &mut current.task {
-                let _ = task.await;
+                let _ = task_failed(task.await);
             }
             current.task = None;
         }
@@ -438,6 +443,9 @@ impl RunManager {
     /// # Returns
     /// None before the first accepted start. Cancelling this read has no side effects.
     ///
+    /// # Panics
+    /// Panics if run progress was poisoned by a programming panic.
+    ///
     /// # Examples
     /// ```
     /// # async fn example() {
@@ -465,6 +473,9 @@ impl RunManager {
     /// The next sequenced interval, or None when the run is absent, replaced, or its
     /// sequence representation is exhausted. Cancelling before lock acquisition has
     /// no side effects. A successful sample consumes that interval's histogram.
+    ///
+    /// # Panics
+    /// Panics if run progress was poisoned by a programming panic.
     ///
     /// # Examples
     /// ```
@@ -510,6 +521,9 @@ impl RunManager {
     /// # Errors
     /// Returns [`RunError`] with RUN_NOT_FOUND if no matching current run exists.
     ///
+    /// # Panics
+    /// Panics if run progress was poisoned by a programming panic.
+    ///
     /// # Examples
     /// ```
     /// # async fn example() {
@@ -541,6 +555,10 @@ impl RunManager {
     /// calls are safe. Cancelling this future leaves stop requested; call again
     /// to finish awaiting cleanup before tearing down the runtime.
     ///
+    /// # Panics
+    /// Propagates programming panics from the supervisor or its workers. Panics if
+    /// run progress was poisoned rather than treating partially changed state as valid.
+    ///
     /// # Examples
     /// ```
     /// # async fn example() {
@@ -552,10 +570,18 @@ impl RunManager {
         if let Some(current) = &mut state.current {
             current.run.stop();
             if let Some(task) = &mut current.task {
-                let _ = task.await;
+                let _ = task_failed(task.await);
             }
             current.task = None;
         }
+    }
+}
+
+fn task_failed(result: Result<(), JoinError>) -> bool {
+    match result {
+        Ok(()) => false,
+        Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
+        Err(error) => !error.is_cancelled(),
     }
 }
 
@@ -657,7 +683,7 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
                             controls.swap_remove(index);
                         }
                     }
-                    Some(Err(_)) => { failed = true; break; }
+                    Some(Err(error)) => { failed = task_failed(Err(error)); break; }
                     None => {}
                 }
             }
@@ -679,19 +705,17 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
                 break;
             }
             result = workers.join_next() => {
-                failed |= result.is_some_and(|result| result.is_err());
+                failed |= result.is_some_and(task_failed);
             }
         }
     }
     while let Some(result) = workers.join_next().await {
-        if let Err(error) = result {
-            failed |= !error.is_cancelled();
-        }
+        failed |= task_failed(result);
     }
     config.upload_stop.cancel();
     let mut uploads = config.uploads.lock().await;
     while let Some(result) = uploads.join_next().await {
-        failed |= result.is_err();
+        failed |= task_failed(result);
     }
     drop(uploads);
     let mut progress = run.lock();
@@ -727,7 +751,7 @@ async fn schedule_arrivals(
     let mut processed = 0;
     loop {
         while let Some(result) = workers.try_join_next() {
-            if result.is_err() {
+            if task_failed(result) {
                 return true;
             }
         }
@@ -737,7 +761,7 @@ async fn schedule_arrivals(
             _ = run.stop.cancelled() => break,
             _ = tokio::time::sleep_until(next.min(deadline)) => {},
             result = workers.join_next(), if !workers.is_empty() => {
-                if result.is_some_and(|result| result.is_err()) {
+                if result.is_some_and(task_failed) {
                     return true;
                 }
                 continue;
@@ -905,6 +929,51 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
 mod tests {
     use super::*;
     use crate::{RampStage, Workload};
+
+    #[tokio::test]
+    #[should_panic(expected = "worker programming bug")]
+    async fn worker_panics_are_propagated_instead_of_failed_run_errors() {
+        let task = tokio::spawn(async { panic!("worker programming bug") });
+        task_failed(task.await);
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "run progress was poisoned by a programming panic")]
+    async fn poisoned_progress_is_not_reused() {
+        let manager = RunManager::default();
+        manager
+            .start(
+                RunConfig {
+                    url: "http://127.0.0.1:1/".into(),
+                    grace_ms: 0,
+                    ..RunConfig::default()
+                },
+                true,
+            )
+            .await
+            .unwrap();
+        manager.shutdown().await;
+        let run = manager
+            .state
+            .lock()
+            .await
+            .current
+            .as_ref()
+            .unwrap()
+            .run
+            .clone();
+        drop(manager);
+        let poisoned = run.clone();
+        assert!(
+            std::thread::spawn(move || {
+                let _guard = poisoned.lock();
+                panic!("initial programming bug");
+            })
+            .join()
+            .is_err()
+        );
+        drop(run.lock());
+    }
 
     #[test]
     fn arrival_deadlines_keep_fractional_rates_and_duration_endpoint_exact() {
