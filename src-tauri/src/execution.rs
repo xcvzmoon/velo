@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-use tauri::{Emitter, async_runtime::JoinHandle};
+use tauri::{Emitter, Manager, async_runtime::JoinHandle};
 use tokio::{
     sync::Mutex,
     time::{Duration, MissedTickBehavior},
@@ -54,12 +54,26 @@ pub(crate) async fn start_run<R: tauri::Runtime>(
             field: Some("update_interval_ms".into()),
         });
     }
-    let snapshot = state.manager.start(config, authorized).await?;
     let mut monitor = state.monitor.lock().await;
-    if let Some(previous) = monitor.take() {
-        previous.abort();
+    if state.manager.current().await.is_none_or(|snapshot| {
+        matches!(
+            snapshot.state,
+            RunState::Completed | RunState::Cancelled | RunState::Failed
+        )
+    }) && let Some(previous) = monitor.take()
+    {
         let _ = previous.await;
     }
+    let method = format!("{:?}", config.method);
+    let snapshot = state.manager.start(config, authorized).await?;
+    let history_id = uuid::Uuid::new_v4().to_string();
+    let mut incomplete = if let Some(history) = app.try_state::<crate::history::History>() {
+        !history
+            .begin(history_id.clone(), method, snapshot.clone())
+            .await
+    } else {
+        true
+    };
     let runs = state.inner().clone();
     let run_id = snapshot.run_id.clone();
     *monitor = Some(tauri::async_runtime::spawn(async move {
@@ -74,6 +88,15 @@ pub(crate) async fn start_run<R: tauri::Runtime>(
                 update.snapshot.state,
                 RunState::Completed | RunState::Cancelled | RunState::Failed
             );
+            if let Some(history) = app.try_state::<crate::history::History>() {
+                if terminal {
+                    history
+                        .finish(history_id.clone(), update.clone(), incomplete)
+                        .await;
+                } else if !history.record(&history_id, update.clone(), incomplete) {
+                    incomplete = true;
+                }
+            }
             if app.emit_to("main", "run-update", &update).is_err() {
                 tracing::warn!(run_id, "Aggregate update delivery failed");
             }
@@ -139,9 +162,19 @@ mod tests {
     #[test]
     fn native_commands_validate_serialize_and_preserve_run_ownership() {
         let state = Arc::new(DesktopRuns::default());
+        let directory = tempfile::tempdir().unwrap();
         let app = mock_builder()
+            .manage(crate::history::History::new(Some(
+                directory.path().join("history.sqlite3"),
+            )))
             .manage(state.clone())
             .invoke_handler(tauri::generate_handler![
+                crate::history::list_history,
+                crate::history::load_history,
+                crate::history::save_configuration,
+                crate::history::list_configurations,
+                crate::history::load_configuration,
+                crate::history::delete_configuration,
                 prepare_run,
                 start_run,
                 stop_run,
@@ -270,6 +303,41 @@ mod tests {
                 break;
             }
         }
+        let history = invoke(&window, "list_history", json!({})).unwrap();
+        assert_eq!(history.as_array().unwrap().len(), 1);
+        assert_eq!(history[0]["snapshot"]["state"], "cancelled");
+        let stored = invoke(&window, "load_history", json!({ "id": history[0]["id"] })).unwrap();
+        assert!(!stored["points"].as_array().unwrap().is_empty());
+        assert!(!stored.to_string().contains("secret"));
+        invoke(
+            &window,
+            "save_configuration",
+            json!({ "name": "Example", "config": config, "remember": false }),
+        )
+        .unwrap();
+        let saved = invoke(&window, "list_configurations", json!({})).unwrap();
+        assert_eq!(saved.as_array().unwrap().len(), 1);
+        let loaded = invoke(
+            &window,
+            "load_configuration",
+            json!({ "id": saved[0]["id"] }),
+        )
+        .unwrap();
+        assert!(!loaded.to_string().contains("secret"));
+        assert!(!loaded.to_string().contains("private"));
+        invoke(
+            &window,
+            "delete_configuration",
+            json!({ "id": saved[0]["id"] }),
+        )
+        .unwrap();
+        assert!(
+            invoke(&window, "list_configurations", json!({}))
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         state.closing.store(true, Ordering::Release);
         assert_eq!(
             invoke(

@@ -1,17 +1,23 @@
 <script setup lang="ts">
+  import type { RunSnapshot } from '~/types/contracts';
+
+  const props = defineProps<{ storedSnapshot?: RunSnapshot }>();
+
   const { $runs } = useNuxtApp();
-  const { snapshot, active } = $runs;
+  const headingId = useId();
+  const snapshot = computed<RunSnapshot | null>(() => props.storedSnapshot ?? $runs.snapshot.value);
+  const active = computed<boolean>(() => (props.storedSnapshot ? false : $runs.active.value));
 </script>
 
 <template>
   <section
     v-if="snapshot && !active"
     class="mt-8 space-y-6 rounded-lg border p-6"
-    aria-labelledby="summary-heading"
+    :aria-labelledby="headingId"
   >
     <div>
       <h2
-        id="summary-heading"
+        :id="headingId"
         class="text-lg font-medium"
       >
         Final summary
@@ -23,7 +29,7 @@
             ? 'Scheduling completed.'
             : 'Partial run. Measurements cover observed work only.'
         }}
-        Only the latest run is retained until another starts or the app exits.
+        Stored summaries are available in Results history when local storage is available.
       </p>
     </div>
 

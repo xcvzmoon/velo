@@ -29,9 +29,10 @@
     <h3 class="text-sm font-medium">Authentication and transport</h3>
 
     <p class="text-muted-foreground text-xs leading-relaxed">
-      Credentials stay in memory and are excluded from run reports. Use HTTPS to protect them in
-      transit. Redirects stay on the original origin; other origins and HTTPS downgrades fail as
-      transport errors. HTTP/2 requires server support and uses prior knowledge over cleartext.
+      Credentials are excluded from reports. Saving omits them unless you explicitly remember the
+      request in your OS credential store. Use HTTPS to protect them in transit. Redirects stay on
+      the original origin; other origins and HTTPS downgrades fail as transport errors. HTTP/2
+      requires server support and uses prior knowledge over cleartext.
     </p>
 
     <FormischField

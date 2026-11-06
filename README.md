@@ -2,7 +2,7 @@
 
 Velo is a local desktop API load-testing studio built with Tauri 2, Nuxt 4, Vue 3, and an independent Rust engine crate.
 
-Configure HTTP requests, run a constant VU, staged VU, or constant arrival-rate workload, monitor live aggregate charts, stop execution, and inspect the final summary. Optional final thresholds evaluate response p95, HTTP failure percentage, and request throughput. Runs survive navigation. The latest summary stays in memory until the next run or application exit; saved history and persistence are not available yet.
+Configure HTTP requests, run a constant VU, staged VU, or constant arrival-rate workload, monitor live aggregate charts, stop execution, and inspect the final summary. Optional final thresholds evaluate response p95, HTTP failure percentage, and request throughput. Runs survive navigation. SQLite retains run summaries and bounded aggregate history across restarts. Save request settings explicitly and compare two selected runs in Results.
 
 ## Install and develop
 
@@ -36,11 +36,11 @@ The frontend uses Composition API, TypeScript, Tailwind 4, and the existing shad
 
 The independent engine validates GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS requests, custom headers, query pairs, and text, JSON, URL-encoded, or multipart bodies. GET and HEAD reject request bodies. Each VU executes sequential requests through a shared keep-alive pool. Timeout defaults to 30 seconds, pacing to zero, and drain grace to five seconds. Redirects default to disabled; automatic retries, proxies, cookies, and automatic response decompression are disabled. TLS uses system certificate validation.
 
-Bearer and Basic credentials stay in memory and are excluded from run reports. Basic authentication is encoded, not encrypted; use HTTPS to protect credentials in transit. Dedicated authentication cannot be combined with a custom Authorization header. HTTP defaults to normal negotiation, with explicit HTTP/1.1-only and HTTP/2-only modes. Cleartext HTTP/2 requires prior knowledge; forced HTTP/2 never falls back to HTTP/1.1.
+Bearer and Basic credentials are excluded from run reports. They stay in memory unless you explicitly remember a request in the OS credential store. Basic authentication is encoded, not encrypted; use HTTPS to protect credentials in transit. Dedicated authentication cannot be combined with a custom Authorization header. HTTP defaults to normal negotiation, with explicit HTTP/1.1-only and HTTP/2-only modes. Cleartext HTTP/2 requires prior knowledge; forced HTTP/2 never falls back to HTTP/1.1.
 
 The redirect limit defaults to zero. Enabled redirects follow only the original origin and reject HTTPS downgrades. This keeps credentials, custom headers, and request bodies on the authorized target. POST changes to GET on 301/302; 303 changes to GET except for HEAD; 307/308 preserve method and body. Redirect bodies contribute to response-byte totals, while counters still count one logical request. The full-request timeout covers all hops and upload setup together.
 
-URL-encoded and multipart fields retain duplicate names and order. Choose multipart files through the native selector; edit the transmitted filename and MIME type separately. Files must remain readable and unchanged during a run. Uploads stream through bounded channels with two 16-KiB buffers per file per concurrent VU charged to the request-data budget. Disk content is not loaded into memory as a whole. Readers are cancelled and joined before a terminal state is published; body-preserving redirects reopen files. File paths, credentials, and body content are excluded from run reports. Body-byte metrics count received response payloads, including redirects, and exclude uploaded bytes. No file or credential persistence is added.
+URL-encoded and multipart fields retain duplicate names and order. Choose multipart files through the native selector; edit the transmitted filename and MIME type separately. Files must remain readable and unchanged during a run. Uploads stream through bounded channels with two 16-KiB buffers per file per concurrent VU charged to the request-data budget. Disk content is not loaded into memory as a whole. Readers are cancelled and joined before a terminal state is published; body-preserving redirects reopen files. File paths, credentials, and body content are excluded from run reports. Body-byte metrics count received response payloads, including redirects, and exclude uploaded bytes. File contents are never persisted; explicitly remembered requests retain file paths in the OS credential store, and the files must still exist when loaded.
 
 Configure final thresholds in the request editor using strict less-than or greater-than comparisons. Limits use milliseconds for response p95, percent for HTTP failures, and requests per second for throughput. Evaluation uses final cumulative measurements after cleanup, including drain in throughput duration. Equality fails. Empty populations, counter overflow, and incomplete latency histograms cannot pass. Cancelled and failed runs retain their partial context; threshold failures do not alter HTTP outcomes or execution state. Response percentiles remain approximate HDR measurements, and comparisons use unrounded native values.
 
@@ -90,6 +90,16 @@ pnpm bindings:check
 The generator uses `ts-rs` declarations from Rust and runs through `cargo run --locked -p velo-contracts --example export-bindings`. Commit generated contract updates alongside the Rust types that require them. Do not edit `app/types/contracts.ts` manually. CI checks for drift. Nuxt exposes native contract types through `#imports`.
 
 TypeScript and Vue component tests live under `tests/`, mirroring the application directories.
+
+## Local history and saved requests
+
+Velo stores `velo.sqlite3` in Tauri's application data directory. An OS file lock gives one application instance ownership of history; another instance reports storage unavailable instead of recovering a live run. Summaries and thresholds remain until you delete their history entry. Lists use pages of 25; comparisons load at most two selected runs with matching origin, HTTP method, and workload kind. Review request settings and target conditions before drawing comparisons. Interrupted runs show their last observed measurements rather than a completed result.
+
+Each run retains at most 600 aggregate intervals. At capacity, storage keeps every second point and doubles the sampling stride. History shows the stride explicitly; retained intervals are samples, not merged buckets. Missing intervals mark history incomplete and hide its chart. The live chart retains its existing 600-point window. There is no individual request storage or automatic summary expiry, so total disk usage grows with retained runs.
+
+A queue holds at most 32 aggregate updates. Queue overflow never waits on execution; it marks missing history. A blocking worker writes SQLite transactions outside measurement and UI threads. Terminal publication and clean exit wait for queued writes and finalization. Storage failures appear in Results and do not change the engine's outcome. A crash can lose pending writes; startup marks unfinished records interrupted.
+
+Review a request before saving. Default saves omit URL paths, query values, headers, authentication, bodies, and upload paths. Re-enter these fields before running. Names are stored as entered; avoid secrets in names. Explicitly remembering a request stores the full configuration through [keyring](https://docs.rs/crate/keyring/3.6.0), with only a reference and redacted configuration in SQLite. Credential denial or unavailability requires re-entry, with no plaintext fallback. OS store size limits apply; Velo also rejects remembered payloads over 64 KiB. Deleting a remembered configuration requires successful OS credential deletion first. SQLite itself is not encrypted.
 
 ## Verify changes
 

@@ -1,7 +1,10 @@
+mod credentials;
 mod diagnostic;
 mod execution;
+mod history;
 #[cfg(target_os = "macos")]
 mod macos_exit;
+mod storage;
 mod uploads;
 
 use std::sync::{Arc, atomic::Ordering};
@@ -34,6 +37,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(execution::DesktopRuns::default()))
         .invoke_handler(tauri::generate_handler![
+            history::history_status,
+            history::list_history,
+            history::load_history,
+            history::delete_history,
+            history::list_configurations,
+            history::save_configuration,
+            history::load_configuration,
+            history::delete_configuration,
             diagnostic::diagnose,
             execution::prepare_run,
             execution::start_run,
@@ -50,8 +61,9 @@ pub fn run() {
                 }
             }
         });
-    #[cfg(target_os = "macos")]
     let builder = builder.setup(|app| {
+        history::initialize(app.handle());
+        #[cfg(target_os = "macos")]
         macos_exit::install(app.handle())?;
         Ok(())
     });
@@ -81,7 +93,7 @@ pub fn run() {
                                     return false;
                                 };
                                 dialog_app.dialog()
-                                    .message("A load test is active. Stop the run and quit? Partial results will be lost when Velo closes.")
+                                    .message("A load test is active. Stop the run and quit? Partial results will be retained when local storage is available.")
                                     .title("Quit Velo?")
                                     .parent(&window)
                                     .kind(MessageDialogKind::Warning)
@@ -97,7 +109,6 @@ pub fn run() {
                         tracing::info!("Awaiting native run cleanup before exit");
                         state.manager.shutdown().await;
                         if let Some(monitor) = state.monitor.lock().await.take() {
-                            monitor.abort();
                             let _ = monitor.await;
                         }
                         state.exit_ready.store(true, Ordering::Release);
