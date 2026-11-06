@@ -9,6 +9,11 @@ fn main() {
         CommandError::decl(&ts_rs::Config::default())
     );
     let config = ts_rs::Config::default();
+    println!("export {};", velo_contracts::HistoryEntry::decl(&config));
+    println!(
+        "export {};",
+        velo_contracts::SavedConfiguration::decl(&config)
+    );
     println!("export {};", velo_engine::NameValue::decl(&config));
     println!("export {};", velo_engine::RequestMethod::decl(&config));
     println!("export {};", velo_engine::RequestAuth::decl(&config));

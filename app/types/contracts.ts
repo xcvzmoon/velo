@@ -28,6 +28,58 @@ export type CommandError = {
    */
   field: string | null;
 };
+export type HistoryEntry = {
+  /**
+   * HTTP method used for comparison eligibility.
+   */
+  method: string;
+  /**
+   * Durable identifier independent of engine process identifiers.
+   */
+  id: string;
+  /**
+   * UTC creation time as Unix seconds.
+   */
+  created_at: string;
+  /**
+   * True when the application closed before a terminal snapshot was recorded.
+   */
+  interrupted: boolean;
+  /**
+   * True when some aggregate intervals could not be stored.
+   */
+  incomplete: boolean;
+  /**
+   * Sampling stride; one retains every interval, two every other interval.
+   */
+  stride: number;
+  /**
+   * Latest safe engine summary.
+   */
+  snapshot: RunSnapshot;
+  /**
+   * At most 600 aggregate intervals; empty in paginated list responses.
+   */
+  points: RunUpdate[];
+};
+export type SavedConfiguration = {
+  /**
+   * Durable configuration and credential reference identifier.
+   */
+  id: string;
+  /**
+   * User-provided display name, never inferred from request content.
+   */
+  name: string;
+  /**
+   * Whether loading requires the OS credential store.
+   */
+  remembered: boolean;
+  /**
+   * Redacted configuration on save/list; restored only during explicit load.
+   */
+  config: RunConfig;
+};
 export type NameValue = {
   /**
    * Header or query parameter name.
