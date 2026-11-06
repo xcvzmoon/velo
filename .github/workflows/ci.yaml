@@ -20,9 +20,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15]
+        os: [macos-15, ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -45,5 +45,19 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build
-        run: pnpm build --no-bundle --ci
+      - name: Build installers
+        run: pnpm build --ci
+
+      - name: Retain installers for platform verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: velo-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            target/release/bundle/**/*.dmg
+            target/release/bundle/**/*.deb
+            target/release/bundle/**/*.rpm
+            target/release/bundle/**/*.AppImage
+            target/release/bundle/**/*.msi
+            target/release/bundle/**/*.exe
+          if-no-files-found: error
+          retention-days: 7
