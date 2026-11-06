@@ -38,7 +38,7 @@ pub(crate) fn forget(id: &str) -> Result<(), RunError> {
 
 fn entry(id: &str) -> Result<Entry, RunError> {
     validate_id(id)?;
-    Entry::new(SERVICE, id).map_err(|_| unavailable())
+    Entry::new(SERVICE, id).map_err(unavailable_from)
 }
 
 fn validate_id(id: &str) -> Result<(), RunError> {
@@ -66,11 +66,11 @@ fn remember_with(entry: &impl CredentialEntry, config: &RunConfig) -> Result<(),
             field: None,
         });
     }
-    entry.write(&secret).map_err(|_| unavailable())
+    entry.write(&secret).map_err(unavailable_from)
 }
 
 fn restore_with(entry: &impl CredentialEntry, config: &mut RunConfig) -> Result<(), RunError> {
-    let secret = entry.read().map_err(|_| unavailable())?;
+    let secret = entry.read().map_err(unavailable_from)?;
     if secret.len() > MAX_SECRET_BYTES {
         return Err(invalid());
     }
@@ -82,8 +82,27 @@ fn restore_with(entry: &impl CredentialEntry, config: &mut RunConfig) -> Result<
 fn forget_with(entry: &impl CredentialEntry) -> Result<(), RunError> {
     match entry.delete() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(_) => Err(unavailable()),
+        Err(error) => Err(unavailable_from(error)),
     }
+}
+
+fn unavailable_from(error: keyring::Error) -> RunError {
+    let category = match error {
+        keyring::Error::NoEntry => "missing",
+        keyring::Error::NoStorageAccess(_) => "access",
+        keyring::Error::PlatformFailure(_) => "platform",
+        keyring::Error::BadEncoding(_) => "encoding",
+        keyring::Error::TooLong(_, _) => "size",
+        keyring::Error::Invalid(_, _) => "invalid",
+        keyring::Error::Ambiguous(_) => "ambiguous",
+        _ => "other",
+    };
+    tracing::warn!(
+        code = "CREDENTIALS_UNAVAILABLE",
+        category,
+        "OS credential operation failed"
+    );
+    unavailable()
 }
 
 fn unavailable() -> RunError {
