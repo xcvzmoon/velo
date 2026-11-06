@@ -183,6 +183,7 @@ struct Run {
     thresholds: Vec<crate::Threshold>,
     stop: CancellationToken,
     progress: Mutex<Progress>,
+    diagnostics: crate::transport::FailureDiagnostics,
 }
 
 impl Run {
@@ -411,6 +412,7 @@ impl RunManager {
             confirmation: config.confirmation.clone(),
             thresholds: config.thresholds.clone(),
             stop: CancellationToken::new(),
+            diagnostics: crate::transport::FailureDiagnostics::default(),
             progress: Mutex::new(Progress {
                 state: RunState::Starting,
                 metrics: Metrics::new(),
@@ -837,8 +839,13 @@ async fn execute_arrival(_worker: Worker, config: Arc<ValidatedConfig>, mut atte
     attempt.elapsed = Some(attempt.started.elapsed());
     attempt.outcome = match result {
         Ok(success) => Outcome::Response(success),
-        Err(crate::transport::Failure::Timeout) => Outcome::Timeout,
-        Err(_) => Outcome::Transport,
+        Err(failure) => {
+            attempt.run.diagnostics.record(failure);
+            match failure {
+                crate::transport::Failure::Timeout => Outcome::Timeout,
+                crate::transport::Failure::Transport(_) => Outcome::Transport,
+            }
+        }
     };
 }
 
@@ -907,8 +914,13 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
         attempt.elapsed = Some(attempt.started.elapsed());
         attempt.outcome = match result {
             Ok(success) => Outcome::Response(success),
-            Err(crate::transport::Failure::Timeout) => Outcome::Timeout,
-            Err(_) => Outcome::Transport,
+            Err(failure) => {
+                attempt.run.diagnostics.record(failure);
+                match failure {
+                    crate::transport::Failure::Timeout => Outcome::Timeout,
+                    crate::transport::Failure::Transport(_) => Outcome::Transport,
+                }
+            }
         };
         drop(attempt);
         if config.pacing.is_zero() {

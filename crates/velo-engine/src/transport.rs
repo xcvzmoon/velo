@@ -1,3 +1,9 @@
+use std::{
+    error::Error,
+    io,
+    sync::atomic::{AtomicU16, Ordering},
+};
+
 use reqwest::{Method, Request, StatusCode, header, multipart};
 use tokio::io::AsyncReadExt;
 use tokio_stream::wrappers::ReceiverStream;
@@ -8,18 +14,113 @@ use crate::{
     http_options::{PreparedPart, UPLOAD_BUFFER_BYTES},
 };
 
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum Failure {
     Timeout,
-    Transport,
+    Transport(Category),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Category {
+    Connect,
+    ConnectionReset,
+    BrokenPipe,
+    ConnectionRefused,
+    Body,
+    Decode,
+    Request,
+    RedirectPolicy,
+    Upload,
+    Other,
+}
+
+impl Failure {
+    fn diagnostic(self) -> (&'static str, u16) {
+        match self {
+            Self::Timeout => ("timeout", 1 << 10),
+            Self::Transport(category) => (category.name(), 1 << category as u8),
+        }
+    }
+}
+
+impl Category {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Connect => "connect",
+            Self::ConnectionReset => "connection_reset",
+            Self::BrokenPipe => "broken_pipe",
+            Self::ConnectionRefused => "connection_refused",
+            Self::Body => "body",
+            Self::Decode => "decode",
+            Self::Request => "request",
+            Self::RedirectPolicy => "redirect_policy",
+            Self::Upload => "upload",
+            Self::Other => "other",
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct FailureDiagnostics(AtomicU16);
+
+impl FailureDiagnostics {
+    fn first(&self, failure: Failure) -> bool {
+        let (_, mask) = failure.diagnostic();
+        self.0.fetch_or(mask, Ordering::Relaxed) & mask == 0
+    }
+
+    pub(crate) fn record(&self, failure: Failure) {
+        if self.first(failure) {
+            let (category, _) = failure.diagnostic();
+            tracing::warn!(
+                domain = "http",
+                code = "HTTP_REQUEST_FAILED",
+                category,
+                "First request failure in category for this run"
+            );
+        }
+    }
+}
+
+fn io_category(error: &io::Error) -> Option<Category> {
+    match error.kind() {
+        io::ErrorKind::ConnectionReset => Some(Category::ConnectionReset),
+        io::ErrorKind::BrokenPipe => Some(Category::BrokenPipe),
+        io::ErrorKind::ConnectionRefused => Some(Category::ConnectionRefused),
+        _ => None,
+    }
+}
+
+impl From<io::Error> for Failure {
+    fn from(error: io::Error) -> Self {
+        Self::Transport(io_category(&error).unwrap_or(Category::Upload))
+    }
 }
 
 impl From<reqwest::Error> for Failure {
     fn from(error: reqwest::Error) -> Self {
         if error.is_timeout() {
-            Self::Timeout
-        } else {
-            Self::Transport
+            return Self::Timeout;
         }
+        let mut source = error.source();
+        for _ in 0..16 {
+            let Some(cause) = source else { break };
+            if let Some(category) = cause.downcast_ref::<io::Error>().and_then(io_category) {
+                return Self::Transport(category);
+            }
+            source = cause.source();
+        }
+        Self::Transport(if error.is_connect() {
+            Category::Connect
+        } else if error.is_body() {
+            Category::Body
+        } else if error.is_decode() {
+            Category::Decode
+        } else if error.is_request() || error.is_builder() {
+            Category::Request
+        } else {
+            Category::Other
+        })
     }
 }
 
@@ -29,7 +130,10 @@ async fn request(
     cancel: &CancellationToken,
     uploads_done: &TaskTracker,
 ) -> Result<Request, Failure> {
-    let mut request = config.request.try_clone().ok_or(Failure::Transport)?;
+    let mut request = config
+        .request
+        .try_clone()
+        .ok_or(Failure::Transport(Category::Request))?;
     if !include_body {
         *request.body_mut() = None;
         for name in [
@@ -57,19 +161,23 @@ async fn request(
                 length,
                 modified,
             } => {
-                let file = tokio::fs::File::open(path)
-                    .await
-                    .map_err(|_| Failure::Transport)?;
-                let metadata = file.metadata().await.map_err(|_| Failure::Transport)?;
+                let file = tokio::fs::File::open(path).await.map_err(Failure::from)?;
+                let metadata = file.metadata().await.map_err(Failure::from)?;
                 if !metadata.is_file()
                     || metadata.len() != *length
                     || metadata.modified().ok() != *modified
                 {
-                    return Err(Failure::Transport);
+                    return Err(Failure::Transport(Category::Upload));
                 }
                 let (send, receive) = tokio::sync::mpsc::channel(1);
                 let mut uploads = config.uploads.lock().await;
-                while uploads.try_join_next().is_some() {}
+                while let Some(result) = uploads.try_join_next() {
+                    if let Err(error) = result
+                        && error.is_panic()
+                    {
+                        std::panic::resume_unwind(error.into_panic());
+                    }
+                }
                 let cancel = cancel.clone();
                 let remaining_length = *length;
                 let tracked = uploads_done.token();
@@ -173,16 +281,20 @@ async fn consume(
             return Ok((200..400).contains(&status.as_u16()));
         }
         if followed >= config.max_redirects {
-            return Err(Failure::Transport);
+            return Err(Failure::Transport(Category::RedirectPolicy));
         }
-        let location = location.ok_or(Failure::Transport)?;
+        let location = location.ok_or(Failure::Transport(Category::RedirectPolicy))?;
         let mut next = url
-            .join(location.to_str().map_err(|_| Failure::Transport)?)
-            .map_err(|_| Failure::Transport)?;
+            .join(
+                location
+                    .to_str()
+                    .map_err(|_| Failure::Transport(Category::RedirectPolicy))?,
+            )
+            .map_err(|_| Failure::Transport(Category::RedirectPolicy))?;
         next.set_fragment(None);
         if next.origin() != url.origin() || !next.username().is_empty() || next.password().is_some()
         {
-            return Err(Failure::Transport);
+            return Err(Failure::Transport(Category::RedirectPolicy));
         }
         if (status == StatusCode::SEE_OTHER && method != Method::HEAD)
             || (matches!(status.as_u16(), 301 | 302) && method == Method::POST)
@@ -199,6 +311,64 @@ async fn consume(
 mod tests {
     use super::*;
     use crate::{MultipartPart, RequestBody, RequestMethod, RunConfig};
+
+    #[test]
+    fn diagnostic_categories_do_not_retain_infrastructure_messages() {
+        for (kind, expected) in [
+            (io::ErrorKind::ConnectionReset, "connection_reset"),
+            (io::ErrorKind::BrokenPipe, "broken_pipe"),
+            (io::ErrorKind::ConnectionRefused, "connection_refused"),
+        ] {
+            let failure = Failure::from(io::Error::new(kind, "AUDIT_DUMMY_SECRET"));
+            assert_eq!(failure.diagnostic().0, expected);
+            assert!(!format!("{failure:?}").contains("AUDIT_DUMMY_SECRET"));
+        }
+    }
+
+    #[test]
+    fn diagnostics_are_bounded_once_per_category_and_reset_per_run() {
+        let diagnostics = FailureDiagnostics::default();
+        for category in [
+            Category::Connect,
+            Category::ConnectionReset,
+            Category::BrokenPipe,
+            Category::ConnectionRefused,
+            Category::Body,
+            Category::Decode,
+            Category::Request,
+            Category::RedirectPolicy,
+            Category::Upload,
+            Category::Other,
+        ] {
+            let failure = Failure::Transport(category);
+            assert!(diagnostics.first(failure));
+            for _ in 0..100 {
+                assert!(!diagnostics.first(failure));
+            }
+        }
+        assert!(diagnostics.first(Failure::Timeout));
+        assert!(!diagnostics.first(Failure::Timeout));
+        assert_eq!(diagnostics.0.load(Ordering::Relaxed).count_ones(), 11);
+        assert!(FailureDiagnostics::default().first(Failure::Timeout));
+    }
+
+    #[tokio::test]
+    async fn reqwest_connection_failures_keep_a_safe_cause_category() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let error = reqwest::Client::builder()
+            .no_proxy()
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/AUDIT_DUMMY_SECRET"))
+            .send()
+            .await
+            .unwrap_err();
+        let failure = Failure::from(error);
+        assert_eq!(failure.diagnostic().0, "connection_refused");
+        assert!(!format!("{failure:?}").contains("AUDIT_DUMMY_SECRET"));
+    }
 
     #[tokio::test]
     async fn changed_upload_source_fails_before_sending_and_releases_handles() {
@@ -224,7 +394,7 @@ mod tests {
                 &TaskTracker::new()
             )
             .await,
-            Err(Failure::Transport)
+            Err(Failure::Transport(Category::Upload))
         ));
         file.close().unwrap();
     }
