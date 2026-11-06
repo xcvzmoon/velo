@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-- Approved through the project interview on 2026-11-05. Phases 1–6 are implemented and verified locally on macOS; milestones 7–8 remain unstarted.
+- Approved through the project interview on 2026-11-05. Phases 1–7 are implemented and verified locally on macOS; milestone 8 remains unstarted.
 - Build a local, offline-capable desktop HTTP load-testing studio for macOS, Windows, and Linux.
 - Follow the repository's [AGENTS.md](../../AGENTS.md): small correct changes, explicit boundaries, reliability before abstractions, and working increments.
 - Preserve Nuxt 4, Vue Composition API, TypeScript, Tailwind 4, shadcn-vue/Reka UI, Valibot, theme tokens, and the existing native titlebar. Nuxt UI is superseded by the existing component stack.
@@ -186,6 +186,8 @@ These eight milestones replace the original five broad phases. Each milestone de
 - Assertions remain outside this roadmap; retain distinct outcome semantics for a future design.
 
 ### 7. Persistence, credentials, history, and comparisons
+
+- Implemented. Policies, tests, and local verification evidence: [[plans/16-persistence]].
 
 - Choose a maintained SQLite library; store saved configurations, run history, final summaries, thresholds, and aggregated time series. No individual request storage by default.
 - Omit secrets from saved configurations by default. Explicit remembered credentials use the OS store; SQLite contains references. Protect sensitive URL/query/header/body data as well as dedicated auth fields.
