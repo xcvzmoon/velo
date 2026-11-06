@@ -5074,6 +5074,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tracing",
  "ts-rs",
 ]
 
