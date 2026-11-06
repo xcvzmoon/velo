@@ -5,6 +5,7 @@ mod history;
 #[cfg(target_os = "macos")]
 mod macos_exit;
 mod panic_policy;
+mod saved_requests;
 mod storage;
 mod uploads;
 

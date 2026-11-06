@@ -24,16 +24,26 @@ impl CredentialEntry for Entry {
     }
 }
 
-pub(crate) fn remember(id: &str, config: &RunConfig) -> Result<(), RunError> {
-    remember_with(&entry(id)?, config)
+pub(crate) trait Credentials: Send + Sync {
+    fn remember(&self, id: &str, config: &RunConfig) -> Result<(), RunError>;
+    fn restore(&self, id: &str, config: &mut RunConfig) -> Result<(), RunError>;
+    fn forget(&self, id: &str) -> Result<(), RunError>;
 }
 
-pub(crate) fn restore(id: &str, config: &mut RunConfig) -> Result<(), RunError> {
-    restore_with(&entry(id)?, config)
-}
+pub(crate) struct NativeCredentials;
 
-pub(crate) fn forget(id: &str) -> Result<(), RunError> {
-    forget_with(&entry(id)?)
+impl Credentials for NativeCredentials {
+    fn remember(&self, id: &str, config: &RunConfig) -> Result<(), RunError> {
+        remember_with(&entry(id)?, config)
+    }
+
+    fn restore(&self, id: &str, config: &mut RunConfig) -> Result<(), RunError> {
+        restore_with(&entry(id)?, config)
+    }
+
+    fn forget(&self, id: &str) -> Result<(), RunError> {
+        forget_with(&entry(id)?)
+    }
 }
 
 fn entry(id: &str) -> Result<Entry, RunError> {

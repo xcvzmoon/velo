@@ -76,6 +76,7 @@ impl Store {
              CREATE TABLE IF NOT EXISTS configurations (
                id TEXT PRIMARY KEY, name TEXT NOT NULL, remembered INTEGER NOT NULL,
                config TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS credential_cleanup (id TEXT PRIMARY KEY);
              UPDATE runs SET interrupted=1, incomplete=1 WHERE terminal=0;",
             )
             .map_err(failure_from)?;
@@ -234,7 +235,11 @@ impl Store {
         remembered: bool,
         config: &RunConfig,
     ) -> Result<(), RunError> {
-        self.connection
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(failure_from)?;
+        transaction
             .execute(
                 "INSERT INTO configurations VALUES (?1,?2,?3,?4)",
                 params![
@@ -245,7 +250,36 @@ impl Store {
                 ],
             )
             .map_err(failure_from)?;
+        transaction
+            .execute("DELETE FROM credential_cleanup WHERE id=?1", [id])
+            .map_err(failure_from)?;
+        transaction.commit().map_err(failure_from)
+    }
+
+    pub(crate) fn queue_cleanup(&self, id: &str) -> Result<(), RunError> {
+        self.connection
+            .execute("INSERT OR IGNORE INTO credential_cleanup VALUES (?1)", [id])
+            .map_err(failure_from)?;
         Ok(())
+    }
+
+    pub(crate) fn complete_cleanup(&self, id: &str) -> Result<(), RunError> {
+        self.connection
+            .execute("DELETE FROM credential_cleanup WHERE id=?1", [id])
+            .map_err(failure_from)?;
+        Ok(())
+    }
+
+    pub(crate) fn pending_cleanup(&self) -> Result<Vec<String>, RunError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT id FROM credential_cleanup ORDER BY rowid LIMIT 25")
+            .map_err(failure_from)?;
+        statement
+            .query_map([], |row| row.get(0))
+            .map_err(failure_from)?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(failure_from)
     }
 
     pub(crate) fn configurations(
@@ -313,10 +347,15 @@ impl Store {
     }
 
     pub(crate) fn delete_configuration(&self, id: &str) -> Result<(), RunError> {
-        self.connection
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(failure_from)?;
+        transaction.execute("INSERT OR IGNORE INTO credential_cleanup SELECT id FROM configurations WHERE id=?1 AND remembered=1", [id]).map_err(failure_from)?;
+        transaction
             .execute("DELETE FROM configurations WHERE id=?1", [id])
             .map_err(failure_from)?;
-        Ok(())
+        transaction.commit().map_err(failure_from)
     }
 }
 
