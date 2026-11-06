@@ -7,6 +7,7 @@ use ts_rs::TS;
 use crate::workload::{Schedule, Workload};
 
 /// Named request value. Duplicate query parameters and headers retain their order.
+/// Debug formatting omits both the name and value.
 ///
 /// # Examples
 /// ```
@@ -14,13 +15,19 @@ use crate::workload::{Schedule, Workload};
 /// let header = NameValue { name: "accept".into(), value: "application/json".into() };
 /// assert_eq!(header.name, "accept");
 /// ```
-#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[derive(Clone, Deserialize, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct NameValue {
     /// Header or query parameter name.
     pub name: String,
     /// Header or query parameter value; never included in run reports.
     pub value: String,
+}
+
+impl std::fmt::Debug for NameValue {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("NameValue([redacted])")
+    }
 }
 
 /// Supported logical request methods.
@@ -51,6 +58,7 @@ pub enum RequestMethod {
 }
 
 /// Request payload. JSON is validated before execution and sent unchanged.
+/// Debug formatting omits payload content.
 ///
 /// # Examples
 /// ```
@@ -59,7 +67,7 @@ pub enum RequestMethod {
 /// assert_eq!(encoded["kind"], "json");
 /// # Ok::<(), serde_json::Error>(())
 /// ```
-#[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
+#[derive(Clone, Default, Deserialize, Serialize, TS)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum RequestBody {
     /// No payload.
@@ -73,6 +81,18 @@ pub enum RequestBody {
     Form(#[ts(type = "NameValue[]")] Vec<NameValue>),
     /// Ordered text and streamed file parts. Files must remain unchanged during a run.
     Multipart(#[ts(type = "MultipartPart[]")] Vec<crate::MultipartPart>),
+}
+
+impl std::fmt::Debug for RequestBody {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::None => "RequestBody::None",
+            Self::Text(_) => "RequestBody::Text([redacted])",
+            Self::Json(_) => "RequestBody::Json([redacted])",
+            Self::Form(_) => "RequestBody::Form([redacted])",
+            Self::Multipart(_) => "RequestBody::Multipart([redacted])",
+        })
+    }
 }
 
 /// Explicit local allocation budgets, adjustable before starting a run.
@@ -110,6 +130,7 @@ impl Default for ResourceBudget {
 
 /// Untrusted request and workload input, validated once by [`crate::RunManager::prepare`]
 /// or [`crate::RunManager::start`]. Durations are integer milliseconds.
+/// Debug formatting exposes workload settings but omits request data.
 ///
 /// # Examples
 /// ```
@@ -117,7 +138,7 @@ impl Default for ResourceBudget {
 /// let config = RunConfig { url: "http://127.0.0.1:8080/health".into(), ..RunConfig::default() };
 /// assert_eq!(config.timeout_ms, 30_000);
 /// ```
-#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[derive(Clone, Deserialize, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RunConfig {
     /// Absolute HTTP(S) URL without embedded credentials or a fragment.
@@ -152,6 +173,22 @@ pub struct RunConfig {
     pub thresholds: Vec<crate::Threshold>,
     /// Explicit task and retained request-data limits.
     pub budget: ResourceBudget,
+}
+
+impl std::fmt::Debug for RunConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RunConfig")
+            .field("method", &self.method)
+            .field("protocol", &self.protocol)
+            .field("max_redirects", &self.max_redirects)
+            .field("workload", &self.workload)
+            .field("timeout_ms", &self.timeout_ms)
+            .field("pacing_ms", &self.pacing_ms)
+            .field("grace_ms", &self.grace_ms)
+            .field("budget", &self.budget)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for RunConfig {

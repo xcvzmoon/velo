@@ -1490,3 +1490,48 @@ async fn forced_http2_rejects_http1_without_falling_back() {
     manager.shutdown().await;
     server.close().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "opt-in release benchmark; runs for 30 seconds per repetition"]
+async fn release_benchmark() {
+    let (server, _) = Server::start().await;
+    let manager = RunManager::default();
+
+    for repetition in 0..4 {
+        let input = RunConfig {
+            url: server.url.clone(),
+            workload: Workload::Constant {
+                vus: 16,
+                duration_ms: if repetition == 0 { 5_000 } else { 30_000 },
+            },
+            ..RunConfig::default()
+        };
+        manager.start(input, true).await.unwrap();
+        let snapshot = timeout(Duration::from_secs(45), async {
+            loop {
+                let snapshot = manager.current().await.unwrap();
+                if matches!(
+                    snapshot.state,
+                    RunState::Completed | RunState::Cancelled | RunState::Failed
+                ) {
+                    break snapshot;
+                }
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .unwrap();
+
+        reconcile(&snapshot);
+        assert_eq!(snapshot.state, RunState::Completed);
+        assert!(snapshot.metrics.counters.successes > 0);
+        println!(
+            "VELO_BENCHMARK repetition={repetition} warmup={} snapshot={}",
+            repetition == 0,
+            serde_json::to_string(&snapshot).unwrap()
+        );
+    }
+
+    manager.shutdown().await;
+    server.close().await;
+}

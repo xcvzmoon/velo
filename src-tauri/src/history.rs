@@ -5,30 +5,55 @@ use velo_contracts::{HistoryEntry, SavedConfiguration};
 use velo_engine::{RunConfig, RunError, RunSnapshot, RunUpdate};
 
 use crate::{
-    credentials,
-    storage::{Store, failure, redacted},
+    credentials::NativeCredentials,
+    saved_requests,
+    storage::{Store, failure, failure_from},
 };
 
-type SharedStore = Arc<Mutex<Option<Store>>>;
+/// Bounds UI waits beyond SQLite's two-second busy timeout; blocking work retains its permit.
+const STORAGE_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
+pub(crate) type SharedStore = Arc<Mutex<Option<Store>>>;
 
 pub(crate) struct History {
     store: SharedStore,
     admission: Arc<tokio::sync::Semaphore>,
-    sender: mpsc::SyncSender<(String, RunUpdate, bool, Option<mpsc::SyncSender<()>>)>,
+    credentials: Arc<tokio::sync::Semaphore>,
+    sender: mpsc::SyncSender<(
+        String,
+        RunUpdate,
+        bool,
+        Option<tokio::sync::oneshot::Sender<()>>,
+    )>,
     status: Arc<Mutex<Option<String>>>,
 }
 
 impl History {
     pub(crate) fn new(path: Option<std::path::PathBuf>) -> Self {
-        let opened = path.and_then(|path| Store::open(&path).ok());
+        let opened = path.and_then(|path| {
+            Store::open(&path)
+                .map_err(|error| {
+                    tracing::warn!(code = error.code, "History initialization failed");
+                })
+                .ok()
+        });
         let status = Arc::new(Mutex::new(if opened.is_some() {
             None
         } else {
             Some("STORAGE_UNAVAILABLE".into())
         }));
+        let recover_pending = opened.as_ref().is_some_and(|store| {
+            store
+                .pending_cleanup()
+                .map_or(true, |pending| !pending.is_empty())
+        });
         let store = Arc::new(Mutex::new(opened));
-        let (sender, receiver) =
-            mpsc::sync_channel::<(String, RunUpdate, bool, Option<mpsc::SyncSender<()>>)>(32);
+        let (sender, receiver) = mpsc::sync_channel::<(
+            String,
+            RunUpdate,
+            bool,
+            Option<tokio::sync::oneshot::Sender<()>>,
+        )>(32);
         let worker_store = store.clone();
         let worker_status = status.clone();
         std::thread::spawn(move || {
@@ -57,7 +82,23 @@ impl History {
                 }
             }
         });
+        let credentials = Arc::new(tokio::sync::Semaphore::new(1));
+        let recovery_store = store.clone();
+        let recovery_credentials = credentials.clone();
+        let recovery_status = status.clone();
+        if recover_pending {
+            std::thread::spawn(move || {
+                if let Ok(_permit) = recovery_credentials.try_acquire_owned()
+                    && let Err(error) = saved_requests::recover(&recovery_store, &NativeCredentials)
+                    && error.code == "CREDENTIAL_CLEANUP_PENDING"
+                    && let Ok(mut status) = recovery_status.lock()
+                {
+                    *status = Some(error.code);
+                }
+            });
+        }
         Self {
+            credentials,
             store,
             admission: Arc::new(tokio::sync::Semaphore::new(4)),
             sender,
@@ -91,20 +132,78 @@ impl History {
     }
 
     pub(crate) async fn finish(&self, id: String, update: RunUpdate, incomplete: bool) {
-        let sender = self.sender.clone();
-        let status = self.status.clone();
-        let _ = tauri::async_runtime::spawn_blocking(move || {
-            let (acknowledged, received) = mpsc::sync_channel(1);
-            if sender
-                .send((id, update, incomplete, Some(acknowledged)))
-                .is_err()
-                && let Ok(mut status) = status.lock()
-            {
-                *status = Some("HISTORY_WRITE_FAILED".into());
+        self.finish_with_deadline(id, update, incomplete, STORAGE_WAIT)
+            .await;
+    }
+
+    async fn finish_with_deadline(
+        &self,
+        id: String,
+        update: RunUpdate,
+        incomplete: bool,
+        deadline: std::time::Duration,
+    ) {
+        let (acknowledged, received) = tokio::sync::oneshot::channel();
+        let committed = if self
+            .sender
+            .try_send((id, update, incomplete, Some(acknowledged)))
+            .is_ok()
+        {
+            matches!(tokio::time::timeout(deadline, received).await, Ok(Ok(())))
+        } else {
+            false
+        };
+        if !committed && let Ok(mut status) = self.status.lock() {
+            *status = Some("HISTORY_WRITE_FAILED".into());
+        }
+    }
+
+    async fn configuration<T: Send + 'static>(
+        &self,
+        credential_access: bool,
+        action: impl FnOnce(&SharedStore) -> Result<T, RunError> + Send + 'static,
+    ) -> Result<T, RunError> {
+        let admission = if credential_access {
+            &self.credentials
+        } else {
+            &self.admission
+        };
+        let permit = admission.clone().try_acquire_owned().map_err(|_| {
+            if credential_access {
+                RunError {
+                    code: "CREDENTIALS_BUSY".into(),
+                    message:
+                        "Another credential operation is still running. Try again when it finishes."
+                            .into(),
+                    field: None,
+                }
+            } else {
+                failure()
             }
-            let _ = received.recv();
+        })?;
+        let store = self.store.clone();
+        let status = self.status.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let _permit = permit;
+            let result = action(&store);
+            let cleanup_complete = saved_requests::access(&store, |store| store.pending_cleanup())
+                .is_ok_and(|pending| pending.is_empty());
+            if let Ok(mut status) = status.lock() {
+                if result
+                    .as_ref()
+                    .is_err_and(|error| error.code == "CREDENTIAL_CLEANUP_PENDING")
+                {
+                    *status = Some("CREDENTIAL_CLEANUP_PENDING".into());
+                } else if cleanup_complete
+                    && status.as_deref() == Some("CREDENTIAL_CLEANUP_PENDING")
+                {
+                    *status = None;
+                }
+            }
+            result
         })
-        .await;
+        .await
+        .map_err(failure_from)?
     }
 
     async fn call<T: Send + 'static>(
@@ -117,13 +216,20 @@ impl History {
             .try_acquire_owned()
             .map_err(|_| failure())?;
         let store = self.store.clone();
-        tauri::async_runtime::spawn_blocking(move || {
+        let task = tauri::async_runtime::spawn_blocking(move || {
             let _permit = permit;
-            let mut guard = store.lock().map_err(|_| failure())?;
-            action(guard.as_mut().ok_or_else(failure)?)
-        })
-        .await
-        .map_err(|_| failure())?
+            saved_requests::access(&store, action)
+        });
+        tokio::time::timeout(STORAGE_WAIT, task)
+            .await
+            .map_err(|_| {
+                tracing::warn!(
+                    code = "STORAGE_WAIT_EXCEEDED",
+                    "Storage operation exceeded its response deadline"
+                );
+                failure()
+            })?
+            .map_err(failure_from)?
     }
 }
 
@@ -189,24 +295,8 @@ pub(crate) async fn save_configuration(
         });
     }
     state
-        .call(move |store| {
-            let confirmation = velo_engine::RunManager::prepare(config.clone())?;
-            let id = uuid::Uuid::new_v4().to_string();
-            if remember {
-                credentials::remember(&id, &config)?;
-            }
-            if let Err(error) = store.save(
-                &id,
-                name.trim(),
-                remember,
-                &redacted(&config, &confirmation.origin),
-            ) {
-                if remember {
-                    let _ = credentials::forget(&id);
-                }
-                return Err(error);
-            }
-            Ok(())
+        .configuration(remember, move |store| {
+            saved_requests::save(store, &NativeCredentials, name.trim(), config, remember)
         })
         .await
 }
@@ -216,16 +306,16 @@ pub(crate) async fn load_configuration(
     state: tauri::State<'_, History>,
     id: String,
 ) -> Result<SavedConfiguration, RunError> {
+    let lookup = id.clone();
+    let saved = state
+        .call(move |store| store.configuration(&lookup))
+        .await?;
+    if !saved.remembered {
+        return Ok(saved);
+    }
     state
-        .call(move |store| {
-            let mut saved = store.configuration(&id)?;
-            if saved.remembered {
-                let mut config: RunConfig =
-                    serde_json::from_value(saved.config).map_err(|_| failure())?;
-                credentials::restore(&id, &mut config)?;
-                saved.config = serde_json::to_value(config).map_err(|_| failure())?;
-            }
-            Ok(saved)
+        .configuration(true, move |store| {
+            saved_requests::load(store, &NativeCredentials, &id)
         })
         .await
 }
@@ -235,22 +325,29 @@ pub(crate) async fn delete_configuration(
     state: tauri::State<'_, History>,
     id: String,
 ) -> Result<(), RunError> {
+    let lookup = id.clone();
+    let saved = state
+        .call(move |store| store.configuration(&lookup))
+        .await?;
     state
-        .call(move |store| {
-            let saved = store.configuration(&id)?;
-            if saved.remembered {
-                credentials::forget(&id)?;
-            }
-            store.delete_configuration(&id)
+        .configuration(saved.remembered, move |store| {
+            saved_requests::remove(store, &NativeCredentials, &id)
         })
         .await
 }
 
 pub(crate) fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let path = app.path().app_data_dir().ok().and_then(|directory| {
-        std::fs::create_dir_all(&directory).ok()?;
-        Some(directory.join("velo.sqlite3"))
-    });
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(failure_from)
+        .ok()
+        .and_then(|directory| {
+            std::fs::create_dir_all(&directory)
+                .map_err(failure_from)
+                .ok()?;
+            Some(directory.join("velo.sqlite3"))
+        });
     app.manage(History::new(path));
 }
 
@@ -305,6 +402,7 @@ mod tests {
             store: Arc::new(Mutex::new(None)),
             admission: Arc::new(tokio::sync::Semaphore::new(4)),
             sender,
+            credentials: Arc::new(tokio::sync::Semaphore::new(1)),
             status: Arc::new(Mutex::new(None)),
         };
         let update = sample();
@@ -313,6 +411,74 @@ mod tests {
         assert_eq!(
             history.status.lock().unwrap().as_deref(),
             Some("HISTORY_BACKPRESSURE")
+        );
+        assert_eq!(receiver.try_recv().unwrap().0, "run");
+    }
+
+    #[test]
+    fn pending_cleanup_does_not_block_omitted_request_operations() {
+        let directory = tempfile::tempdir().unwrap();
+        let history = History::new(Some(directory.path().join("history.sqlite3")));
+        let _credential_operation = history.credentials.try_acquire().unwrap();
+        tauri::async_runtime::block_on(async {
+            history
+                .call(|store| store.queue_cleanup("pending-credential"))
+                .await
+                .unwrap();
+            *history.status.lock().unwrap() = Some("CREDENTIAL_CLEANUP_PENDING".into());
+            history
+                .configuration(false, |store| {
+                    saved_requests::save(
+                        store,
+                        &NativeCredentials,
+                        "Independent",
+                        RunConfig {
+                            url: "http://127.0.0.1:9/".into(),
+                            ..Default::default()
+                        },
+                        false,
+                    )
+                })
+                .await
+                .unwrap();
+            let saved = history
+                .call(|store| store.configurations(None))
+                .await
+                .unwrap();
+            let id = saved[0].id.clone();
+            assert!(!saved[0].remembered);
+            history
+                .configuration(false, move |store| {
+                    saved_requests::remove(store, &NativeCredentials, &id)
+                })
+                .await
+                .unwrap();
+            assert_eq!(
+                history.status.lock().unwrap().as_deref(),
+                Some("CREDENTIAL_CLEANUP_PENDING")
+            );
+        });
+    }
+
+    #[test]
+    fn finalization_reports_a_stalled_writer_without_waiting_forever() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let history = History {
+            store: Arc::new(Mutex::new(None)),
+            admission: Arc::new(tokio::sync::Semaphore::new(4)),
+            credentials: Arc::new(tokio::sync::Semaphore::new(1)),
+            sender,
+            status: Arc::new(Mutex::new(None)),
+        };
+        tauri::async_runtime::block_on(history.finish_with_deadline(
+            "run".into(),
+            sample(),
+            false,
+            std::time::Duration::from_millis(5),
+        ));
+        assert_eq!(
+            history.status.lock().unwrap().as_deref(),
+            Some("HISTORY_WRITE_FAILED")
         );
         assert_eq!(receiver.try_recv().unwrap().0, "run");
     }

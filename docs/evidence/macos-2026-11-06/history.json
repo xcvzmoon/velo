@@ -1,0 +1,842 @@
+[
+  {
+    "id": "efee78e5-51ff-4c1c-a550-08e25e166f4a",
+    "snapshot": {
+      "run_id": "1",
+      "state": "completed",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 8,
+        "duration_ms": 600000,
+        "workload": {
+          "kind": "constant",
+          "vus": 8,
+          "duration_ms": 600000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "600000000",
+      "drain_us": "11191",
+      "actual_us": "600011191",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 8,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "356886",
+          "responses": "356867",
+          "successes": "356867",
+          "status_failures": "0",
+          "transport_failures": "19",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "2498069",
+          "completed_iterations": "356886",
+          "failed_iterations": "19"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "356867",
+          "out_of_range": "0",
+          "mean_us": 13427.627827734143,
+          "min_us": 10200,
+          "max_us": 61087,
+          "median_us": 13135,
+          "p90_us": 15695,
+          "p95_us": 15983,
+          "p99_us": 16863
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "19",
+          "out_of_range": "0",
+          "mean_us": 1375.3157894736842,
+          "min_us": 111,
+          "max_us": 6631,
+          "median_us": 275,
+          "p90_us": 6019,
+          "p95_us": 6631,
+          "p99_us": 6631
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 5.323828897743257e-5,
+        "request_rate": 594.7989054717798,
+        "iteration_rate": 594.7989054717798,
+        "success_rate": 594.7672393957668,
+        "aggregation_wait_us": "92117",
+        "aggregation_interference": true,
+        "counter_overflow": false,
+        "max_in_flight": "8"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  },
+  {
+    "id": "3846237c-b03b-4a13-803c-4fa8e4049ba0",
+    "snapshot": {
+      "run_id": "2",
+      "state": "cancelled",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 2,
+        "duration_ms": 30000,
+        "workload": {
+          "kind": "constant",
+          "vus": 2,
+          "duration_ms": 30000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "3050851",
+      "drain_us": "3705",
+      "actual_us": "3054556",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 2,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "486",
+          "responses": "486",
+          "successes": "486",
+          "status_failures": "0",
+          "transport_failures": "0",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "3402",
+          "completed_iterations": "486",
+          "failed_iterations": "0"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "486",
+          "out_of_range": "0",
+          "mean_us": 12552.090534979427,
+          "min_us": 10352,
+          "max_us": 18767,
+          "median_us": 12927,
+          "p90_us": 13295,
+          "p95_us": 13471,
+          "p99_us": 14319
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 0.0,
+        "request_rate": 159.10659356056985,
+        "iteration_rate": 159.10659356056985,
+        "success_rate": 159.10659356056985,
+        "aggregation_wait_us": "196",
+        "aggregation_interference": false,
+        "counter_overflow": false,
+        "max_in_flight": "2"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  },
+  {
+    "id": "0002b8be-fa4c-4028-8f4b-735b4e8ee668",
+    "snapshot": {
+      "run_id": "3",
+      "state": "cancelled",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 2,
+        "duration_ms": 30000,
+        "workload": {
+          "kind": "constant",
+          "vus": 2,
+          "duration_ms": 30000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "3066148",
+      "drain_us": "4441",
+      "actual_us": "3070589",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 2,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "478",
+          "responses": "478",
+          "successes": "478",
+          "status_failures": "0",
+          "transport_failures": "0",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "3346",
+          "completed_iterations": "478",
+          "failed_iterations": "0"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "478",
+          "out_of_range": "0",
+          "mean_us": 12827.514644351459,
+          "min_us": 10528,
+          "max_us": 15095,
+          "median_us": 13047,
+          "p90_us": 13391,
+          "p95_us": 13495,
+          "p99_us": 13919
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 0.0,
+        "request_rate": 155.67044030431455,
+        "iteration_rate": 155.67044030431455,
+        "success_rate": 155.67044030431455,
+        "aggregation_wait_us": "126",
+        "aggregation_interference": false,
+        "counter_overflow": false,
+        "max_in_flight": "2"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  },
+  {
+    "id": "945b1d3f-d3a3-4354-bd42-b4cd9098dd1a",
+    "snapshot": {
+      "run_id": "4",
+      "state": "cancelled",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 2,
+        "duration_ms": 30000,
+        "workload": {
+          "kind": "constant",
+          "vus": 2,
+          "duration_ms": 30000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "3068119",
+      "drain_us": "10538",
+      "actual_us": "3078657",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 2,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "480",
+          "responses": "480",
+          "successes": "480",
+          "status_failures": "0",
+          "transport_failures": "0",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "3360",
+          "completed_iterations": "480",
+          "failed_iterations": "0"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "480",
+          "out_of_range": "0",
+          "mean_us": 12792.341666666664,
+          "min_us": 10408,
+          "max_us": 20431,
+          "median_us": 12975,
+          "p90_us": 13303,
+          "p95_us": 13399,
+          "p99_us": 14303
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 0.0,
+        "request_rate": 155.91213120480333,
+        "iteration_rate": 155.91213120480333,
+        "success_rate": 155.91213120480333,
+        "aggregation_wait_us": "157",
+        "aggregation_interference": false,
+        "counter_overflow": false,
+        "max_in_flight": "2"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  },
+  {
+    "id": "5ea3e7d3-eb60-427c-9c11-0f4358e749a8",
+    "snapshot": {
+      "run_id": "5",
+      "state": "cancelled",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 2,
+        "duration_ms": 30000,
+        "workload": {
+          "kind": "constant",
+          "vus": 2,
+          "duration_ms": 30000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "3073068",
+      "drain_us": "5320",
+      "actual_us": "3078388",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 2,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "484",
+          "responses": "484",
+          "successes": "484",
+          "status_failures": "0",
+          "transport_failures": "0",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "3388",
+          "completed_iterations": "484",
+          "failed_iterations": "0"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "484",
+          "out_of_range": "0",
+          "mean_us": 12692.446280991737,
+          "min_us": 10440,
+          "max_us": 13959,
+          "median_us": 12999,
+          "p90_us": 13295,
+          "p95_us": 13423,
+          "p99_us": 13711
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 0.0,
+        "request_rate": 157.22509827370197,
+        "iteration_rate": 157.22509827370197,
+        "success_rate": 157.22509827370197,
+        "aggregation_wait_us": "196",
+        "aggregation_interference": false,
+        "counter_overflow": false,
+        "max_in_flight": "2"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  },
+  {
+    "id": "cddff74d-4b7d-419a-a929-d09cf6cd5fbd",
+    "snapshot": {
+      "run_id": "6",
+      "state": "cancelled",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 2,
+        "duration_ms": 30000,
+        "workload": {
+          "kind": "constant",
+          "vus": 2,
+          "duration_ms": 30000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "3059111",
+      "drain_us": "7909",
+      "actual_us": "3067020",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 2,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "486",
+          "responses": "486",
+          "successes": "486",
+          "status_failures": "0",
+          "transport_failures": "0",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "3402",
+          "completed_iterations": "486",
+          "failed_iterations": "0"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "486",
+          "out_of_range": "0",
+          "mean_us": 12597.695473251028,
+          "min_us": 10424,
+          "max_us": 14079,
+          "median_us": 12967,
+          "p90_us": 13247,
+          "p95_us": 13327,
+          "p99_us": 13559
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 0.0,
+        "request_rate": 158.45998414666548,
+        "iteration_rate": 158.45998414666548,
+        "success_rate": 158.45998414666548,
+        "aggregation_wait_us": "75",
+        "aggregation_interference": false,
+        "counter_overflow": false,
+        "max_in_flight": "2"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  },
+  {
+    "id": "aea1a845-bc88-4f39-af3f-abff7eea1bb6",
+    "snapshot": {
+      "run_id": "1",
+      "state": "completed",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 1,
+        "duration_ms": 10000,
+        "workload": {
+          "kind": "constant",
+          "vus": 1,
+          "duration_ms": 10000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "10000000",
+      "drain_us": "3899",
+      "actual_us": "10003899",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 1,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "784",
+          "responses": "784",
+          "successes": "784",
+          "status_failures": "0",
+          "transport_failures": "0",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "5488",
+          "completed_iterations": "784",
+          "failed_iterations": "0"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "784",
+          "out_of_range": "0",
+          "mean_us": 12743.719387755105,
+          "min_us": 10416,
+          "max_us": 19983,
+          "median_us": 13047,
+          "p90_us": 13239,
+          "p95_us": 13295,
+          "p99_us": 13535
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 0.0,
+        "request_rate": 78.36943885769945,
+        "iteration_rate": 78.36943885769945,
+        "success_rate": 78.36943885769945,
+        "aggregation_wait_us": "7",
+        "aggregation_interference": false,
+        "counter_overflow": false,
+        "max_in_flight": "1"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  },
+  {
+    "id": "45f5f792-eb76-4bbb-a6d9-e822d2629fce",
+    "snapshot": {
+      "run_id": "2",
+      "state": "cancelled",
+      "confirmation": {
+        "origin": "http://127.0.0.1:8080",
+        "vus": 1,
+        "duration_ms": 60000,
+        "workload": {
+          "kind": "constant",
+          "vus": 1,
+          "duration_ms": 60000
+        },
+        "budget": {
+          "max_vus": 256,
+          "max_request_bytes": 8388608
+        },
+        "warnings": []
+      },
+      "scheduling_us": "8751886",
+      "drain_us": "10188",
+      "actual_us": "8762074",
+      "desired_vus": 0,
+      "retiring_vus": 0,
+      "active_vus": 0,
+      "max_vus": 1,
+      "arrival": {
+        "offered": "0",
+        "capacity_drops": "0",
+        "missed_deadlines": "0",
+        "max_lateness_us": "0"
+      },
+      "metrics": {
+        "counters": {
+          "started": "706",
+          "responses": "706",
+          "successes": "706",
+          "status_failures": "0",
+          "transport_failures": "0",
+          "timeouts": "0",
+          "cancelled": "0",
+          "in_flight": "0",
+          "response_body_bytes": "4942",
+          "completed_iterations": "706",
+          "failed_iterations": "0"
+        },
+        "response_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "706",
+          "out_of_range": "0",
+          "mean_us": 12394.32294617563,
+          "min_us": 10520,
+          "max_us": 14055,
+          "median_us": 12887,
+          "p90_us": 13111,
+          "p95_us": 13151,
+          "p99_us": 13303
+        },
+        "transport_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "timeout_latency": {
+          "significant_digits": 3,
+          "lowest_us": 1,
+          "highest_us": 3600000000,
+          "samples": "0",
+          "out_of_range": "0",
+          "mean_us": null,
+          "min_us": null,
+          "max_us": null,
+          "median_us": null,
+          "p90_us": null,
+          "p95_us": null,
+          "p99_us": null
+        },
+        "http_failure_rate": 0.0,
+        "request_rate": 80.57452221856808,
+        "iteration_rate": 80.57452221856808,
+        "success_rate": 80.57452221856808,
+        "aggregation_wait_us": "18",
+        "aggregation_interference": false,
+        "counter_overflow": false,
+        "max_in_flight": "1"
+      },
+      "thresholds": [],
+      "failure_code": null
+    },
+    "terminal": 1,
+    "interrupted": 0,
+    "incomplete": 0
+  }
+]

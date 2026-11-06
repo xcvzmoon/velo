@@ -6,6 +6,7 @@ use ts_rs::TS;
 /// Input to the native diagnostic command.
 ///
 /// The command validates the trimmed label before running the diagnostic.
+/// Debug formatting omits the user-provided label.
 ///
 /// # Examples
 /// ```
@@ -16,6 +17,12 @@ use ts_rs::TS;
 pub struct DiagnosticInput {
     /// Label containing 1 to 64 characters after trimming whitespace.
     pub label: String,
+}
+
+impl std::fmt::Debug for DiagnosticInput {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("DiagnosticInput([redacted])")
+    }
 }
 
 /// Build identity returned by a successful native diagnostic.
@@ -89,6 +96,7 @@ pub struct HistoryEntry {
 }
 
 /// Saved request metadata with omitted fields or an explicit OS-store reference.
+/// Debug formatting omits names, identifiers, and request content, including restored credentials.
 ///
 /// # Examples
 /// ```
@@ -96,7 +104,7 @@ pub struct HistoryEntry {
 /// assert!(!config.id.is_empty());
 /// # }
 /// ```
-#[derive(Debug, Serialize, TS)]
+#[derive(Serialize, TS)]
 pub struct SavedConfiguration {
     /// Durable configuration and credential reference identifier.
     pub id: String,
@@ -107,4 +115,13 @@ pub struct SavedConfiguration {
     /// Redacted configuration on save/list; restored only during explicit load.
     #[ts(type = "RunConfig")]
     pub config: serde_json::Value,
+}
+
+impl std::fmt::Debug for SavedConfiguration {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SavedConfiguration")
+            .field("remembered", &self.remembered)
+            .finish_non_exhaustive()
+    }
 }
