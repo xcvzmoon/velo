@@ -1,0 +1,92 @@
+{
+  "run_id": "1",
+  "state": "completed",
+  "confirmation": {
+    "origin": "http://127.0.0.1:8080",
+    "vus": 8,
+    "duration_ms": 60000,
+    "workload": { "kind": "constant", "vus": 8, "duration_ms": 60000 },
+    "budget": { "max_vus": 256, "max_request_bytes": 8388608 },
+    "warnings": []
+  },
+  "scheduling_us": "60000000",
+  "drain_us": "10231",
+  "actual_us": "60010231",
+  "desired_vus": 0,
+  "retiring_vus": 0,
+  "active_vus": 0,
+  "max_vus": 8,
+  "arrival": {
+    "offered": "0",
+    "capacity_drops": "0",
+    "missed_deadlines": "0",
+    "max_lateness_us": "0"
+  },
+  "metrics": {
+    "counters": {
+      "started": "36125",
+      "responses": "36125",
+      "successes": "36125",
+      "status_failures": "0",
+      "transport_failures": "0",
+      "timeouts": "0",
+      "cancelled": "0",
+      "in_flight": "0",
+      "response_body_bytes": "252875",
+      "completed_iterations": "36125",
+      "failed_iterations": "0"
+    },
+    "response_latency": {
+      "significant_digits": 3,
+      "lowest_us": 1,
+      "highest_us": 3600000000,
+      "samples": "36125",
+      "out_of_range": "0",
+      "mean_us": 13265.796318339117,
+      "min_us": 10224,
+      "max_us": 109631,
+      "median_us": 12871,
+      "p90_us": 14423,
+      "p95_us": 17231,
+      "p99_us": 24255
+    },
+    "transport_latency": {
+      "significant_digits": 3,
+      "lowest_us": 1,
+      "highest_us": 3600000000,
+      "samples": "0",
+      "out_of_range": "0",
+      "mean_us": null,
+      "min_us": null,
+      "max_us": null,
+      "median_us": null,
+      "p90_us": null,
+      "p95_us": null,
+      "p99_us": null
+    },
+    "timeout_latency": {
+      "significant_digits": 3,
+      "lowest_us": 1,
+      "highest_us": 3600000000,
+      "samples": "0",
+      "out_of_range": "0",
+      "mean_us": null,
+      "min_us": null,
+      "max_us": null,
+      "median_us": null,
+      "p90_us": null,
+      "p95_us": null,
+      "p99_us": null
+    },
+    "http_failure_rate": 0.0,
+    "request_rate": 601.9806776586693,
+    "iteration_rate": 601.9806776586693,
+    "success_rate": 601.9806776586693,
+    "aggregation_wait_us": "13783",
+    "aggregation_interference": false,
+    "counter_overflow": false,
+    "max_in_flight": "8"
+  },
+  "thresholds": [],
+  "failure_code": null
+}
