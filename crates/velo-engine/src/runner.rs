@@ -290,6 +290,12 @@ pub struct RunManager {
     state: AsyncMutex<ManagerState>,
 }
 
+impl std::fmt::Debug for RunManager {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("RunManager").finish_non_exhaustive()
+    }
+}
+
 impl RunManager {
     /// Validates a configuration and returns safe confirmation details without HTTP traffic.
     ///

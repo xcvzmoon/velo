@@ -66,6 +66,7 @@ pub enum HttpProtocol {
 /// One multipart field. File contents are streamed afresh for each logical attempt.
 /// Files must be regular, readable files with absolute paths and remain unchanged
 /// throughout the run. Paths and field values are omitted from run reports.
+/// Debug formatting omits file metadata and field contents.
 ///
 /// # Examples
 /// ```
@@ -73,7 +74,7 @@ pub enum HttpProtocol {
 /// assert_eq!(serde_json::to_value(part)?["kind"], "text");
 /// # Ok::<(), serde_json::Error>(())
 /// ```
-#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[derive(Clone, Deserialize, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MultipartPart {
     /// UTF-8 field; duplicate names preserve order.
@@ -94,6 +95,15 @@ pub enum MultipartPart {
         /// Valid MIME type; defaults in the editor to application/octet-stream.
         content_type: String,
     },
+}
+
+impl std::fmt::Debug for MultipartPart {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Text { .. } => "MultipartPart::Text([redacted])",
+            Self::File { .. } => "MultipartPart::File([redacted])",
+        })
+    }
 }
 
 pub(crate) enum PreparedPart {
