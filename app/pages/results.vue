@@ -18,7 +18,7 @@
     <ShellEmptyState
       v-else
       title="No results yet"
-      description="Configure and run a request in Tests. The latest summary remains available until the next run or app exit."
+      description="Configure and run a request in Tests. Stored runs appear in history below."
     >
       <Button
         variant="outline"
@@ -27,5 +27,7 @@
         <NuxtLink to="/tests">Configure a test</NuxtLink>
       </Button>
     </ShellEmptyState>
+
+    <RunHistory />
   </div>
 </template>

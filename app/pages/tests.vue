@@ -12,6 +12,8 @@
     initialInput: { updateIntervalMs: '1000' },
   });
 
+  const loaded = shallowRef<RunConfig | null>(null);
+
   const confirmation = shallowRef<RunConfirmation | null>(null);
   const prepared = shallowRef<RunConfig | null>(null);
 
@@ -187,14 +189,24 @@
       </div>
     </FormischForm>
 
+    <RunSavedConfigurations
+      :config="prepared"
+      :disabled="active || busy"
+      @load="
+        loaded = $event;
+        cancel();
+      "
+    />
+
     <RunRequestEditor
+      :loaded="loaded"
       :disabled="active || busy || confirmation !== null"
       @prepare="prepare"
     />
 
     <p class="text-muted-foreground text-xs">
-      Navigation preserves the active run. Request settings and results are held in memory; saved
-      history is not available.
+      Navigation preserves the active run. History is stored locally; storage failures appear in
+      Results. Loading a configuration requires reviewing and authorizing it again.
     </p>
 
     <Button

@@ -6,6 +6,7 @@
     Form as FormischForm,
     insert,
     remove,
+    setInput,
     useForm,
   } from '@formisch/vue';
   import { requestEditorSchema } from '~/schemas/run';
@@ -51,7 +52,7 @@
     },
   ] as const;
 
-  defineProps<{ disabled: boolean }>();
+  const props = defineProps<{ disabled: boolean; loaded?: RunConfig | null }>();
   const emit = defineEmits<{ prepare: [config: RunConfig] }>();
 
   const form = useForm({
@@ -91,6 +92,48 @@
       max_request_bytes: 8_388_608,
     },
   });
+
+  watch(
+    () => props.loaded,
+    (config) => {
+      if (!config) {
+        return;
+      }
+      const { workload, body, auth, budget, ...request } = config;
+      setInput(form, {
+        input: {
+          ...request,
+          authKind: auth.kind,
+          authToken: auth.kind === 'bearer' ? auth.token : '',
+          authUsername: auth.kind === 'basic' ? auth.username : '',
+          authPassword: auth.kind === 'basic' ? auth.password : '',
+          bodyKind: body.kind,
+          bodyValue: body.kind === 'text' || body.kind === 'json' ? body.value : '',
+          formPairs: body.kind === 'form' ? body.value : [],
+          multipartParts:
+            body.kind === 'multipart'
+              ? body.value.map((part) => ({
+                  kind: part.kind,
+                  name: part.name,
+                  value: part.kind === 'text' ? part.value : '',
+                  path: part.kind === 'file' ? part.path : '',
+                  filename: part.kind === 'file' ? part.filename : '',
+                  content_type: part.kind === 'file' ? part.content_type : '',
+                }))
+              : [],
+          workloadKind: workload.kind,
+          vus: workload.kind === 'constant' ? workload.vus : 1,
+          duration_ms: workload.kind === 'ramping' ? 10000 : workload.duration_ms,
+          start_vus: workload.kind === 'ramping' ? workload.start_vus : 0,
+          stages: workload.kind === 'ramping' ? workload.stages : [],
+          rate: workload.kind === 'arrival' ? workload.rate : 10,
+          capacity: workload.kind === 'arrival' ? workload.capacity : 10,
+          max_vus: budget.max_vus,
+          max_request_bytes: budget.max_request_bytes,
+        },
+      });
+    },
+  );
 
   function prepare(config: RunConfig): void {
     emit('prepare', config);
