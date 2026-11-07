@@ -11,6 +11,7 @@
   const schema = v.object({ text: v.pipe(v.string(), v.maxLength(8_388_608)) });
   const props = defineProps<{ source: string; label: string; action: string; disabled: boolean }>();
   const emit = defineEmits<{ apply: [source: string]; dirty: [value: boolean] }>();
+  const inputId = useId();
   const form = useForm({
     schema,
     initialInput: { text: props.source },
@@ -39,12 +40,12 @@
       :path="['text']"
     >
       <div class="space-y-2">
-        <Label :for="field.props.name">{{ label }}</Label>
+        <Label :for="inputId">{{ label }}</Label>
 
         <Textarea
           v-model="field.input"
           v-bind="field.props"
-          :id="field.props.name"
+          :id="inputId"
           :disabled="disabled"
           class="min-h-64 font-mono text-xs"
           spellcheck="false"
