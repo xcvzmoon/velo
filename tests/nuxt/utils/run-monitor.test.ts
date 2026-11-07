@@ -32,6 +32,7 @@ const population: LatencySnapshot = {
 
 function snapshot(runId = '1', seconds = 1): RunSnapshot {
   return {
+    dataset: null,
     thresholds: [],
     run_id: runId,
     state: 'running',
@@ -48,6 +49,7 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
         max_vus: 1000,
         max_request_bytes: 16_777_216,
       },
+      dataset: null,
       warnings: [],
     },
     scheduling_us: String(seconds * 1e6),
@@ -61,6 +63,7 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
     arrival: {
       offered: '0',
       capacity_drops: '0',
+      dataset_drops: '0',
       missed_deadlines: '0',
       max_lateness_us: '0',
     },

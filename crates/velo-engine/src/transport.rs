@@ -126,12 +126,13 @@ impl From<reqwest::Error> for Failure {
 
 async fn request(
     config: &ValidatedConfig,
+    record: Option<&crate::config::PreparedRequest>,
     include_body: bool,
     cancel: &CancellationToken,
     uploads_done: &TaskTracker,
 ) -> Result<Request, Failure> {
-    let mut request = config
-        .request
+    let template = record.map_or(&config.request, |record| &record.request);
+    let mut request = template
         .try_clone()
         .ok_or(Failure::Transport(Category::Request))?;
     if !include_body {
@@ -146,7 +147,9 @@ async fn request(
         }
         return Ok(request);
     }
-    let Some(parts) = &config.multipart else {
+    let Some(parts) = record.map_or(config.multipart.as_ref(), |record| {
+        record.multipart.as_ref()
+    }) else {
         return Ok(request);
     };
     let mut form = multipart::Form::new();
@@ -232,13 +235,17 @@ async fn request(
         .map_err(Failure::from)
 }
 
-pub(crate) async fn execute(config: &ValidatedConfig, bytes: &mut u64) -> Result<bool, Failure> {
+pub(crate) async fn execute(
+    config: &ValidatedConfig,
+    record: Option<&crate::config::PreparedRequest>,
+    bytes: &mut u64,
+) -> Result<bool, Failure> {
     let cancel = config.upload_stop.child_token();
     let _cleanup = cancel.clone().drop_guard();
     let uploads_done = TaskTracker::new();
     let result = tokio::time::timeout(
         config.timeout,
-        consume(config, bytes, &cancel, &uploads_done, None),
+        consume(config, record, bytes, &cancel, &uploads_done, None),
     )
     .await
     .map_err(|_| Failure::Timeout)
@@ -262,6 +269,7 @@ pub(crate) async fn preview(
         config.timeout,
         consume(
             config,
+            None,
             &mut bytes,
             &cancel,
             &uploads_done,
@@ -281,19 +289,21 @@ pub(crate) async fn preview(
 
 async fn consume(
     config: &ValidatedConfig,
+    record: Option<&crate::config::PreparedRequest>,
     bytes: &mut u64,
     cancel: &CancellationToken,
     uploads_done: &TaskTracker,
     mut preview: Option<&mut crate::preview::PreviewResponse>,
 ) -> Result<bool, Failure> {
-    let mut url = config.request.url().clone();
-    let mut method = config.request.method().clone();
+    let template = record.map_or(&config.request, |record| &record.request);
+    let mut url = template.url().clone();
+    let mut method = template.method().clone();
     let mut include_body = true;
     let mut followed = 0_u32;
     loop {
         let hop_cancel = cancel.child_token();
         let _hop_cleanup = hop_cancel.clone().drop_guard();
-        let mut request = request(config, include_body, &hop_cancel, uploads_done).await?;
+        let mut request = request(config, record, include_body, &hop_cancel, uploads_done).await?;
         *request.url_mut() = url.clone();
         *request.method_mut() = method.clone();
         let mut response = config.client.execute(request).await?;
@@ -451,6 +461,7 @@ mod tests {
         assert!(matches!(
             request(
                 &config,
+                None,
                 true,
                 &CancellationToken::new(),
                 &TaskTracker::new()

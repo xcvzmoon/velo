@@ -28,6 +28,197 @@ export type CommandError = {
    */
   field: string | null;
 };
+export type DataLifetime = 'run' | 'user' | 'iteration';
+export type DataAllocation = 'sequential' | 'random' | 'unique';
+export type DataExhaustion = 'stop' | 'repeat' | 'fail';
+export type DataDefinition = {
+  /**
+   * Reuse boundary for selected records.
+   */
+  lifetime: DataLifetime;
+  /**
+   * Global selection order.
+   */
+  allocation: DataAllocation;
+  /**
+   * Explicit end-of-data behavior.
+   */
+  exhaustion: DataExhaustion;
+  /**
+   * Seed for generation and the native allocation shuffle.
+   */
+  seed: number;
+  /**
+   * Generator or import recipe. Imported files must be selected on this machine.
+   */
+  source: DataSource;
+};
+export type DataSource =
+  | {
+      kind: 'faker';
+      /**
+       * Exact supported package version, currently 10.6.0.
+       */
+      version: string;
+      /**
+       * Supported locale: en, de, or fr, with English fallback.
+       */
+      locale: string;
+      /**
+       * Number of prepared records, 1 through 10,000.
+       */
+      count: number;
+      /**
+       * Ordered fields; related fields may refer to earlier fields only.
+       */
+      fields: DataField[];
+    }
+  | {
+      kind: 'csv';
+      /**
+       * Required source columns, mapped to request variables.
+       */
+      mapping: Record<string, string>;
+    }
+  | {
+      kind: 'json';
+      /**
+       * Required source fields, mapped to request variables.
+       */
+      mapping: Record<string, string>;
+    };
+export type DataField = {
+  /**
+   * Variable name, using letters, digits, underscores, dots, or hyphens.
+   */
+  name: string;
+  /**
+   * Allowlisted generator and its supported arguments.
+   */
+  generator: DataGenerator;
+};
+export type DataGenerator =
+  | { kind: 'first_name' }
+  | { kind: 'last_name' }
+  | { kind: 'uuid' }
+  | {
+      kind: 'email';
+      /**
+       * Earlier field containing the first name.
+       */
+      first: string;
+      /**
+       * Earlier field containing the last name.
+       */
+      last: string;
+      /**
+       * Email provider domain.
+       */
+      provider: string;
+    }
+  | {
+      kind: 'integer';
+      /**
+       * Inclusive minimum.
+       */
+      min: number;
+      /**
+       * Inclusive maximum, at least min.
+       */
+      max: number;
+    }
+  | {
+      kind: 'literal';
+      /**
+       * Literal string, at most 16 KiB.
+       */
+      value: string;
+    }
+  | {
+      kind: 'copy';
+      /**
+       * Earlier field name.
+       */
+      field: string;
+    };
+export type DataRequest = {
+  /**
+   * Resolved HTTP URL.
+   */
+  url: string;
+  /**
+   * Resolved ordered headers.
+   */
+  headers: NameValue[];
+  /**
+   * Resolved ordered query pairs.
+   */
+  query: NameValue[];
+  /**
+   * Resolved body with JSON escaping preserved.
+   */
+  body: RequestBody;
+  /**
+   * Resolved authentication.
+   */
+  auth: RequestAuth;
+};
+export type PreparedData = {
+  /**
+   * Recipe that produced these requests.
+   */
+  definition: DataDefinition;
+  /**
+   * Resolved request records, limited to 10,000 and the configured byte budget.
+   */
+  requests: DataRequest[];
+};
+export type DataSummary = {
+  /**
+   * Source kind: faker, csv, or json.
+   */
+  source: string;
+  /**
+   * Faker package version, absent for imports.
+   */
+  version: string | null;
+  /**
+   * Faker locale, absent for imports.
+   */
+  locale: string | null;
+  /**
+   * Generation and shuffle seed.
+   */
+  seed: number;
+  /**
+   * Prepared record count.
+   */
+  records: number;
+  /**
+   * Reuse boundary.
+   */
+  lifetime: DataLifetime;
+  /**
+   * Selection order.
+   */
+  allocation: DataAllocation;
+  /**
+   * End-of-data behavior.
+   */
+  exhaustion: DataExhaustion;
+  /**
+   * Allocations made, excluding reuse within a lifetime.
+   */
+  allocated: string;
+  /**
+   * Repeat cycles entered after the initial pass.
+   */
+  cycles: string;
+  /**
+   * True once a stop or fail policy closed admission.
+   */
+  exhausted: boolean;
+};
 export type HistoryEntry = {
   /**
    * HTTP method used for comparison eligibility.
@@ -85,6 +276,10 @@ export type TestDefinition = {
    * Format version; only 1 is supported.
    */
   version: number;
+  /**
+   * Optional dataset recipe; prepared rows are transient and must be rebound after loading.
+   */
+  dataset?: DataDefinition;
   /**
    * Editable request and workload, with optional `{{name}}` placeholders.
    */
@@ -357,6 +552,10 @@ export type RunConfig = {
    * Explicit task and retained request-data limits.
    */
   budget: ResourceBudget;
+  /**
+   * Transient prepared requests; omitted from portable definitions and saved configurations.
+   */
+  data?: PreparedData;
 };
 export type RunError = {
   /**
@@ -397,6 +596,10 @@ export type RunConfirmation = {
    * HIGH_VU_COUNT warns at 100 workers; HIGH_ARRIVAL_RATE at 1,000 iterations/s.
    */
   warnings: string[];
+  /**
+   * Safe dataset preparation metadata, absent for static requests.
+   */
+  dataset: DataSummary | null;
 };
 export type RunState = 'starting' | 'running' | 'stopping' | 'completed' | 'cancelled' | 'failed';
 export type Counters = {
@@ -555,6 +758,10 @@ export type ArrivalSnapshot = {
    */
   capacity_drops: string;
   /**
+   * Slots rejected because a stop or fail dataset exhaustion policy closed admission.
+   */
+  dataset_drops: string;
+  /**
    * Expired slots skipped after a delayed scheduler wake; never replayed.
    */
   missed_deadlines: string;
@@ -620,6 +827,10 @@ export type RunSnapshot = {
    * Stable internal failure code, without infrastructure or target details.
    */
   failure_code: string | null;
+  /**
+   * Safe preparation metadata and final allocation counts; never includes rows.
+   */
+  dataset: DataSummary | null;
 };
 export type RunUpdate = {
   /**

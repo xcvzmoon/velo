@@ -20,6 +20,10 @@ use crate::{MultipartPart, RequestAuth, RequestBody, RunConfig, RunError};
 pub struct TestDefinition {
     /// Format version; only 1 is supported.
     pub version: u32,
+    /// Optional dataset recipe; prepared rows are transient and must be rebound after loading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub dataset: Option<crate::DataDefinition>,
     /// Editable request and workload, with optional `{{name}}` placeholders.
     pub config: RunConfig,
     /// Shared literal values or OS secret references, overridden by the selected environment.
@@ -34,6 +38,7 @@ impl Default for TestDefinition {
     fn default() -> Self {
         Self {
             version: 1,
+            dataset: None,
             config: RunConfig::default(),
             variables: BTreeMap::new(),
             environments: BTreeMap::new(),
@@ -51,10 +56,15 @@ fn invalid(field: &str, message: &str) -> RunError {
     RunError::new("INVALID_TEST_DEFINITION", message, Some(field))
 }
 
+struct Variable {
+    text: String,
+    literal: bool,
+}
+
 fn substitute(
     value: &str,
     field: &str,
-    variables: &BTreeMap<String, String>,
+    variables: &BTreeMap<String, Variable>,
     secrets: &mut impl FnMut(&str) -> Result<String, RunError>,
 ) -> Result<String, RunError> {
     let mut output = String::with_capacity(value.len());
@@ -71,9 +81,14 @@ fn substitute(
             Some(secret)
         } else {
             variable = variables.get(name).ok_or_else(|| RunError::new("VARIABLE_UNRESOLVED", "Define the referenced variable in the selected environment or shared variables.", Some(field)))?;
-            variable
-                .strip_prefix("{{secret:")
-                .and_then(|value| value.strip_suffix("}}"))
+            if variable.literal {
+                None
+            } else {
+                variable
+                    .text
+                    .strip_prefix("{{secret:")
+                    .and_then(|value| value.strip_suffix("}}"))
+            }
         };
         let replacement = if let Some(secret) = secret_name {
             secrets(secret).map_err(|_| {
@@ -87,13 +102,13 @@ fn substitute(
             let value = variables
                 .get(name)
                 .ok_or_else(|| invalid(field, "Define the referenced variable."))?;
-            if value.contains("{{") {
+            if !value.literal && value.text.contains("{{") {
                 return Err(invalid(
                     field,
                     "Variable values may reference one OS secret, but cannot contain nested variables.",
                 ));
             }
-            value.clone()
+            value.text.clone()
         };
         if output.len().saturating_add(replacement.len()) > 8_388_608 {
             return Err(invalid(field, "Resolved field exceeds 8 MiB."));
@@ -110,7 +125,7 @@ fn substitute(
 
 fn substitute_url(
     value: &str,
-    variables: &BTreeMap<String, String>,
+    variables: &BTreeMap<String, Variable>,
     secrets: &mut impl FnMut(&str) -> Result<String, RunError>,
 ) -> Result<String, RunError> {
     let mut output = String::with_capacity(value.len());
@@ -148,7 +163,7 @@ fn substitute_url(
 
 fn json_strings(
     value: &mut serde_json::Value,
-    variables: &BTreeMap<String, String>,
+    variables: &BTreeMap<String, Variable>,
     secrets: &mut impl FnMut(&str) -> Result<String, RunError>,
 ) -> Result<(), RunError> {
     match value {
@@ -210,19 +225,166 @@ impl TestDefinition {
             ));
         }
         let mut deserializer = serde_json::Deserializer::from_str(source);
-        serde_path_to_error::deserialize(&mut deserializer).map_err(|error| {
+        let definition: Self = serde_path_to_error::deserialize(&mut deserializer).map_err(|error| {
             let field = error.path().to_string();
             RunError::new(
                 "INVALID_TEST_DEFINITION",
                 "Check the field type, required properties, and supported values for version 1.",
                 Some(&field),
             )
-        })
+        })?;
+        if let Some(data) = &definition.dataset {
+            data.validate()?;
+        }
+        if definition.config.data.is_some() {
+            return Err(invalid(
+                "config.data",
+                "Prepared requests cannot be saved in a test definition.",
+            ));
+        }
+        Ok(definition)
+    }
+
+    /// Resolves bounded records through the existing variable binding rules before any traffic.
+    ///
+    /// # Arguments
+    /// * `environment` - Environment override, or None for shared values.
+    /// * `rows` - Prepared scalar string records; empty only when no dataset is configured.
+    /// * `cancelled` - Cooperative cancellation check, sampled before each record.
+    /// * `secrets` - OS secret lookup. Callers should cache values across records.
+    ///
+    /// # Returns
+    /// A transient run configuration. Dataset values override environment/shared variables.
+    /// All records must resolve successfully before the configuration can be executed.
+    ///
+    /// # Errors
+    /// Returns `INVALID_DATASET`, `DATASET_BUDGET_EXCEEDED`, `PREPARATION_CANCELLED`, or variable-resolution errors.
+    /// No requests are sent and owned temporary allocations are dropped on failure.
+    ///
+    /// # Examples
+    /// ```
+    /// let definition = velo_engine::TestDefinition::default();
+    /// let config = definition.resolve_data(None, &[], || false, |_| unreachable!())?;
+    /// assert!(config.data.is_none());
+    /// # Ok::<(), velo_engine::RunError>(())
+    /// ```
+    pub fn resolve_data(
+        &self,
+        environment: Option<&str>,
+        rows: &[BTreeMap<String, String>],
+        mut cancelled: impl FnMut() -> bool,
+        mut secrets: impl FnMut(&str) -> Result<String, RunError>,
+    ) -> Result<RunConfig, RunError> {
+        if self.config.data.is_some() {
+            return Err(invalid(
+                "config.data",
+                "Prepared requests do not belong in test definitions.",
+            ));
+        }
+        let Some(data) = &self.dataset else {
+            if !rows.is_empty() {
+                return Err(crate::dataset::invalid(
+                    "Configure a dataset before supplying rows.",
+                ));
+            }
+            return self.resolve(environment, secrets);
+        };
+        data.validate()?;
+        if rows.is_empty() || rows.len() > 10_000 {
+            return Err(crate::dataset::invalid(
+                "Prepare 1 to 10,000 records before review.",
+            ));
+        }
+        if let crate::DataSource::Faker { count, .. } = &data.source
+            && rows.len() != *count as usize
+        {
+            return Err(crate::dataset::invalid(
+                "Prepared count does not match the Faker recipe.",
+            ));
+        }
+        let names: Vec<&str> = match &data.source {
+            crate::DataSource::Faker { fields, .. } => {
+                fields.iter().map(|field| field.name.as_str()).collect()
+            }
+            crate::DataSource::Csv { mapping } | crate::DataSource::Json { mapping } => {
+                mapping.keys().map(String::as_str).collect()
+            }
+        };
+        let mut bytes = 0usize;
+        let mut requests = Vec::with_capacity(rows.len());
+        let mut first = None;
+        let mut row_bytes = 0usize;
+        for (index, row) in rows.iter().enumerate() {
+            if cancelled() {
+                return Err(RunError::new(
+                    "PREPARATION_CANCELLED",
+                    "Prepared data was discarded.",
+                    Some("dataset"),
+                ));
+            }
+            if row.len() != names.len() || names.iter().any(|name| !row.contains_key(*name)) {
+                return Err(crate::dataset::invalid(
+                    "Prepared fields do not match the dataset recipe.",
+                ));
+            }
+            row_bytes = row.iter().fold(row_bytes, |size, (name, value)| {
+                size.saturating_add(name.len()).saturating_add(value.len())
+            });
+            if row_bytes > self.config.budget.max_request_bytes.min(8_388_608) as usize {
+                return Err(RunError::new(
+                    "DATASET_BUDGET_EXCEEDED",
+                    "Prepared rows exceed the byte budget or 8 MiB.",
+                    Some("dataset"),
+                ));
+            }
+            let config = self
+                .resolve_record(environment, row, &mut secrets)
+                .map_err(|mut error| {
+                    error.field = Some(format!(
+                        "dataset.rows.{index}.{}",
+                        error.field.as_deref().unwrap_or("request")
+                    ));
+                    error
+                })?;
+            if first.is_none() {
+                first = Some(config.clone());
+            }
+            let request = crate::DataRequest {
+                url: config.url,
+                headers: config.headers,
+                query: config.query,
+                body: config.body,
+                auth: config.auth,
+            };
+            bytes = bytes
+                .saturating_add(
+                    serde_json::to_vec(&request)
+                        .map_err(|_| crate::dataset::invalid("Record encoding failed."))?
+                        .len(),
+                )
+                .saturating_add(std::mem::size_of::<crate::DataRequest>());
+            if bytes > self.config.budget.max_request_bytes.min(16_777_216) as usize {
+                return Err(RunError::new(
+                    "DATASET_BUDGET_EXCEEDED",
+                    "Prepared requests exceed the request budget or 16 MiB hard limit.",
+                    Some("dataset"),
+                ));
+            }
+            requests.push(request);
+        }
+        let mut config =
+            first.ok_or_else(|| crate::dataset::invalid("Prepare at least one record."))?;
+        config.data = Some(crate::PreparedData {
+            definition: data.clone(),
+            requests,
+        });
+        Ok(config)
     }
 
     /// Resolves supported request fields once, preserving JSON escaping and query encoding.
     /// Whole JSON bodies may use one reference that resolves to valid JSON.
     /// File paths are machine-local bindings and never accept substitutions.
+    /// Definitions with datasets must use [`Self::resolve_data`].
     ///
     /// # Arguments
     /// * `environment` - Named environment, or `None` for shared variables only.
@@ -233,7 +395,7 @@ impl TestDefinition {
     ///
     /// # Errors
     /// Returns `UNSUPPORTED_TEST_VERSION`, `VARIABLE_UNRESOLVED`, `SECRET_UNAVAILABLE`,
-    /// or `INVALID_TEST_DEFINITION`, with the affected field and no resolved values.
+    /// `INVALID_DATASET`, or `INVALID_TEST_DEFINITION`, with the affected field and no resolved values.
     ///
     /// # Examples
     /// ```
@@ -245,6 +407,20 @@ impl TestDefinition {
     pub fn resolve(
         &self,
         environment: Option<&str>,
+        mut secrets: impl FnMut(&str) -> Result<String, RunError>,
+    ) -> Result<RunConfig, RunError> {
+        if self.dataset.is_some() {
+            return Err(crate::dataset::invalid(
+                "Call resolve_data to prepare dataset records.",
+            ));
+        }
+        self.resolve_record(environment, &BTreeMap::new(), &mut secrets)
+    }
+
+    fn resolve_record(
+        &self,
+        environment: Option<&str>,
+        row: &BTreeMap<String, String>,
         mut secrets: impl FnMut(&str) -> Result<String, RunError>,
     ) -> Result<RunConfig, RunError> {
         if self.version != 1 {
@@ -263,6 +439,27 @@ impl TestDefinition {
                     .clone(),
             );
         }
+        let mut variables: BTreeMap<String, Variable> = variables
+            .into_iter()
+            .map(|(name, text)| {
+                (
+                    name,
+                    Variable {
+                        text,
+                        literal: false,
+                    },
+                )
+            })
+            .collect();
+        variables.extend(row.iter().map(|(name, text)| {
+            (
+                name.clone(),
+                Variable {
+                    text: text.clone(),
+                    literal: true,
+                },
+            )
+        }));
         let mut config = self.config.clone();
         config.url = substitute_url(&config.url, &variables, &mut secrets)?;
         for (field, pairs) in [

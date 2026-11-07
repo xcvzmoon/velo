@@ -173,6 +173,10 @@ pub struct RunConfig {
     pub thresholds: Vec<crate::Threshold>,
     /// Explicit task and retained request-data limits.
     pub budget: ResourceBudget,
+    /// Transient prepared requests; omitted from portable definitions and saved configurations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub data: Option<crate::PreparedData>,
 }
 
 impl std::fmt::Debug for RunConfig {
@@ -208,6 +212,7 @@ impl Default for RunConfig {
             grace_ms: 5_000,
             thresholds: Vec::new(),
             budget: ResourceBudget::default(),
+            data: None,
         }
     }
 }
@@ -268,9 +273,19 @@ pub struct RunConfirmation {
     /// HIGH_VU_COUNT warns at 100 workers; HIGH_ARRIVAL_RATE at 1,000 iterations/s.
     #[ts(type = "string[]")]
     pub warnings: Vec<String>,
+    /// Safe dataset preparation metadata, absent for static requests.
+    pub dataset: Option<crate::DataSummary>,
+}
+
+pub(crate) struct PreparedRequest {
+    pub request: reqwest::Request,
+    pub multipart: Option<Vec<crate::http_options::PreparedPart>>,
 }
 
 pub(crate) struct ValidatedConfig {
+    pub dataset_requests: Box<[PreparedRequest]>,
+    pub request_bytes: usize,
+    pub retained_bytes: usize,
     pub confirmation: RunConfirmation,
     pub thresholds: Vec<crate::Threshold>,
     pub request: reqwest::Request,
@@ -286,7 +301,78 @@ pub(crate) struct ValidatedConfig {
     pub grace: Duration,
 }
 
-pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
+pub(crate) fn validate(mut config: RunConfig) -> Result<ValidatedConfig, RunError> {
+    let data = config.data.take();
+    let Some(data) = data else {
+        return validate_request(config, None);
+    };
+    data.definition.validate()?;
+    if data.requests.is_empty() || data.requests.len() > 10_000 {
+        return Err(crate::dataset::invalid("Prepare 1 to 10,000 records."));
+    }
+    if let crate::DataSource::Faker { count, .. } = &data.definition.source
+        && *count as usize != data.requests.len()
+    {
+        return Err(crate::dataset::invalid(
+            "Prepared count does not match the recipe.",
+        ));
+    }
+    let mut base = validate_request(config.clone(), None)?;
+    if matches!(config.workload, Workload::Arrival { .. })
+        && data.definition.lifetime == crate::DataLifetime::User
+    {
+        return Err(crate::dataset::invalid(
+            "Arrival workloads have no persistent users. Choose run or iteration lifetime.",
+        ));
+    }
+    let mut requests = Vec::with_capacity(data.requests.len());
+    let mut retained = base.request_bytes;
+    let mut worker_bytes = base.retained_bytes;
+    let budget = config.budget.max_request_bytes.min(16_777_216) as usize;
+    for (index, record) in data.requests.into_iter().enumerate() {
+        let mut input = config.clone();
+        input.url = record.url;
+        input.headers = record.headers;
+        input.query = record.query;
+        input.body = record.body;
+        input.auth = record.auth;
+        let request = validate_request(input, Some(base.client.clone())).map_err(|mut error| {
+            error.field = Some(format!(
+                "dataset.records.{index}.{}",
+                error.field.as_deref().unwrap_or("request")
+            ));
+            error
+        })?;
+        if request.confirmation.origin != base.confirmation.origin {
+            return Err(crate::dataset::invalid(
+                "All dataset records must target the reviewed origin.",
+            ));
+        }
+        retained = retained
+            .saturating_add(request.request_bytes)
+            .saturating_add(std::mem::size_of::<PreparedRequest>());
+        worker_bytes = worker_bytes.max(request.retained_bytes);
+        if retained.saturating_add(worker_bytes) > budget {
+            return Err(RunError::new(
+                "DATASET_BUDGET_EXCEEDED",
+                "Prepared requests and worker clones exceed the request budget or 16 MiB hard limit.",
+                Some("dataset"),
+            ));
+        }
+        requests.push(PreparedRequest {
+            request: request.request,
+            multipart: request.multipart,
+        });
+    }
+    base.confirmation.dataset = Some(data.definition.summary(requests.len()));
+    base.dataset_requests = requests.into_boxed_slice();
+    Ok(base)
+}
+
+fn validate_request(
+    config: RunConfig,
+    shared_client: Option<Client>,
+) -> Result<ValidatedConfig, RunError> {
     let invalid = |message, field| RunError::new("INVALID_RUN_CONFIG", message, Some(field));
     crate::threshold::validate(&config.thresholds)?;
     let threshold_bytes = config
@@ -404,29 +490,33 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
             "headers",
         ));
     }
-    let client = Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .retry(reqwest::retry::never())
-        .no_proxy()
-        .no_gzip()
-        .no_brotli()
-        .no_deflate()
-        .no_zstd()
-        .pool_max_idle_per_host(schedule.peak_vus as usize)
-        .timeout(Duration::from_millis(config.timeout_ms.into()));
-    let client = match config.protocol {
-        crate::HttpProtocol::Auto => client,
-        crate::HttpProtocol::Http1 => client.http1_only(),
-        crate::HttpProtocol::Http2 => client.http2_prior_knowledge(),
-    }
-    .build()
-    .map_err(|_| {
-        RunError::new(
-            "HTTP_CLIENT_INIT_FAILED",
-            "HTTP client initialization failed.",
-            None,
-        )
-    })?;
+    let client = if let Some(client) = shared_client {
+        client
+    } else {
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .retry(reqwest::retry::never())
+            .no_proxy()
+            .no_gzip()
+            .no_brotli()
+            .no_deflate()
+            .no_zstd()
+            .pool_max_idle_per_host(schedule.peak_vus as usize)
+            .timeout(Duration::from_millis(config.timeout_ms.into()));
+        match config.protocol {
+            crate::HttpProtocol::Auto => client,
+            crate::HttpProtocol::Http1 => client.http1_only(),
+            crate::HttpProtocol::Http2 => client.http2_prior_knowledge(),
+        }
+        .build()
+        .map_err(|_| {
+            RunError::new(
+                "HTTP_CLIENT_INIT_FAILED",
+                "HTTP client initialization failed.",
+                None,
+            )
+        })?
+    };
     if !headers.contains_key(header::CONTENT_TYPE) {
         let content_type = match &config.body {
             RequestBody::Text(_) => Some("text/plain; charset=utf-8"),
@@ -504,7 +594,11 @@ pub(crate) fn validate(config: RunConfig) -> Result<ValidatedConfig, RunError> {
         ));
     }
     Ok(ValidatedConfig {
+        dataset_requests: Box::default(),
+        request_bytes,
+        retained_bytes,
         confirmation: RunConfirmation {
+            dataset: None,
             origin,
             vus: schedule.peak_vus,
             duration_ms: schedule.duration_ms,

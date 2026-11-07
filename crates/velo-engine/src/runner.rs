@@ -93,6 +93,8 @@ pub struct RunSnapshot {
     pub thresholds: Vec<crate::ThresholdResult>,
     /// Stable internal failure code, without infrastructure or target details.
     pub failure_code: Option<String>,
+    /// Safe preparation metadata and final allocation counts; never includes rows.
+    pub dataset: Option<crate::DataSummary>,
 }
 
 /// One sequenced aggregate interval and the authoritative cumulative state.
@@ -150,6 +152,10 @@ pub struct ArrivalSnapshot {
     #[serde(serialize_with = "decimal")]
     #[ts(type = "string")]
     pub capacity_drops: u64,
+    /// Slots rejected because a stop or fail dataset exhaustion policy closed admission.
+    #[serde(serialize_with = "decimal")]
+    #[ts(type = "string")]
+    pub dataset_drops: u64,
     /// Expired slots skipped after a delayed scheduler wake; never replayed.
     #[serde(serialize_with = "decimal")]
     #[ts(type = "string")]
@@ -175,6 +181,9 @@ struct Progress {
     active_vus: u32,
     max_vus: u32,
     failure_code: Option<String>,
+    dataset: Option<crate::DataSummary>,
+    allocator: Option<crate::dataset::Allocator>,
+    run_record: Option<usize>,
 }
 
 struct Run {
@@ -232,6 +241,7 @@ impl Run {
             metrics,
             arrival: progress.arrival.clone(),
             failure_code: progress.failure_code.clone(),
+            dataset: progress.dataset.clone(),
         }
     }
 
@@ -310,7 +320,9 @@ impl RunManager {
     /// # Errors
     /// Returns [`RunError`] with INVALID_RUN_CONFIG, VU_BUDGET_EXCEEDED,
     /// REQUEST_BUDGET_EXCEEDED, UPLOAD_FILE_UNAVAILABLE, or HTTP_CLIENT_INIT_FAILED
-    /// on invalid input, unavailable files, or HTTP initialization failure. Input
+    /// on invalid input, unavailable files, or HTTP initialization failure.
+    /// Dataset preparation also returns INVALID_DATASET or DATASET_BUDGET_EXCEEDED.
+    /// All records are checked before traffic; every record must target the reviewed origin. Input
     /// secrets are omitted. Multipart preparation opens and closes files to validate
     /// readability; call this synchronous API from a blocking thread for file inputs.
     ///
@@ -370,22 +382,23 @@ impl RunManager {
                 None,
             ));
         }
-        let config = if matches!(&config.body, crate::RequestBody::Multipart(_)) {
-            tokio::task::spawn_blocking(move || validate(config))
-                .await
-                .map_err(|error| {
-                    if error.is_panic() {
-                        std::panic::resume_unwind(error.into_panic());
-                    }
-                    RunError::new(
-                        "RUN_PREPARATION_FAILED",
-                        "Request preparation could not complete.",
-                        None,
-                    )
-                })??
-        } else {
-            validate(config)?
-        };
+        let config =
+            if config.data.is_some() || matches!(&config.body, crate::RequestBody::Multipart(_)) {
+                tokio::task::spawn_blocking(move || validate(config))
+                    .await
+                    .map_err(|error| {
+                        if error.is_panic() {
+                            std::panic::resume_unwind(error.into_panic());
+                        }
+                        RunError::new(
+                            "RUN_PREPARATION_FAILED",
+                            "Request preparation could not complete.",
+                            None,
+                        )
+                    })??
+            } else {
+                validate(config)?
+            };
         let mut state = self.state.lock().await;
         if let Some(current) = &mut state.current {
             if !current.run.lock().state.is_terminal() {
@@ -427,6 +440,16 @@ impl RunManager {
                 retiring_vus: 0,
                 active_vus: 0,
                 max_vus: 0,
+                dataset: config.confirmation.dataset.clone(),
+                allocator: config.confirmation.dataset.as_ref().map(|summary| {
+                    crate::dataset::Allocator::new(
+                        summary.allocation,
+                        summary.exhaustion,
+                        summary.seed,
+                        config.dataset_requests.len(),
+                    )
+                }),
+                run_record: None,
                 failure_code: None,
             }),
         });
@@ -721,10 +744,16 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
     }
     drop(uploads);
     let mut progress = run.lock();
+    progress.allocator = None;
+    progress.run_record = None;
     progress.finished = Some(Instant::now());
     progress.state = if failed {
         progress.failure_code = Some("WORKER_FAILED".into());
         RunState::Failed
+    } else if progress.failure_code.is_some() {
+        RunState::Failed
+    } else if progress.dataset.as_ref().is_some_and(|data| data.exhausted) {
+        RunState::Completed
     } else if run.stop.is_cancelled() {
         RunState::Cancelled
     } else {
@@ -800,6 +829,10 @@ async fn schedule_arrivals(
             progress.arrival.capacity_drops += 1;
             continue;
         }
+        let Some(record) = select_record(run, &mut progress, &mut None) else {
+            progress.arrival.dataset_drops += 1;
+            break;
+        };
         progress.metrics.admission();
         progress.active_vus += 1;
         progress.max_vus = progress.max_vus.max(progress.active_vus);
@@ -815,7 +848,7 @@ async fn schedule_arrivals(
             outcome: Outcome::Cancelled,
             elapsed: None,
         };
-        workers.spawn(execute_arrival(worker, config.clone(), attempt));
+        workers.spawn(execute_arrival(worker, config.clone(), record, attempt));
     }
     let mut progress = run.lock();
     let end = progress
@@ -833,9 +866,16 @@ async fn schedule_arrivals(
     false
 }
 
-async fn execute_arrival(_worker: Worker, config: Arc<ValidatedConfig>, mut attempt: Attempt) {
+async fn execute_arrival(
+    _worker: Worker,
+    config: Arc<ValidatedConfig>,
+    record: usize,
+    mut attempt: Attempt,
+) {
     attempt.started = Instant::now();
-    let result = crate::transport::execute(&config, &mut attempt.bytes).await;
+    let result =
+        crate::transport::execute(&config, record_request(&config, record), &mut attempt.bytes)
+            .await;
     attempt.elapsed = Some(attempt.started.elapsed());
     attempt.outcome = match result {
         Ok(success) => Outcome::Response(success),
@@ -847,6 +887,49 @@ async fn execute_arrival(_worker: Worker, config: Arc<ValidatedConfig>, mut atte
             }
         }
     };
+}
+
+fn select_record(run: &Run, progress: &mut Progress, cached: &mut Option<usize>) -> Option<usize> {
+    let Some(summary) = &mut progress.dataset else {
+        return Some(usize::MAX);
+    };
+    if summary.lifetime == crate::DataLifetime::Run
+        && let Some(index) = progress.run_record
+    {
+        return Some(index);
+    }
+    if summary.lifetime == crate::DataLifetime::User
+        && let Some(index) = *cached
+    {
+        return Some(index);
+    }
+    let index = progress.allocator.as_mut()?.take(summary);
+    if let Some(index) = index {
+        match summary.lifetime {
+            crate::DataLifetime::Run => progress.run_record = Some(index),
+            crate::DataLifetime::User => *cached = Some(index),
+            crate::DataLifetime::Iteration => {}
+        }
+    } else {
+        if summary.exhaustion == crate::DataExhaustion::Fail {
+            progress.failure_code = Some("DATASET_EXHAUSTED".into());
+        }
+        progress.state = RunState::Stopping;
+        progress.scheduling_end.get_or_insert_with(Instant::now);
+        run.stop.cancel();
+    }
+    index
+}
+
+fn record_request(
+    config: &ValidatedConfig,
+    index: usize,
+) -> Option<&crate::config::PreparedRequest> {
+    if index == usize::MAX {
+        None
+    } else {
+        Some(&config.dataset_requests[index])
+    }
 }
 
 struct WorkerControl {
@@ -892,7 +975,9 @@ impl Drop for Attempt {
 }
 
 async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: Instant) {
+    let mut cached = None;
     loop {
+        let record;
         {
             let mut progress = worker.run.measured_lock();
             if progress.state != RunState::Running
@@ -901,6 +986,10 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             {
                 break;
             }
+            let Some(index) = select_record(&worker.run, &mut progress, &mut cached) else {
+                break;
+            };
+            record = index;
             progress.metrics.admission();
         }
         let mut attempt = Attempt {
@@ -910,7 +999,9 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             outcome: Outcome::Cancelled,
             elapsed: None,
         };
-        let result = crate::transport::execute(&config, &mut attempt.bytes).await;
+        let result =
+            crate::transport::execute(&config, record_request(&config, record), &mut attempt.bytes)
+                .await;
         attempt.elapsed = Some(attempt.started.elapsed());
         attempt.outcome = match result {
             Ok(success) => Outcome::Response(success),
