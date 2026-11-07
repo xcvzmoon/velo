@@ -1,10 +1,12 @@
+#[cfg(test)]
+use crate::storage::redacted;
 use velo_contracts::SavedConfiguration;
 use velo_engine::{RunConfig, RunError};
 
 use crate::{
     credentials::Credentials,
     history::SharedStore,
-    storage::{Store, failure, failure_from, redacted},
+    storage::{Store, failure, failure_from},
 };
 
 pub(crate) fn access<T>(
@@ -44,6 +46,7 @@ pub(crate) fn recover(store: &SharedStore, credentials: &impl Credentials) -> Re
     }
 }
 
+#[cfg(test)]
 pub(crate) fn save(
     store: &SharedStore,
     credentials: &impl Credentials,

@@ -555,3 +555,38 @@ describe('HTTP request options', () => {
     expect(result.body).toEqual({ kind: 'none' });
   });
 });
+
+describe('authoring templates', () => {
+  it('retains references across visual request, credentials, and body fields', () => {
+    const result = v.parse(requestEditorSchema, {
+      ...input,
+      url: '{{baseUrl}}/items/{{itemId}}',
+      authKind: 'basic',
+      authUsername: '{{secret:username}}',
+      authPassword: '{{secret:password}}',
+      headers: [
+        {
+          name: '{{headerName}}',
+          value: '{{secret:header}}',
+        },
+      ],
+      bodyValue: '{{jsonBody}}',
+    });
+    expect(result.url).toBe('{{baseUrl}}/items/{{itemId}}');
+    expect(result.auth).toEqual({
+      kind: 'basic',
+      username: '{{secret:username}}',
+      password: '{{secret:password}}',
+    });
+    expect(result.body).toEqual({
+      kind: 'json',
+      value: '{{jsonBody}}',
+    });
+    expect(result.headers).toEqual([
+      {
+        name: '{{headerName}}',
+        value: '{{secret:header}}',
+      },
+    ]);
+  });
+});

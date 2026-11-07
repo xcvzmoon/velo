@@ -14,6 +14,10 @@ fn main() {
         "export {};",
         velo_contracts::SavedConfiguration::decl(&config)
     );
+    println!("export {};", velo_engine::TestDefinition::decl(&config));
+    println!("export {};", velo_engine::ImportFormat::decl(&config));
+    println!("export {};", velo_engine::ImportedRequest::decl(&config));
+    println!("export {};", velo_engine::PreviewResponse::decl(&config));
     println!("export {};", velo_engine::NameValue::decl(&config));
     println!("export {};", velo_engine::RequestMethod::decl(&config));
     println!("export {};", velo_engine::RequestAuth::decl(&config));

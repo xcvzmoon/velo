@@ -5,12 +5,14 @@ const SERVICE: &str = "app.velo.saved-configurations";
 const MAX_SECRET_BYTES: usize = 65_536;
 
 trait CredentialEntry {
+    #[cfg(test)]
     fn write(&self, value: &str) -> keyring::Result<()>;
     fn read(&self) -> keyring::Result<String>;
     fn delete(&self) -> keyring::Result<()>;
 }
 
 impl CredentialEntry for Entry {
+    #[cfg(test)]
     fn write(&self, value: &str) -> keyring::Result<()> {
         self.set_password(value)
     }
@@ -25,6 +27,7 @@ impl CredentialEntry for Entry {
 }
 
 pub(crate) trait Credentials: Send + Sync {
+    #[cfg(test)]
     fn remember(&self, id: &str, config: &RunConfig) -> Result<(), RunError>;
     fn restore(&self, id: &str, config: &mut RunConfig) -> Result<(), RunError>;
     fn forget(&self, id: &str) -> Result<(), RunError>;
@@ -33,6 +36,7 @@ pub(crate) trait Credentials: Send + Sync {
 pub(crate) struct NativeCredentials;
 
 impl Credentials for NativeCredentials {
+    #[cfg(test)]
     fn remember(&self, id: &str, config: &RunConfig) -> Result<(), RunError> {
         remember_with(&entry(id)?, config)
     }
@@ -67,6 +71,7 @@ fn validate_id(id: &str) -> Result<(), RunError> {
     Ok(())
 }
 
+#[cfg(test)]
 fn remember_with(entry: &impl CredentialEntry, config: &RunConfig) -> Result<(), RunError> {
     let secret = serde_json::to_string(config).map_err(|_| invalid())?;
     if secret.len() > MAX_SECRET_BYTES {
@@ -145,6 +150,7 @@ mod tests {
     }
 
     impl CredentialEntry for MemoryEntry {
+        #[cfg(test)]
         fn write(&self, value: &str) -> keyring::Result<()> {
             if self.unavailable {
                 return Err(keyring::Error::NoEntry);

@@ -1,3 +1,4 @@
+mod authoring;
 mod credentials;
 mod diagnostic;
 mod execution;
@@ -41,12 +42,23 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(execution::DesktopRuns::default()))
         .invoke_handler(tauri::generate_handler![
+            authoring::import_definition_file,
+            authoring::export_definition_file,
+            authoring::load_configuration_definition,
+            authoring::parse_definition,
+            authoring::resolve_definition,
+            authoring::import_requests,
+            authoring::set_authoring_secret,
+            authoring::preview_request,
+            authoring::save_definition,
+            authoring::list_definitions,
+            authoring::load_definition,
+            authoring::delete_definition,
             history::history_status,
             history::list_history,
             history::load_history,
             history::delete_history,
             history::list_configurations,
-            history::save_configuration,
             history::load_configuration,
             history::delete_configuration,
             diagnostic::diagnose,
@@ -84,6 +96,7 @@ pub fn run() {
                 if !state.closing.swap(true, Ordering::AcqRel) {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
+                        state.preview_exit.notify_waiters();
                         let _admission = state.admission.lock().await;
                         let active = state.manager.current().await.is_some_and(|snapshot| {
                             matches!(snapshot.state, RunState::Starting | RunState::Running | RunState::Stopping)

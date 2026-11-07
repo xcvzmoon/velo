@@ -80,6 +80,65 @@ export type SavedConfiguration = {
    */
   config: RunConfig;
 };
+export type TestDefinition = {
+  /**
+   * Format version; only 1 is supported.
+   */
+  version: number;
+  /**
+   * Editable request and workload, with optional `{{name}}` placeholders.
+   */
+  config: RunConfig;
+  /**
+   * Shared literal values or OS secret references, overridden by the selected environment.
+   */
+  variables: Record<string, string>;
+  /**
+   * Named values or `{{secret:name}}` references. Resolved secrets are never stored here.
+   */
+  environments: Record<string, Record<string, string>>;
+};
+export type ImportFormat = 'curl' | 'openapi' | 'postman';
+export type ImportedRequest = {
+  /**
+   * Display name from the source; may contain private information.
+   */
+  name: string;
+  /**
+   * Converted request with default workload and budgets.
+   */
+  config: RunConfig;
+  /**
+   * Unsupported fields, security, scripts, or unresolved references.
+   */
+  warnings: string[];
+};
+export type PreviewResponse = {
+  /**
+   * Final HTTP status, including non-success responses.
+   */
+  status: number;
+  /**
+   * Elapsed time including redirects and bounded body consumption.
+   */
+  elapsed_ms: number;
+  /**
+   * Ordered response headers, with sensitive values masked.
+   */
+  headers: NameValue[];
+  /**
+   * Lossy UTF-8 body, with known request values masked.
+   */
+  body: string;
+  /**
+   * Whether body or header capture exceeded its limit.
+   */
+  truncated: boolean;
+  /**
+   * True when response content has been masked.
+   */
+  redacted: boolean;
+};
 export type NameValue = {
   /**
    * Header or query parameter name.

@@ -4,11 +4,13 @@
     Field as FormischField,
     FieldArray as FormischFieldArray,
     Form as FormischForm,
+    getInput,
     insert,
     remove,
     setInput,
     useForm,
   } from '@formisch/vue';
+  import * as v from 'valibot';
   import { requestEditorSchema } from '~/schemas/run';
 
   const numericFields = [
@@ -53,7 +55,11 @@
   ] as const;
 
   const props = defineProps<{ disabled: boolean; loaded?: RunConfig | null }>();
-  const emit = defineEmits<{ prepare: [config: RunConfig] }>();
+  const emit = defineEmits<{
+    prepare: [config: RunConfig];
+    change: [config: RunConfig];
+    valid: [value: boolean];
+  }>();
 
   const form = useForm({
     schema: requestEditorSchema,
@@ -132,6 +138,22 @@
           max_request_bytes: budget.max_request_bytes,
         },
       });
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => getInput(form),
+    (input) => {
+      const result = v.safeParse(requestEditorSchema, input);
+      emit('valid', result.success);
+      if (result.success) {
+        emit('change', result.output);
+      }
+    },
+    {
+      deep: true,
+      immediate: true,
     },
   );
 

@@ -1,25 +1,10 @@
 <script setup lang="ts">
-  import type { InferOutput } from 'valibot';
-  import type { RunConfig, SavedConfiguration } from '~/types/contracts';
-  import { Field as FormischField, Form as FormischForm, useForm } from '@formisch/vue';
+  import type { SavedConfiguration, TestDefinition } from '~/types/contracts';
   import { invoke } from '@tauri-apps/api/core';
-  import * as v from 'valibot';
 
-  const schema = v.object({
-    name: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
-    remember: v.picklist(['omit', 'remember']),
-  });
+  defineProps<{ disabled: boolean }>();
+  const emit = defineEmits<{ load: [definition: TestDefinition] }>();
 
-  const props = defineProps<{ config: RunConfig | null; disabled: boolean }>();
-  const emit = defineEmits<{ load: [config: RunConfig] }>();
-
-  const form = useForm({
-    schema,
-    initialInput: {
-      name: '',
-      remember: 'omit',
-    },
-  });
   const saved = shallowRef<SavedConfiguration[]>([]);
   const error = shallowRef<string | null>(null);
   const cursor = shallowRef<string | null>(null);
@@ -36,33 +21,12 @@
     }
   }
 
-  async function save(values: InferOutput<typeof schema>): Promise<void> {
-    if (!props.config) {
-      return;
-    }
-    busy.value = true;
-    error.value = null;
-    try {
-      await invoke('save_configuration', {
-        name: values.name,
-        config: props.config,
-        remember: values.remember === 'remember',
-      });
-      await refresh();
-    } catch {
-      error.value =
-        'SAVE_FAILED: The configuration could not be saved. Check local storage and OS credential access.';
-    } finally {
-      busy.value = false;
-    }
-  }
-
   async function load(id: string): Promise<void> {
     busy.value = true;
     error.value = null;
     try {
-      const entry = await invoke<SavedConfiguration>('load_configuration', { id });
-      emit('load', entry.config);
+      const definition = await invoke<TestDefinition>('load_configuration_definition', { id });
+      emit('load', definition);
     } catch {
       error.value =
         'LOAD_FAILED: Storage or remembered credentials are unavailable. Re-enter the request fields.';
@@ -95,9 +59,9 @@
     <h2 class="font-medium">Saved configurations</h2>
 
     <p class="text-muted-foreground text-sm">
-      Review a request to save it. By default, saves omit the URL path, query, headers,
-      authentication, and body. Remembering stores the full request in your OS credential store. Use
-      a name without secrets. Configurations are listed in pages of 25.
+      Open an earlier saved configuration in the unified editor. Remembered fields remain OS-store
+      references in definitions and exports. Select local upload files again. Save further changes
+      under Saved tests. Configurations are listed in pages of 25.
     </p>
 
     <p
@@ -107,65 +71,6 @@
     >
       {{ error }}
     </p>
-
-    <FormischForm
-      :of="form"
-      class="flex flex-wrap items-end gap-3"
-      @submit="save"
-    >
-      <FormischField
-        v-slot="field"
-        :of="form"
-        :path="['name']"
-      >
-        <div class="space-y-2">
-          <Label for="configuration-name">Name</Label>
-
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled || busy"
-            id="configuration-name"
-          />
-
-          <p
-            v-if="field.errors"
-            class="text-destructive text-sm"
-          >
-            {{ field.errors.join(' ') }}
-          </p>
-        </div>
-      </FormischField>
-
-      <FormischField
-        v-slot="field"
-        :of="form"
-        :path="['remember']"
-      >
-        <div class="space-y-2">
-          <Label for="configuration-secrets">Request data</Label>
-
-          <Select
-            v-model="field.input"
-            :disabled="disabled || busy"
-          >
-            <SelectTrigger id="configuration-secrets"><SelectValue /></SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="omit">Omit sensitive fields</SelectItem>
-              <SelectItem value="remember">Remember full request in OS store</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </FormischField>
-
-      <Button
-        :disabled="disabled || busy || !config"
-        type="submit"
-      >
-        Save reviewed request
-      </Button>
-    </FormischForm>
 
     <ul class="space-y-3">
       <li

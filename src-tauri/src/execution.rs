@@ -16,6 +16,7 @@ pub(crate) struct DesktopRuns {
     pub closing: AtomicBool,
     pub exit_ready: AtomicBool,
     pub admission: Mutex<()>,
+    pub preview_exit: tokio::sync::Notify,
     pub monitor: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -175,6 +176,7 @@ mod tests {
                 crate::history::list_configurations,
                 crate::history::load_configuration,
                 crate::history::delete_configuration,
+                crate::authoring::preview_request,
                 prepare_run,
                 start_run,
                 stop_run,
@@ -209,6 +211,17 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(unauthorized["code"], "AUTHORIZATION_REQUIRED");
+        let definition = velo_engine::TestDefinition {
+            config: config.clone(),
+            ..Default::default()
+        };
+        let unauthorized_preview = invoke(
+            &window,
+            "preview_request",
+            json!({ "definition": definition, "authorized": false }),
+        )
+        .unwrap_err();
+        assert_eq!(unauthorized_preview["code"], "AUTHORIZATION_REQUIRED");
         let mut invalid = config.clone();
         invalid.timeout_ms = 0;
         let error = invoke(
@@ -241,6 +254,13 @@ mod tests {
             json!({ "config": config, "authorized": true, "updateIntervalMs": 250 }),
         )
         .unwrap();
+        let blocked_preview = invoke(
+            &window,
+            "preview_request",
+            json!({ "definition": definition, "authorized": true }),
+        )
+        .unwrap_err();
+        assert_eq!(blocked_preview["code"], "RUN_ALREADY_ACTIVE");
         assert!(accepted["run_id"].is_string());
         assert!(accepted["metrics"]["counters"]["started"].is_string());
         assert_eq!(
