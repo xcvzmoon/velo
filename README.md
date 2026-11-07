@@ -8,7 +8,8 @@ Velo is a local desktop studio for testing HTTP APIs under load. Configure a req
 - Configure HTTP methods, headers, query parameters, authentication, text/JSON/form bodies, and streamed multipart uploads.
 - Set final thresholds for response p95, HTTP failure percentage, and request throughput.
 - Stop a run with graceful drain, navigate without interrupting it, and retain partial results.
-- Save reviewed requests, optionally remember their data in the OS credential store, and compare compatible historical runs.
+- Edit and share versioned JSON test definitions, select environments, import API requests, and preview one request.
+- Save tests with OS secret references and compare compatible historical runs.
 
 Velo runs one test at a time per application instance. It repeats one request; it does not provide scripted journeys, browser testing, or distributed load generation.
 
@@ -32,7 +33,7 @@ The development runner launches Nuxt and the native desktop shell together. Nati
 5. Watch the live charts or select **Stop run** to end admission and drain active requests.
 6. Open **Results** to inspect the summary, select stored runs for comparison, or delete history.
 
-Saving a request omits sensitive fields by default. Explicitly remembering it stores the full request in the OS credential store. SQLite holds redacted configuration data and credential references. See [persistence and credentials](docs/persistence.md) for retention and recovery behavior.
+Save the editable definition under **Saved tests**. Definitions retain literal request fields and non-secret environment values locally; use OS secret references for private values. See [test authoring](docs/authoring.md) for JSON files, environments, imports, and preview, and [persistence and credentials](docs/persistence.md) for retention and recovery.
 
 ## Implementation
 
@@ -47,7 +48,7 @@ The application uses Tauri 2 with a client-rendered Nuxt 4/Vue 3 frontend. Rust 
 | `app/types/contracts.ts` | Generated Rust-owned TypeScript contracts                                      |
 | `docs/`                  | Implementation guides, development instructions, and dated evidence            |
 
-Responses are streamed and discarded. Live charts and stored time series are bounded; individual requests are not persisted. Retained run summaries grow disk usage until deleted. See [execution and measurements](docs/execution.md) for outcome definitions and workload semantics.
+Load-run responses are streamed and discarded. Explicit single-request previews retain bounded response content temporarily. Live charts and stored time series are bounded; individual requests are not persisted. Retained run summaries grow disk usage until deleted. See [execution and measurements](docs/execution.md) for outcome definitions and workload semantics.
 
 ## Build and verify
 

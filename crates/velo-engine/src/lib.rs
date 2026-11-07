@@ -1,18 +1,27 @@
 //! Desktop-independent HTTP load engine with bounded virtual-user execution.
 
+mod authoring;
 mod config;
 mod http_options;
+mod imports;
 mod metrics;
+mod preview;
 mod runner;
 mod threshold;
 mod transport;
 mod workload;
 
+#[doc(inline)]
+pub use authoring::TestDefinition;
 pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
 pub use http_options::{HttpProtocol, MultipartPart, RequestAuth};
+#[doc(inline)]
+pub use imports::{ImportFormat, ImportedRequest, import_requests};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
+#[doc(inline)]
+pub use preview::{PreviewResponse, preview_request};
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
 pub use threshold::{
     Threshold, ThresholdMetric, ThresholdOperator, ThresholdResult, ThresholdStatus,

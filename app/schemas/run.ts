@@ -45,8 +45,10 @@ const thresholdSchema = v.pipe(
 const requestFieldsSchema = v.object({
   url: v.pipe(
     v.string(),
-    v.url('Enter an absolute HTTP(S) URL.'),
     v.check((value) => {
+      if (/\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}/.test(value)) {
+        return true;
+      }
       try {
         const url = new URL(value);
         return (
@@ -74,7 +76,10 @@ const requestFieldsSchema = v.object({
     v.object({
       name: v.pipe(
         v.string(),
-        v.regex(/^[!#$%&'*+.^_`|~\w-]+$/, 'Enter a valid HTTP header name.'),
+        v.regex(
+          /^(?:[!#$%&'*+.^_`|~\w-]|\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\})+$/,
+          'Enter a valid HTTP header name.',
+        ),
         v.check(
           (name) => !['host', 'content-length', 'transfer-encoding'].includes(name.toLowerCase()),
           'Host and body framing headers are managed by the client.',
@@ -182,7 +187,9 @@ export const requestEditorSchema = v.pipe(
   v.forward(
     v.check(
       ({ bodyKind, bodyValue }) =>
-        bodyKind !== 'json' || v.is(v.pipe(v.string(), v.parseJson()), bodyValue),
+        bodyKind !== 'json' ||
+        /^\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}$/.test(bodyValue) ||
+        v.is(v.pipe(v.string(), v.parseJson()), bodyValue),
       'Enter a valid JSON body.',
     ),
     ['bodyValue'],
@@ -230,8 +237,10 @@ export const requestEditorSchema = v.pipe(
       }
 
       return authKind === 'bearer'
-        ? /^[A-Za-z0-9._~+/-]+=*$/.test(authToken)
-        : !authUsername.includes(':') && !/\p{Cc}/u.test(authUsername + authPassword);
+        ? /\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}/.test(authToken) ||
+            /^[A-Za-z0-9._~+/-]+=*$/.test(authToken)
+        : !authUsername.replace(/\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}/g, '').includes(':') &&
+            !/\p{Cc}/u.test(authUsername + authPassword);
     }, 'Enter valid credentials and remove conflicting Authorization headers.'),
     ['authKind'],
   ),
@@ -248,7 +257,8 @@ export const requestEditorSchema = v.pipe(
                 (part.path.length > 0 &&
                   part.filename.length > 0 &&
                   !/[\\/\p{Cc}]/u.test(part.filename) &&
-                  /^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/.test(part.content_type))),
+                  (/^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/.test(part.content_type) ||
+                    /^\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}$/.test(part.content_type)))),
           )),
       'Multipart needs valid names, selected files, filenames and MIME types; remove custom Content-Type headers.',
     ),

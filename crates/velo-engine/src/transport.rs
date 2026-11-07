@@ -238,7 +238,7 @@ pub(crate) async fn execute(config: &ValidatedConfig, bytes: &mut u64) -> Result
     let uploads_done = TaskTracker::new();
     let result = tokio::time::timeout(
         config.timeout,
-        consume(config, bytes, &cancel, &uploads_done),
+        consume(config, bytes, &cancel, &uploads_done, None),
     )
     .await
     .map_err(|_| Failure::Timeout)
@@ -249,11 +249,42 @@ pub(crate) async fn execute(config: &ValidatedConfig, bytes: &mut u64) -> Result
     result
 }
 
+pub(crate) async fn preview(
+    config: &ValidatedConfig,
+) -> Result<crate::preview::PreviewResponse, Failure> {
+    let cancel = config.upload_stop.child_token();
+    let _cleanup = cancel.clone().drop_guard();
+    let uploads_done = TaskTracker::new();
+    let started = std::time::Instant::now();
+    let mut response = crate::preview::PreviewResponse::default();
+    let mut bytes = 0;
+    let result = tokio::time::timeout(
+        config.timeout,
+        consume(
+            config,
+            &mut bytes,
+            &cancel,
+            &uploads_done,
+            Some(&mut response),
+        ),
+    )
+    .await
+    .map_err(|_| Failure::Timeout)
+    .and_then(|result| result);
+    cancel.cancel();
+    uploads_done.close();
+    uploads_done.wait().await;
+    result?;
+    response.elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+    Ok(response)
+}
+
 async fn consume(
     config: &ValidatedConfig,
     bytes: &mut u64,
     cancel: &CancellationToken,
     uploads_done: &TaskTracker,
+    mut preview: Option<&mut crate::preview::PreviewResponse>,
 ) -> Result<bool, Failure> {
     let mut url = config.request.url().clone();
     let mut method = config.request.method().clone();
@@ -268,8 +299,39 @@ async fn consume(
         let mut response = config.client.execute(request).await?;
         let status = response.status();
         let location = response.headers().get(header::LOCATION).cloned();
+        if let Some(capture) = preview.as_deref_mut() {
+            capture.status = status.as_u16();
+            capture.headers.clear();
+            capture.body.clear();
+            capture.truncated = false;
+            let mut retained = 0;
+            for (name, value) in response.headers() {
+                let value = value.to_str().unwrap_or("[binary]");
+                if retained + name.as_str().len() + value.len() > 16_384 {
+                    capture.truncated = true;
+                    break;
+                }
+                retained += name.as_str().len() + value.len();
+                capture.headers.push(crate::NameValue {
+                    name: name.to_string(),
+                    value: value.into(),
+                });
+            }
+        }
+        let mut body = Vec::new();
         while let Some(chunk) = response.chunk().await? {
             *bytes = bytes.saturating_add(chunk.len() as u64);
+            if let Some(capture) = preview.as_deref_mut() {
+                let remaining = 65_536_usize.saturating_sub(body.len());
+                body.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+                if chunk.len() > remaining {
+                    capture.truncated = true;
+                    break;
+                }
+            }
+        }
+        if let Some(capture) = preview.as_deref_mut() {
+            capture.body = String::from_utf8_lossy(&body).into_owned();
         }
         hop_cancel.cancel();
         uploads_done.close();

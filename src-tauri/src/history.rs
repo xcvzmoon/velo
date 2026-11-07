@@ -2,7 +2,9 @@ use std::sync::{Arc, Mutex, mpsc};
 
 use tauri::Manager;
 use velo_contracts::{HistoryEntry, SavedConfiguration};
-use velo_engine::{RunConfig, RunError, RunSnapshot, RunUpdate};
+#[cfg(test)]
+use velo_engine::RunConfig;
+use velo_engine::{RunError, RunSnapshot, RunUpdate};
 
 use crate::{
     credentials::NativeCredentials,
@@ -158,7 +160,7 @@ impl History {
         }
     }
 
-    async fn configuration<T: Send + 'static>(
+    pub(crate) async fn configuration<T: Send + 'static>(
         &self,
         credential_access: bool,
         action: impl FnOnce(&SharedStore) -> Result<T, RunError> + Send + 'static,
@@ -206,7 +208,7 @@ impl History {
         .map_err(failure_from)?
     }
 
-    async fn call<T: Send + 'static>(
+    pub(crate) async fn call<T: Send + 'static>(
         &self,
         action: impl FnOnce(&mut Store) -> Result<T, RunError> + Send + 'static,
     ) -> Result<T, RunError> {
@@ -280,6 +282,7 @@ pub(crate) async fn list_configurations(
         .await
 }
 
+#[cfg(test)]
 #[tauri::command]
 pub(crate) async fn save_configuration(
     state: tauri::State<'_, History>,

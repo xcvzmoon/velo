@@ -11,6 +11,10 @@ authors = ["Mon Albert Gamil <mrgamilmonalbert@gmail.com>"]
 repository = "https://github.com/xcvzmoon/velo"
 
 [workspace.dependencies]
+aho-corasick = "1"
+percent-encoding = "2"
+serde_path_to_error = "0.1"
+shlex = "2"
 axum = { version = "0.8", default-features = false }
 hdrhistogram = { version = "7.6", default-features = false }
 keyring = "3.6"

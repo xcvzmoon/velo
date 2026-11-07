@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import type { InferOutput } from 'valibot';
-  import type { RunConfig, RunConfirmation } from '~/types/contracts';
+  import type { RunConfig, RunConfirmation, TestDefinition } from '~/types/contracts';
   import { Field as FormischField, Form as FormischForm, useForm } from '@formisch/vue';
   import { confirmationSettingsSchema } from '~/schemas/run';
 
@@ -12,7 +12,7 @@
     initialInput: { updateIntervalMs: '1000' },
   });
 
-  const loaded = shallowRef<RunConfig | null>(null);
+  const loaded = shallowRef<TestDefinition | null>(null);
 
   const confirmation = shallowRef<RunConfirmation | null>(null);
   const prepared = shallowRef<RunConfig | null>(null);
@@ -190,7 +190,6 @@
     </FormischForm>
 
     <RunSavedConfigurations
-      :config="prepared"
       :disabled="active || busy"
       @load="
         loaded = $event;
@@ -198,10 +197,11 @@
       "
     />
 
-    <RunRequestEditor
+    <AuthoringEditor
       :loaded="loaded"
-      :disabled="active || busy || confirmation !== null"
+      :disabled="active || busy"
       @prepare="prepare"
+      @invalidate="cancel"
     />
 
     <p class="text-muted-foreground text-xs">

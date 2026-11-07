@@ -2,11 +2,24 @@ use std::{path::Path, time::Duration};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use velo_contracts::{HistoryEntry, SavedConfiguration};
-use velo_engine::{RunConfig, RunError, RunSnapshot, RunUpdate};
+#[cfg(test)]
+use velo_engine::RunConfig;
+use velo_engine::{RunError, RunSnapshot, RunUpdate};
 
 pub(crate) struct Store {
     connection: Connection,
-    _ownership: Option<std::fs::File>,
+    _ownership: Option<StoreOwnership>,
+}
+
+/// Releases database ownership when the store ends, even if a child inherited the descriptor.
+struct StoreOwnership(std::fs::File);
+
+impl Drop for StoreOwnership {
+    fn drop(&mut self) {
+        if let Err(error) = self.0.unlock() {
+            tracing::warn!(code = "STORAGE_UNLOCK_FAILED", kind = ?error.kind(), "Database ownership could not be released explicitly");
+        }
+    }
 }
 
 pub(crate) fn failure() -> RunError {
@@ -51,7 +64,7 @@ impl Store {
         ownership.try_lock().map_err(failure_from)?;
         let connection = Connection::open(path).map_err(failure_from)?;
         let mut store = Self::initialize(connection)?;
-        store._ownership = Some(ownership);
+        store._ownership = Some(StoreOwnership(ownership));
         Ok(store)
     }
 
@@ -76,6 +89,7 @@ impl Store {
              CREATE TABLE IF NOT EXISTS configurations (
                id TEXT PRIMARY KEY, name TEXT NOT NULL, remembered INTEGER NOT NULL,
                config TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS definitions (name TEXT PRIMARY KEY, source TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS credential_cleanup (id TEXT PRIMARY KEY);
              UPDATE runs SET interrupted=1, incomplete=1 WHERE terminal=0;",
             )
@@ -84,6 +98,49 @@ impl Store {
             connection,
             _ownership: None,
         })
+    }
+
+    pub(crate) fn save_definition(&self, name: &str, source: &str) -> Result<(), RunError> {
+        let allowed: bool = self.connection.query_row("SELECT (SELECT COUNT(*) FROM definitions) < 1000 OR EXISTS(SELECT 1 FROM definitions WHERE name=?1)", [name], |row| row.get(0)).map_err(failure_from)?;
+        if !allowed {
+            return Err(RunError {
+                code: "DEFINITION_LIMIT_REACHED".into(),
+                message: "Delete a saved test before adding another. The limit is 1,000 tests."
+                    .into(),
+                field: Some("name".into()),
+            });
+        }
+        self.connection.execute("INSERT INTO definitions(name, source) VALUES (?1,?2) ON CONFLICT(name) DO UPDATE SET source=excluded.source", params![name, source]).map_err(failure_from)?;
+        Ok(())
+    }
+
+    pub(crate) fn definition_names(&self) -> Result<Vec<String>, RunError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT name FROM definitions ORDER BY name LIMIT 1000")
+            .map_err(failure_from)?;
+        statement
+            .query_map([], |row| row.get(0))
+            .map_err(failure_from)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(failure_from)
+    }
+
+    pub(crate) fn definition(&self, name: &str) -> Result<String, RunError> {
+        self.connection
+            .query_row(
+                "SELECT source FROM definitions WHERE name=?1",
+                [name],
+                |row| row.get(0),
+            )
+            .map_err(failure_from)
+    }
+
+    pub(crate) fn delete_definition(&self, name: &str) -> Result<(), RunError> {
+        self.connection
+            .execute("DELETE FROM definitions WHERE name=?1", [name])
+            .map_err(failure_from)?;
+        Ok(())
     }
 
     pub(crate) fn begin(
@@ -228,6 +285,7 @@ impl Store {
         Ok(())
     }
 
+    #[cfg(test)]
     pub(crate) fn save(
         &self,
         id: &str,
@@ -256,6 +314,7 @@ impl Store {
         transaction.commit().map_err(failure_from)
     }
 
+    #[cfg(test)]
     pub(crate) fn queue_cleanup(&self, id: &str) -> Result<(), RunError> {
         self.connection
             .execute("INSERT OR IGNORE INTO credential_cleanup VALUES (?1)", [id])
@@ -359,6 +418,7 @@ impl Store {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn redacted(config: &RunConfig, origin: &str) -> RunConfig {
     RunConfig {
         url: format!("{origin}/"),
@@ -576,5 +636,16 @@ mod tests {
         assert!(Store::open(&path).is_err());
         drop(first);
         assert!(Store::open(&path).is_ok());
+    }
+    #[test]
+    fn store_lifetime_releases_ownership_when_a_descriptor_is_duplicated() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.sqlite3");
+        let store = Store::open(&path).unwrap();
+        let duplicate = store._ownership.as_ref().unwrap().0.try_clone().unwrap();
+        drop(store);
+        let reopened = Store::open(&path).unwrap();
+        drop(duplicate);
+        drop(reopened);
     }
 }
