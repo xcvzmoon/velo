@@ -461,6 +461,20 @@
       </div>
 
       <template v-if="preview">
+        <ul
+          v-if="preview.checks.length"
+          class="space-y-1 text-sm"
+          aria-label="Preview assertion outcomes"
+        >
+          <li
+            v-for="(outcome, index) in preview.checks"
+            :key="index"
+          >
+            {{ definition?.config.assertions[index]?.id ?? `Assertion ${index + 1}` }}:
+            {{ outcome.replaceAll('_', ' ') }}
+          </li>
+        </ul>
+
         <p class="font-mono text-sm">
           HTTP {{ preview.status }} · {{ preview.elapsed_ms.toFixed(1) }} ms
         </p>
