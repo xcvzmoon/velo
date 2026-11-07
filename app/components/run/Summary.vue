@@ -150,7 +150,9 @@
                   ? 'Completed response p95 (ms)'
                   : result.rule.metric === 'http_failure_percent'
                     ? 'HTTP failure (%) / terminal attempts'
-                    : 'Terminal requests/s / actual duration'
+                    : result.rule.metric === 'assertion_failure_percent'
+                      ? 'Assertion failure (%) / evaluated checks'
+                      : 'Terminal requests/s / actual duration'
               }}
             </th>
 
@@ -172,6 +174,8 @@
         </tbody>
       </table>
     </div>
+
+    <RunResponseDiagnostics :diagnostics="snapshot.metrics.diagnostics" />
 
     <RunArrivalMetrics :snapshot="snapshot" />
 

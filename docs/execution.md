@@ -56,3 +56,59 @@ pnpm bindings:check
 The generator uses `ts-rs` declarations from Rust and runs through `cargo run --locked -p velo-contracts --example export-bindings`. Commit generated contract updates alongside the Rust types that require them. Do not edit `app/types/contracts.ts` manually. CI checks for drift. Nuxt exposes native contract types through `#imports`.
 
 TypeScript and Vue component tests live under `tests/`, mirroring the application directories.
+
+## Response assertions and failure diagnostics
+
+Add checks under **Response assertions and diagnostics** in the visual editor, or set `config.assertions` in a portable definition. Preview sends one logical request and shows each check's result in configuration order. Review validates all definitions before load admission.
+
+```json
+{
+  "assertions": [
+    { "id": "status", "rule": { "kind": "status", "allowed": [200, 201] } },
+    { "id": "content", "rule": { "kind": "header_present", "name": "content-type" } },
+    {
+      "id": "application-ok",
+      "rule": { "kind": "json_equals", "pointer": "/ok", "value": "true" }
+    },
+    { "id": "message", "rule": { "kind": "text_contains", "value": "ready" } }
+  ],
+  "inspection": { "body_bytes": 16384, "sample_count": 16, "sample_bytes": 8192 },
+  "thresholds": [{ "metric": "assertion_failure_percent", "operator": "less_than", "limit": 1 }]
+}
+```
+
+The fragment belongs inside `config`; keep the request and workload fields from your definition. Assertions use literal expectations. Environment and dataset substitution applies to request fields, not assertion definitions.
+
+| Rule             | Condition                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| `status`         | Final status matches one of 1–100 allowed codes in 100–599.                                             |
+| `header_present` | Case-insensitive `name` exists, including an empty value.                                               |
+| `header_equals`  | Any occurrence of `name` exactly equals `value`.                                                        |
+| `json_present`   | RFC 6901 `pointer` exists; JSON null counts as present.                                                 |
+| `json_equals`    | Field equals the parsed JSON in `value`, including its type. Use `"\"ready\""` to expect a JSON string. |
+| `text_contains`  | Complete UTF-8 body contains the nonempty literal `value`.                                              |
+| `text_equals`    | Complete UTF-8 body exactly matches `value`, including whitespace.                                      |
+
+Use at most 32 assertions with unique IDs of 1–64 ASCII letters, digits, underscores or hyphens. Header names are limited to 256 bytes, JSON pointers to 1,024 bytes, and expectations to 4,096 bytes. An empty JSON pointer selects the whole document. Escape `~` as `~0` and `/` as `~1`. Equality expectations are parsed once during preparation; each response JSON body is parsed at most once, using serde_json's default nesting limit.
+
+### Accounting
+
+A complete 200 response with an incorrect payload increments HTTP successes and the failed assertion's counter. It does not increment HTTP status failures. Multiple failed assertions on that response each contribute one failed check. Existing HTTP failure percentage and failed-iteration accounting retain their status/transport/timeout meanings.
+
+For each assertion, `passed + failed + unavailable` equals terminal logical attempts, including cancellations. Missing headers or fields and mismatched values fail. Invalid JSON, invalid UTF-8, unsupported content encoding and truncated input are unavailable/error outcomes. A transport failure, timeout or cancellation makes every check unavailable, even when response headers arrived. In-flight attempts contribute no check totals yet.
+
+Live results and stored history plot cumulative assertion failure percentage separately from interval HTTP failure percentage. Assertion charts use a 0–100% axis. Unavailable checks, counter overflow and missed live events leave gaps; incomplete stored histories hide charts.
+
+`assertion_failure_percent` is `100 × failed checks / (passed checks + failed checks)` across configured assertions. If any check is unavailable, or no checks have been evaluated, the threshold reports `insufficient_data`. Equality with a strict threshold limit fails, as with other thresholds. HTTP failure percentage is unchanged.
+
+### Bounds, latency and retention
+
+Body inspection defaults to 16 KiB per worker and accepts 1–65,536 bytes. Body checks share the transport reader used by preview; there is no observation queue or second request. Load execution retains a bounded prefix, drains and discards excess bytes, and marks all body checks unavailable on truncation, including text matches found in that prefix. Status and header checks still run on a fully consumed oversized response. Without body assertions, load execution does not retain a body buffer. Across peak workers, configured inspection buffers must fit the 16 MiB run limit; reduce peak workers or the byte cap when preparation reports `INSPECTION_BUDGET_EXCEEDED`. Parsing and transport allocations are additional to these raw capture buffers and remain bounded by the response prefix and existing transport limits.
+
+The existing deadline covers request setup, redirects, body consumption and assertion evaluation. Streaming reads remain cancellable. Parsing and literal comparisons execute synchronously on the bounded input before the next cancellation point. Response latency includes this processing and upload cleanup; enabling checks can reduce measured throughput and increase latency. JSON parsing costs scale with inspected body size; literal checks cost up to 32 scans of the bounded body. Assertions do not decompress encoded responses. Preview still captures at most 64 KiB of body and 16 KiB of headers, independently of the smaller assertion inspection cap.
+
+Failure groups use stable cause, assertion index and HTTP status, capped at 256 groups. Excess group occurrences remain visible in `dropped_groups`. Samples keep the first representative metadata for each new group, with defaults of 16 samples and 8 KiB of serialized sample data per run. Hard maxima are 32 samples and 32 KiB. Setting either sample limit to zero disables samples; aggregate counts and grouping continue. `dropped_samples`, retained bytes and truncated-response counts are visible during and after execution.
+
+Samples contain only HTTP status, assertion index and a stable cause. All response bodies, header values, URLs, credentials, configured sensitive fields, and actual/expected assertion values are withheld before native IPC or persistence. This conservative policy also prevents partial or encoded secrets from escaping. IDs are user-authored labels and should not contain secrets. Single-request preview remains a separate, explicitly authorized inspection tool with its existing redaction policy.
+
+The latest run summary stores assertion aggregates, groups and retained samples. Interval points keep assertion aggregates without duplicating groups or samples. Samples follow the run's retention: they remain until the run is deleted; deletion removes the summary and cascades to interval points. There is no automatic expiry. See [history](history.md) for storage failure and deletion behavior.

@@ -183,13 +183,17 @@ impl Store {
         let sequence = update.sequence.parse::<i64>().map_err(failure_from)?;
         transaction.execute("UPDATE runs SET snapshot=?2, terminal=?3, incomplete=MAX(incomplete,?4) WHERE id=?1", params![id, serde_json::to_string(&update.snapshot).map_err(failure_from)?, terminal, incomplete]).map_err(failure_from)?;
         if sequence % i64::from(stride) == 0 {
+            let mut interval = update.clone();
+            interval.snapshot.metrics.diagnostics.samples.clear();
+            interval.snapshot.metrics.diagnostics.groups.clear();
+            interval.snapshot.metrics.diagnostics.retained_bytes = 0;
             transaction
                 .execute(
                     "INSERT OR REPLACE INTO points VALUES (?1,?2,?3)",
                     params![
                         id,
                         sequence,
-                        serde_json::to_string(update).map_err(failure_from)?
+                        serde_json::to_string(&interval).map_err(failure_from)?
                     ],
                 )
                 .map_err(failure_from)?;
@@ -500,6 +504,53 @@ mod tests {
         assert!(rendered.contains("sqlite_code=8"));
         assert!(!rendered.contains("dummy-storage-secret"));
         assert!(!rendered.contains("dummy-sql-secret"));
+    }
+
+    #[test]
+    fn diagnostics_persist_once_per_run_and_are_deleted_with_the_run() {
+        let mut store = Store::initialize(Connection::open_in_memory().unwrap()).unwrap();
+        let mut update = sample();
+        let diagnostics = &mut update.snapshot.metrics.diagnostics;
+        let example = velo_engine::ResponseSample {
+            assertion: None,
+            status: Some(500),
+            cause: "http_status".into(),
+        };
+        diagnostics.samples.push(example.clone());
+        diagnostics
+            .groups
+            .push(velo_engine::FailureGroup { example, count: 17 });
+        diagnostics.retained_bytes = serde_json::to_vec(&diagnostics.samples).unwrap().len() as u32;
+        store.begin("diagnostics", "GET", &update.snapshot).unwrap();
+        store.record("diagnostics", &update, false).unwrap();
+        let entry = store.detail("diagnostics").unwrap();
+        assert_eq!(
+            entry.snapshot["metrics"]["diagnostics"]["groups"][0]["count"],
+            "17"
+        );
+        assert_eq!(
+            entry.snapshot["metrics"]["diagnostics"]["samples"][0]["status"],
+            500
+        );
+        assert_eq!(
+            entry.points[0]["snapshot"]["metrics"]["diagnostics"]["samples"],
+            serde_json::json!([])
+        );
+        assert_eq!(
+            entry.points[0]["snapshot"]["metrics"]["diagnostics"]["groups"],
+            serde_json::json!([])
+        );
+        store.delete_run("diagnostics").unwrap();
+        assert!(store.detail("diagnostics").is_err());
+        let points: u32 = store
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM points WHERE run_id='diagnostics'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(points, 0);
     }
 
     #[test]

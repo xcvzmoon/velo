@@ -17,6 +17,9 @@ use crate::{NameValue, RunConfig, RunError};
 /// ```
 #[derive(Default, Serialize, TS)]
 pub struct PreviewResponse {
+    /// Assertion outcomes in configuration order; expectations and actual values are omitted.
+    #[ts(type = "CheckOutcome[]")]
+    pub checks: Vec<crate::CheckOutcome>,
     /// Final HTTP status, including non-success responses.
     pub status: u16,
     /// Elapsed time including redirects and bounded body consumption.

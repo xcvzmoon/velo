@@ -1535,3 +1535,344 @@ async fn release_benchmark() {
     manager.shutdown().await;
     server.close().await;
 }
+
+fn response_assertion(id: &str, rule: velo_engine::AssertionRule) -> velo_engine::Assertion {
+    velo_engine::Assertion {
+        id: id.into(),
+        rule,
+    }
+}
+
+async fn assertion_run(
+    server: &Server,
+    rules: Vec<velo_engine::Assertion>,
+    limits: velo_engine::InspectionLimits,
+) -> RunSnapshot {
+    let manager = RunManager::default();
+    manager
+        .start(
+            RunConfig {
+                url: server.url.clone(),
+                workload: Workload::Constant {
+                    vus: 1,
+                    duration_ms: 40,
+                },
+                assertions: rules,
+                inspection: limits,
+                timeout_ms: 50,
+                grace_ms: 100,
+                pacing_ms: 100,
+                thresholds: vec![velo_engine::Threshold {
+                    metric: velo_engine::ThresholdMetric::AssertionFailurePercent,
+                    operator: velo_engine::ThresholdOperator::LessThan,
+                    limit: 1.0,
+                }],
+                ..Default::default()
+            },
+            true,
+        )
+        .await
+        .unwrap();
+    terminal(&manager).await
+}
+
+#[tokio::test]
+async fn assertions_keep_http_success_distinct_and_reconcile_multiple_failures() {
+    use velo_engine::AssertionRule::*;
+    let server = Server::raw(b"HTTP/1.1 200 OK\r\nContent-Length: 42\r\nX-State: ready\r\nX-Multi: wrong\r\nX-Multi: right\r\nSet-Cookie: AUDIT_SECRET\r\nConnection: close\r\n\r\n{\"ok\":false,\"data\":{\"a/b\":null},\"n\":\"123\"}", false).await;
+    let checks = vec![
+        response_assertion("status", Status { allowed: vec![200] }),
+        response_assertion(
+            "header",
+            HeaderPresent {
+                name: "x-state".into(),
+            },
+        ),
+        response_assertion(
+            "duplicates",
+            HeaderEquals {
+                name: "X-Multi".into(),
+                value: "right".into(),
+            },
+        ),
+        response_assertion(
+            "ok",
+            JsonEquals {
+                pointer: "/ok".into(),
+                value: "true".into(),
+            },
+        ),
+        response_assertion(
+            "missing",
+            JsonPresent {
+                pointer: "/absent".into(),
+            },
+        ),
+        response_assertion(
+            "escaped-null",
+            JsonPresent {
+                pointer: "/data/a~1b".into(),
+            },
+        ),
+        response_assertion(
+            "typed",
+            JsonEquals {
+                pointer: "/n".into(),
+                value: "123".into(),
+            },
+        ),
+        response_assertion(
+            "text",
+            TextContains {
+                value: "false".into(),
+            },
+        ),
+    ];
+    let snapshot = assertion_run(&server, checks, Default::default()).await;
+    assert!(snapshot.metrics.counters.successes > 0);
+    assert_eq!(snapshot.metrics.counters.status_failures, 0);
+    assert_eq!(snapshot.metrics.http_failure_rate, Some(0.0));
+    assert_eq!(snapshot.metrics.assertion_failure_rate, Some(3.0 / 8.0));
+    assert_eq!(
+        snapshot.thresholds[0].status,
+        velo_engine::ThresholdStatus::Failed
+    );
+    let terminal = snapshot.metrics.counters.started;
+    for (index, total) in snapshot.metrics.diagnostics.assertions.iter().enumerate() {
+        assert_eq!(total.passed + total.failed + total.unavailable, terminal);
+        assert_eq!(total.unavailable, 0);
+        assert_eq!(
+            total.failed,
+            if [3, 4, 6].contains(&index) {
+                terminal
+            } else {
+                0
+            }
+        );
+    }
+    let wire = serde_json::to_string(&snapshot).unwrap();
+    assert!(!wire.contains("AUDIT_SECRET"));
+    assert!(!wire.contains("/data/a~1b"));
+    assert!(!wire.contains("right"));
+    assert!(snapshot.metrics.diagnostics.samples.len() >= 3);
+    server.close().await;
+}
+
+#[tokio::test]
+async fn assertion_body_errors_are_unavailable_and_never_silently_pass() {
+    use velo_engine::{AssertionRule::*, CheckOutcome};
+    for (body, response, cap, expected) in [
+        (
+            "not-json",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nnot-json".as_slice(),
+            32,
+            CheckOutcome::InvalidJson,
+        ),
+        (
+            "{\"ok\":true}",
+            b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}"
+                .as_slice(),
+            4,
+            CheckOutcome::Truncated,
+        ),
+    ] {
+        let server = Server::raw(response, false).await;
+        let limits = velo_engine::InspectionLimits {
+            body_bytes: cap,
+            ..Default::default()
+        };
+        let checks = vec![
+            response_assertion(
+                "body",
+                JsonEquals {
+                    pointer: "/ok".into(),
+                    value: "true".into(),
+                },
+            ),
+            response_assertion("status", Status { allowed: vec![200] }),
+        ];
+        let preview = velo_engine::preview_request(
+            RunConfig {
+                url: server.url.clone(),
+                assertions: checks.clone(),
+                inspection: limits.clone(),
+                ..Default::default()
+            },
+            &[],
+        )
+        .await
+        .unwrap();
+        assert_eq!(preview.checks, vec![expected, CheckOutcome::Passed]);
+        let snapshot = assertion_run(&server, checks, limits).await;
+        let total = &snapshot.metrics.diagnostics.assertions[0];
+        assert!(total.unavailable > 0);
+        assert_eq!(total.passed + total.failed, 0);
+        assert_eq!(
+            snapshot.metrics.diagnostics.assertions[1].passed,
+            snapshot.metrics.counters.responses
+        );
+        assert_eq!(snapshot.metrics.assertion_failure_rate, None);
+        assert_eq!(
+            snapshot.thresholds[0].status,
+            velo_engine::ThresholdStatus::InsufficientData
+        );
+        assert_eq!(
+            snapshot.metrics.counters.response_body_bytes,
+            body.len() as u64 * snapshot.metrics.counters.responses
+        );
+        server.close().await;
+    }
+}
+
+#[tokio::test]
+async fn partial_body_transport_failure_and_timeout_do_not_evaluate_response_checks() {
+    use velo_engine::AssertionRule::*;
+    for stall in [false, true] {
+        let server = Server::raw(
+            b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\npartial",
+            stall,
+        )
+        .await;
+        let snapshot = assertion_run(
+            &server,
+            vec![
+                response_assertion("status", Status { allowed: vec![200] }),
+                response_assertion(
+                    "body",
+                    TextContains {
+                        value: "partial".into(),
+                    },
+                ),
+            ],
+            Default::default(),
+        )
+        .await;
+        assert_eq!(snapshot.metrics.counters.responses, 0);
+        assert_eq!(snapshot.metrics.http_failure_rate, Some(1.0));
+        for total in &snapshot.metrics.diagnostics.assertions {
+            assert_eq!(total.passed + total.failed, 0);
+            assert_eq!(total.unavailable, snapshot.metrics.counters.started);
+        }
+        assert!(
+            snapshot.metrics.diagnostics.groups.iter().any(|group| group
+                .example
+                .assertion
+                .is_none()
+                && group.example.status == Some(200))
+        );
+        server.close().await;
+    }
+}
+
+#[tokio::test]
+async fn cancellation_keeps_assertions_unavailable_and_body_reads_cancellable() {
+    let server = Server::raw(
+        b"HTTP/1.1 200 OK\r\nContent-Length: 1000000000\r\n\r\npartial",
+        true,
+    )
+    .await;
+    let manager = RunManager::default();
+    let start = manager
+        .start(
+            RunConfig {
+                url: server.url.clone(),
+                workload: Workload::Constant {
+                    vus: 1,
+                    duration_ms: 10_000,
+                },
+                grace_ms: 0,
+                assertions: vec![response_assertion(
+                    "status",
+                    velo_engine::AssertionRule::Status { allowed: vec![200] },
+                )],
+                ..Default::default()
+            },
+            true,
+        )
+        .await
+        .unwrap();
+    sleep(Duration::from_millis(20)).await;
+    manager.stop(&start.run_id).await.unwrap();
+    let terminal = timeout(Duration::from_secs(1), async {
+        loop {
+            let snapshot = manager.current().await.unwrap();
+            if snapshot.state == RunState::Cancelled {
+                break snapshot;
+            }
+            sleep(Duration::from_millis(2)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(terminal.metrics.counters.cancelled, 1);
+    assert_eq!(terminal.metrics.diagnostics.assertions[0].unavailable, 1);
+    assert_eq!(terminal.metrics.diagnostics.assertions[0].passed, 0);
+    assert_eq!(terminal.metrics.http_failure_rate, None);
+    assert_eq!(
+        terminal.metrics.diagnostics.groups[0].example.cause,
+        "cancelled"
+    );
+    server.close().await;
+}
+
+#[tokio::test]
+async fn invalid_assertions_and_run_wide_capture_budgets_are_rejected_before_traffic() {
+    let (server, target) = Server::start().await;
+    for (rules, workload, limits, code) in [
+        (
+            vec![response_assertion(
+                "bad",
+                velo_engine::AssertionRule::Status { allowed: vec![] },
+            )],
+            Workload::Constant {
+                vus: 1,
+                duration_ms: 100,
+            },
+            velo_engine::InspectionLimits::default(),
+            "INVALID_ASSERTION",
+        ),
+        (
+            vec![],
+            Workload::Constant {
+                vus: 1,
+                duration_ms: 100,
+            },
+            velo_engine::InspectionLimits {
+                body_bytes: 0,
+                ..Default::default()
+            },
+            "INVALID_INSPECTION_LIMITS",
+        ),
+        (
+            vec![response_assertion(
+                "body",
+                velo_engine::AssertionRule::TextEquals { value: "ok".into() },
+            )],
+            Workload::Constant {
+                vus: 257,
+                duration_ms: 100,
+            },
+            velo_engine::InspectionLimits {
+                body_bytes: 65_536,
+                ..Default::default()
+            },
+            "INSPECTION_BUDGET_EXCEEDED",
+        ),
+    ] {
+        let config = RunConfig {
+            url: server.url.clone(),
+            assertions: rules,
+            workload,
+            inspection: limits,
+            budget: velo_engine::ResourceBudget {
+                max_vus: 300,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let error = RunManager::default().start(config, true).await.unwrap_err();
+        assert_eq!(error.code, code);
+    }
+    assert_eq!(target.requests.load(Ordering::SeqCst), 0);
+    server.close().await;
+}

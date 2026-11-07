@@ -19,8 +19,9 @@
       Evaluate cumulative measurements after cleanup. Response p95 covers completed HTTP responses
       of all statuses. HTTP failure percentage covers status, transport, and timeout failures over
       non-cancelled terminal attempts. Request rate uses those attempts per actual second, including
-      drain. Equality fails. Empty or incomplete populations cannot pass. Partial runs use observed
-      work.
+      drain. Assertion failure percentage counts failed checks over evaluated checks; any
+      unavailable checks make that threshold insufficient. Equality fails. Empty or incomplete
+      populations cannot pass. Partial runs use observed work.
     </p>
 
     <FormischFieldArray
@@ -83,6 +84,7 @@
                 <SelectContent>
                   <SelectItem value="response_p95_ms">Response p95 (ms)</SelectItem>
                   <SelectItem value="http_failure_percent">HTTP failure (%)</SelectItem>
+                  <SelectItem value="assertion_failure_percent">Assertion failure (%)</SelectItem>
                   <SelectItem value="request_rate">Requests/s</SelectItem>
                 </SelectContent>
               </Select>

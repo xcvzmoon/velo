@@ -13,6 +13,13 @@
         : null,
     ),
   );
+  const assertionFailures = computed<(number | null)[]>(() =>
+    props.entry.points.map(({ snapshot }) =>
+      snapshot.metrics.counter_overflow || snapshot.metrics.assertion_failure_rate === null
+        ? null
+        : snapshot.metrics.assertion_failure_rate * 100,
+    ),
+  );
 </script>
 
 <template>
@@ -44,12 +51,25 @@
       shown.
     </p>
 
-    <RunChart
+    <div
       v-else-if="entry.points.length"
-      :seconds="seconds"
-      :values="rates"
-      title="Stored request rate"
-      unit="requests/s"
-    />
+      class="space-y-4"
+    >
+      <RunChart
+        :seconds="seconds"
+        :values="rates"
+        title="Stored request rate"
+        unit="requests/s"
+      />
+
+      <RunChart
+        v-if="entry.snapshot.metrics.diagnostics.assertions.length"
+        :seconds="seconds"
+        :values="assertionFailures"
+        title="Stored cumulative assertion failure rate"
+        unit="%"
+        percentage
+      />
+    </div>
   </article>
 </template>

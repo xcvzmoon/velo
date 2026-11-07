@@ -1,5 +1,6 @@
 import type { RunConfig } from '../types/contracts';
 import * as v from 'valibot';
+import { assertionEditorSchema, inspectionSchema, toAssertion } from './assertions';
 
 const positiveIntegerSchema = v.pipe(
   v.union([v.string(), v.number()]),
@@ -19,7 +20,12 @@ const nonnegativeIntegerSchema = v.pipe(
 
 const thresholdSchema = v.pipe(
   v.object({
-    metric: v.picklist(['response_p95_ms', 'http_failure_percent', 'request_rate']),
+    metric: v.picklist([
+      'response_p95_ms',
+      'http_failure_percent',
+      'assertion_failure_percent',
+      'request_rate',
+    ]),
     operator: v.picklist(['less_than', 'greater_than']),
     limit: v.pipe(
       v.union([v.pipe(v.string(), v.nonEmpty('Enter a limit.')), v.number()]),
@@ -31,7 +37,7 @@ const thresholdSchema = v.pipe(
   v.forward(
     v.check(
       ({ metric, limit }) =>
-        metric === 'http_failure_percent'
+        metric === 'http_failure_percent' || metric === 'assertion_failure_percent'
           ? limit <= 100
           : metric === 'response_p95_ms'
             ? limit <= 3_600_000
@@ -72,6 +78,22 @@ const requestFieldsSchema = v.object({
   protocol: v.picklist(['auto', 'http1', 'http2']),
   max_redirects: nonnegativeIntegerSchema,
   thresholds: v.array(thresholdSchema),
+  assertions: v.optional(
+    v.pipe(
+      v.array(assertionEditorSchema),
+      v.maxLength(32),
+      v.check(
+        (items) => new Set(items.map(({ id }) => id)).size === items.length,
+        'Assertion identifiers must be unique.',
+      ),
+    ),
+    [],
+  ),
+  inspection: v.optional(inspectionSchema, {
+    body_bytes: 16_384,
+    sample_count: 16,
+    sample_bytes: 8_192,
+  }),
   headers: v.array(
     v.object({
       name: v.pipe(
@@ -266,6 +288,7 @@ export const requestEditorSchema = v.pipe(
   ),
   v.transform(
     ({
+      assertions,
       bodyKind,
       bodyValue,
       formPairs,
@@ -286,6 +309,7 @@ export const requestEditorSchema = v.pipe(
       ...config
     }): RunConfig => ({
       ...config,
+      assertions: assertions.map((assertion) => toAssertion(assertion)),
       auth:
         authKind === 'none'
           ? { kind: 'none' }

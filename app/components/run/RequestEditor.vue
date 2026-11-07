@@ -11,6 +11,7 @@
     useForm,
   } from '@formisch/vue';
   import * as v from 'valibot';
+  import { assertionInput } from '~/schemas/assertions';
   import { requestEditorSchema } from '~/schemas/run';
 
   const numericFields = [
@@ -75,6 +76,12 @@
       formPairs: [],
       multipartParts: [],
       thresholds: [],
+      assertions: [],
+      inspection: {
+        body_bytes: 16_384,
+        sample_count: 16,
+        sample_bytes: 8_192,
+      },
       headers: [],
       query: [],
       bodyKind: 'none',
@@ -109,6 +116,7 @@
       setInput(form, {
         input: {
           ...request,
+          assertions: config.assertions.map((assertion) => assertionInput(assertion)),
           authKind: auth.kind,
           authToken: auth.kind === 'bearer' ? auth.token : '',
           authUsername: auth.kind === 'basic' ? auth.username : '',
@@ -433,6 +441,11 @@
             requests, drains for the configured grace, then cancels remaining requests.
           </p>
         </div>
+
+        <RunAssertionEditor
+          :form="form"
+          :disabled="disabled"
+        />
 
         <RunThresholdEditor
           :form="form"

@@ -55,6 +55,12 @@ describe('request editor schema', () => {
       protocol: 'auto',
       max_redirects: 0,
       thresholds: [],
+      assertions: [],
+      inspection: {
+        body_bytes: 16_384,
+        sample_count: 16,
+        sample_bytes: 8192,
+      },
       headers: input.headers,
       query: input.query,
       body: {
@@ -588,5 +594,65 @@ describe('authoring templates', () => {
         value: '{{secret:header}}',
       },
     ]);
+  });
+});
+
+describe('response assertion configuration', () => {
+  it('rejects duplicate assertion identities and supports a separate assertion threshold', () => {
+    const check = {
+      id: 'ok',
+      kind: 'json_equals',
+      target: '/ok',
+      expected: 'true',
+    };
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        assertions: [check, check],
+      }).success,
+    ).toBe(false);
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        assertions: Array.from({ length: 33 }, (_, index) => ({
+          ...check,
+          id: `check-${index}`,
+        })),
+      }).success,
+    ).toBe(false);
+    const output = v.parse(requestEditorSchema, {
+      ...input,
+      assertions: [check],
+      thresholds: [
+        {
+          metric: 'assertion_failure_percent',
+          operator: 'less_than',
+          limit: 1,
+        },
+      ],
+    });
+    expect(output.assertions).toEqual([
+      {
+        id: 'ok',
+        rule: {
+          kind: 'json_equals',
+          pointer: '/ok',
+          value: 'true',
+        },
+      },
+    ]);
+    expect(output.thresholds[0]?.metric).toBe('assertion_failure_percent');
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        thresholds: [
+          {
+            metric: 'assertion_failure_percent',
+            operator: 'less_than',
+            limit: 101,
+          },
+        ],
+      }).success,
+    ).toBe(false);
   });
 });

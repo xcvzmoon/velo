@@ -6,6 +6,9 @@
   const requests = computed<(number | null)[]>(() => points.value.map((point) => point.requests));
   const latency = computed<(number | null)[]>(() => points.value.map((point) => point.latency));
   const failures = computed<(number | null)[]>(() => points.value.map((point) => point.failures));
+  const assertionFailures = computed<(number | null)[]>(() =>
+    points.value.map((point) => point.assertionFailures),
+  );
   const vus = computed<(number | null)[]>(() => points.value.map((point) => point.vus));
   const desiredVus = computed<(number | null)[]>(() =>
     points.value.map((point) => point.desiredVus),
@@ -101,6 +104,11 @@
       </div>
     </dl>
 
+    <RunResponseDiagnostics
+      v-if="active"
+      :diagnostics="snapshot.metrics.diagnostics"
+    />
+
     <RunArrivalMetrics :snapshot="snapshot" />
 
     <p
@@ -157,6 +165,15 @@
       />
 
       <RunChart
+        v-if="snapshot.metrics.diagnostics.assertions.length"
+        :seconds="seconds"
+        :values="assertionFailures"
+        title="Cumulative assertion failure rate"
+        unit="%"
+        percentage
+      />
+
+      <RunChart
         :seconds="seconds"
         :values="vus"
         :comparison-values="desiredVus"
@@ -171,7 +188,8 @@
           ? 'Live aggregate subscription connected.'
           : 'Live events unavailable; recovering native totals.'
       }}
-      Charts retain the latest 600 points.
+      Assertion failure rate uses cumulative evaluated checks. Unavailable checks or counter
+      overflow leave a gap; HTTP failures remain separate. Charts retain the latest 600 points.
       {{ gaps ? 'Some intervals were missed; gaps are shown.' : 'No event gaps detected.' }}
       Actual VUs include retiring users; slow retirees may defer a later ramp-up within the worker
       budget. Empty response populations have no percentile. Request rates exclude cancellations.

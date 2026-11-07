@@ -7,6 +7,7 @@ type ChartPoint = {
   requests: number | null;
   latency: number | null;
   failures: number | null;
+  assertionFailures: number | null;
   vus: number | null;
   desiredVus: number | null;
 };
@@ -149,6 +150,7 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
         requests: null,
         latency: null,
         failures: null,
+        assertionFailures: null,
         vus: null,
         desiredVus: null,
       });
@@ -165,6 +167,11 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
         requests === null || failures === null || requests === 0
           ? null
           : (failures / requests) * 100,
+      assertionFailures:
+        update.snapshot.metrics.counter_overflow ||
+        update.snapshot.metrics.assertion_failure_rate === null
+          ? null
+          : update.snapshot.metrics.assertion_failure_rate * 100,
       vus: update.snapshot.active_vus,
       desiredVus: update.snapshot.desired_vus,
     });
