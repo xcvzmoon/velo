@@ -47,6 +47,7 @@ pub fn run() {
             authoring::load_configuration_definition,
             authoring::parse_definition,
             authoring::resolve_definition,
+            authoring::cancel_data_preparation,
             authoring::import_requests,
             authoring::set_authoring_secret,
             authoring::preview_request,
@@ -97,6 +98,11 @@ pub fn run() {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
                         state.preview_exit.notify_waiters();
+                        if let Ok(current) = state.preparation.lock()
+                            && let Some(cancelled) = current.as_ref()
+                        {
+                            cancelled.store(true, Ordering::Release);
+                        }
                         let _admission = state.admission.lock().await;
                         let active = state.manager.current().await.is_some_and(|snapshot| {
                             matches!(snapshot.state, RunState::Starting | RunState::Running | RunState::Stopping)

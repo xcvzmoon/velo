@@ -13,6 +13,7 @@ use velo_engine::{RunConfig, RunConfirmation, RunError, RunManager, RunSnapshot,
 #[derive(Default)]
 pub(crate) struct DesktopRuns {
     pub manager: RunManager,
+    pub preparation: std::sync::Mutex<Option<Arc<AtomicBool>>>,
     pub closing: AtomicBool,
     pub exit_ready: AtomicBool,
     pub admission: Mutex<()>,
