@@ -128,6 +128,10 @@ pub struct Counters {
 /// ```
 #[derive(Clone, Debug, Serialize, TS)]
 pub struct MetricsSnapshot {
+    /// Assertion outcomes and bounded content-free diagnostic samples.
+    pub diagnostics: crate::ResponseDiagnostics,
+    /// Failed assertion evaluations over all evaluations; absent if any check is unavailable.
+    pub assertion_failure_rate: Option<f64>,
     /// Reconciled request outcomes and received payload bytes.
     pub counters: Counters,
     /// Completed HTTP response latencies, including status failures.
@@ -158,6 +162,7 @@ pub struct MetricsSnapshot {
     pub max_in_flight: u64,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum Outcome {
     Response(bool),
     Transport,
@@ -221,6 +226,7 @@ fn add(counter: &mut u64, amount: u64, overflow: &mut bool) {
 }
 
 pub(crate) struct Metrics {
+    diagnostics: crate::ResponseDiagnostics,
     counters: Counters,
     response: Distribution,
     interval_response: Distribution,
@@ -237,6 +243,7 @@ pub(crate) struct Metrics {
 impl Metrics {
     pub fn new() -> Self {
         Self {
+            diagnostics: crate::ResponseDiagnostics::new(&[], crate::InspectionLimits::default()),
             counters: Counters::default(),
             response: Distribution::new(),
             interval_response: Distribution::new(),
@@ -249,6 +256,25 @@ impl Metrics {
             overflow: false,
             max_in_flight: 0,
         }
+    }
+
+    pub(crate) fn configured(
+        assertions: &[crate::Assertion],
+        limits: crate::InspectionLimits,
+    ) -> Self {
+        Self {
+            diagnostics: crate::ResponseDiagnostics::new(assertions, limits),
+            ..Self::new()
+        }
+    }
+
+    pub(crate) fn inspect(
+        &mut self,
+        observation: &crate::assertions::Observation,
+        outcome: Outcome,
+    ) {
+        self.diagnostics
+            .observe(observation, matches!(outcome, Outcome::Response(_)));
     }
 
     pub fn admission(&mut self) {
@@ -322,6 +348,8 @@ impl Metrics {
             + counters.timeouts as f64;
         let seconds = elapsed.as_secs_f64();
         MetricsSnapshot {
+            diagnostics: self.diagnostics.clone(),
+            assertion_failure_rate: self.diagnostics.failure_rate(),
             counters: counters.clone(),
             response_latency: self.response.snapshot(),
             transport_latency: self.transport.snapshot(),

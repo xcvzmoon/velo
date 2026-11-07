@@ -1,5 +1,6 @@
 //! Desktop-independent HTTP load engine with bounded virtual-user execution.
 
+mod assertions;
 mod authoring;
 mod config;
 mod dataset;
@@ -12,6 +13,11 @@ mod threshold;
 mod transport;
 mod workload;
 
+#[doc(inline)]
+pub use assertions::{
+    Assertion, AssertionRule, AssertionTotals, CheckOutcome, FailureGroup, InspectionLimits,
+    ResponseDiagnostics, ResponseSample,
+};
 #[doc(inline)]
 pub use authoring::TestDefinition;
 pub use config::{

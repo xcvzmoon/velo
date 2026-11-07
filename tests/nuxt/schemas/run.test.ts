@@ -55,6 +55,12 @@ describe('request editor schema', () => {
       protocol: 'auto',
       max_redirects: 0,
       thresholds: [],
+      assertions: [],
+      inspection: {
+        body_bytes: 16_384,
+        sample_count: 16,
+        sample_bytes: 8192,
+      },
       headers: input.headers,
       query: input.query,
       body: {

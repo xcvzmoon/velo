@@ -17,6 +17,8 @@ pub enum ThresholdMetric {
     ResponseP95Ms,
     /// Status, transport and timeout failures over non-cancelled attempts, in percent.
     HttpFailurePercent,
+    /// Failed assertion evaluations in percent; unavailable checks make this insufficient.
+    AssertionFailurePercent,
     /// Non-cancelled terminal attempts per actual second, including drain.
     RequestRate,
 }
@@ -99,7 +101,7 @@ pub(crate) fn validate(thresholds: &[Threshold]) -> Result<(), RunError> {
     for threshold in thresholds {
         let maximum = match threshold.metric {
             ThresholdMetric::ResponseP95Ms => 3_600_000.0,
-            ThresholdMetric::HttpFailurePercent => 100.0,
+            ThresholdMetric::HttpFailurePercent | ThresholdMetric::AssertionFailurePercent => 100.0,
             ThresholdMetric::RequestRate => f64::MAX,
         };
         if !threshold.limit.is_finite() || !(0.0..=maximum).contains(&threshold.limit) {
@@ -135,6 +137,9 @@ pub(crate) fn evaluate(
                     ThresholdMetric::ResponseP95Ms => None,
                     ThresholdMetric::HttpFailurePercent => {
                         metrics.http_failure_rate.map(|value| value * 100.0)
+                    }
+                    ThresholdMetric::AssertionFailurePercent => {
+                        metrics.assertion_failure_rate.map(|value| value * 100.0)
                     }
                     ThresholdMetric::RequestRate => metrics
                         .http_failure_rate

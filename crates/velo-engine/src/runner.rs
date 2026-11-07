@@ -322,6 +322,8 @@ impl RunManager {
     /// REQUEST_BUDGET_EXCEEDED, UPLOAD_FILE_UNAVAILABLE, or HTTP_CLIENT_INIT_FAILED
     /// on invalid input, unavailable files, or HTTP initialization failure.
     /// Dataset preparation also returns INVALID_DATASET or DATASET_BUDGET_EXCEEDED.
+    /// Response checks can return INVALID_ASSERTION, INVALID_INSPECTION_LIMITS, or
+    /// INSPECTION_BUDGET_EXCEEDED before allocating worker inspection buffers.
     /// All records are checked before traffic; every record must target the reviewed origin. Input
     /// secrets are omitted. Multipart preparation opens and closes files to validate
     /// readability; call this synchronous API from a blocking thread for file inputs.
@@ -428,7 +430,10 @@ impl RunManager {
             diagnostics: crate::transport::FailureDiagnostics::default(),
             progress: Mutex::new(Progress {
                 state: RunState::Starting,
-                metrics: Metrics::new(),
+                metrics: Metrics::configured(
+                    &config.assertions.definitions,
+                    config.inspection.clone(),
+                ),
                 arrival: ArrivalSnapshot::default(),
                 sequence: 0,
                 sampled_us: 0,
@@ -845,6 +850,7 @@ async fn schedule_arrivals(
             run: run.clone(),
             started: now,
             bytes: 0,
+            observation: crate::assertions::Observation::default(),
             outcome: Outcome::Cancelled,
             elapsed: None,
         };
@@ -873,14 +879,19 @@ async fn execute_arrival(
     mut attempt: Attempt,
 ) {
     attempt.started = Instant::now();
-    let result =
-        crate::transport::execute(&config, record_request(&config, record), &mut attempt.bytes)
-            .await;
+    let result = crate::transport::execute(
+        &config,
+        record_request(&config, record),
+        &mut attempt.bytes,
+        &mut attempt.observation,
+    )
+    .await;
     attempt.elapsed = Some(attempt.started.elapsed());
     attempt.outcome = match result {
         Ok(success) => Outcome::Response(success),
         Err(failure) => {
             attempt.run.diagnostics.record(failure);
+            attempt.observation.cause = Some(failure.diagnostic().0);
             match failure {
                 crate::transport::Failure::Timeout => Outcome::Timeout,
                 crate::transport::Failure::Transport(_) => Outcome::Transport,
@@ -959,6 +970,7 @@ struct Attempt {
     run: Arc<Run>,
     started: Instant,
     bytes: u64,
+    observation: crate::assertions::Observation,
     outcome: Outcome,
     elapsed: Option<Duration>,
 }
@@ -967,10 +979,12 @@ impl Drop for Attempt {
     fn drop(&mut self) {
         let outcome = std::mem::replace(&mut self.outcome, Outcome::Cancelled);
         let elapsed = self.elapsed.unwrap_or_else(|| self.started.elapsed());
-        self.run
-            .measured_lock()
-            .metrics
-            .observe(outcome, elapsed, self.bytes);
+        if matches!(outcome, Outcome::Cancelled) {
+            self.observation.cause = Some("cancelled");
+        }
+        let mut progress = self.run.measured_lock();
+        progress.metrics.inspect(&self.observation, outcome);
+        progress.metrics.observe(outcome, elapsed, self.bytes);
     }
 }
 
@@ -996,17 +1010,23 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             run: worker.run.clone(),
             started: Instant::now(),
             bytes: 0,
+            observation: crate::assertions::Observation::default(),
             outcome: Outcome::Cancelled,
             elapsed: None,
         };
-        let result =
-            crate::transport::execute(&config, record_request(&config, record), &mut attempt.bytes)
-                .await;
+        let result = crate::transport::execute(
+            &config,
+            record_request(&config, record),
+            &mut attempt.bytes,
+            &mut attempt.observation,
+        )
+        .await;
         attempt.elapsed = Some(attempt.started.elapsed());
         attempt.outcome = match result {
             Ok(success) => Outcome::Response(success),
             Err(failure) => {
                 attempt.run.diagnostics.record(failure);
+                attempt.observation.cause = Some(failure.diagnostic().0);
                 match failure {
                     crate::transport::Failure::Timeout => Outcome::Timeout,
                     crate::transport::Failure::Transport(_) => Outcome::Transport,

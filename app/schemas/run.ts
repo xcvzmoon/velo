@@ -286,6 +286,12 @@ export const requestEditorSchema = v.pipe(
       ...config
     }): RunConfig => ({
       ...config,
+      assertions: [],
+      inspection: {
+        body_bytes: 16_384,
+        sample_count: 16,
+        sample_bytes: 8_192,
+      },
       auth:
         authKind === 'none'
           ? { kind: 'none' }

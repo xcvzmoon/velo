@@ -68,6 +68,21 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
       max_lateness_us: '0',
     },
     metrics: {
+      assertion_failure_rate: null,
+      diagnostics: {
+        assertions: [],
+        groups: [],
+        samples: [],
+        dropped_samples: '0',
+        dropped_groups: '0',
+        truncated_responses: '0',
+        retained_bytes: 0,
+        limits: {
+          body_bytes: 16_384,
+          sample_count: 16,
+          sample_bytes: 8192,
+        },
+      },
       counters: {
         started: '9007199254740993',
         responses: '10',
@@ -151,6 +166,12 @@ describe('run monitor', () => {
       headers: [],
       query: [],
       thresholds: [],
+      assertions: [],
+      inspection: {
+        body_bytes: 16_384,
+        sample_count: 16,
+        sample_bytes: 8192,
+      },
       body: { kind: 'none' },
       workload: {
         kind: 'constant',

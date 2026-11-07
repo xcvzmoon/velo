@@ -171,6 +171,13 @@ pub struct RunConfig {
     /// Final cumulative metric rules; empty by default.
     #[ts(type = "Threshold[]")]
     pub thresholds: Vec<crate::Threshold>,
+    /// Ordered response checks; at most 32, validated before load starts.
+    #[serde(default)]
+    #[ts(type = "Assertion[]")]
+    pub assertions: Vec<crate::Assertion>,
+    /// Bounded response inspection and safe diagnostic sample retention.
+    #[serde(default)]
+    pub inspection: crate::InspectionLimits,
     /// Explicit task and retained request-data limits.
     pub budget: ResourceBudget,
     /// Transient prepared requests; omitted from portable definitions and saved configurations.
@@ -211,6 +218,8 @@ impl Default for RunConfig {
             pacing_ms: 0,
             grace_ms: 5_000,
             thresholds: Vec::new(),
+            assertions: Vec::new(),
+            inspection: crate::InspectionLimits::default(),
             budget: ResourceBudget::default(),
             data: None,
         }
@@ -283,6 +292,8 @@ pub(crate) struct PreparedRequest {
 }
 
 pub(crate) struct ValidatedConfig {
+    pub assertions: crate::assertions::PreparedAssertions,
+    pub inspection: crate::InspectionLimits,
     pub dataset_requests: Box<[PreparedRequest]>,
     pub request_bytes: usize,
     pub retained_bytes: usize,
@@ -373,6 +384,7 @@ fn validate_request(
     config: RunConfig,
     shared_client: Option<Client>,
 ) -> Result<ValidatedConfig, RunError> {
+    let assertions = crate::assertions::prepare(config.assertions.clone(), &config.inspection)?;
     let invalid = |message, field| RunError::new("INVALID_RUN_CONFIG", message, Some(field));
     crate::threshold::validate(&config.thresholds)?;
     let threshold_bytes = config
@@ -384,6 +396,18 @@ fn validate_request(
         config.budget.max_vus,
         config.budget.max_request_bytes,
     )?;
+    let inspection_bytes = if assertions.needs_body() {
+        (config.inspection.body_bytes as usize).saturating_mul(schedule.peak_vus as usize)
+    } else {
+        0
+    };
+    if inspection_bytes > 16_777_216 {
+        return Err(RunError::new(
+            "INSPECTION_BUDGET_EXCEEDED",
+            "Worker body inspection buffers exceed the 16 MiB run limit. Reduce inspection bytes or peak workers.",
+            Some("inspection.body_bytes"),
+        ));
+    }
     if matches!(config.workload, Workload::Arrival { .. }) && config.pacing_ms != 0 {
         return Err(invalid(
             "Arrival workloads require zero iteration pacing.",
@@ -397,11 +421,15 @@ fn validate_request(
         ));
     }
 
+    let assertion_bytes = serde_json::to_vec(&config.assertions)
+        .map_err(|_| invalid("Invalid response assertions.", "assertions"))?
+        .len();
     let mut size = config
         .url
         .len()
         .saturating_add(schedule.retained_bytes())
-        .saturating_add(threshold_bytes);
+        .saturating_add(threshold_bytes)
+        .saturating_add(assertion_bytes);
     for pair in config.headers.iter().chain(&config.query) {
         size = size
             .saturating_add(std::mem::size_of::<NameValue>())
@@ -585,6 +613,7 @@ fn validate_request(
         .saturating_mul(schedule.peak_vus as usize + 1)
         .saturating_add(schedule.retained_bytes())
         .saturating_add(threshold_bytes)
+        .saturating_add(assertion_bytes)
         .saturating_add(upload_bytes.saturating_mul(schedule.peak_vus as usize));
     if retained_bytes > config.budget.max_request_bytes as usize {
         return Err(RunError::new(
@@ -594,6 +623,8 @@ fn validate_request(
         ));
     }
     Ok(ValidatedConfig {
+        assertions,
+        inspection: config.inspection,
         dataset_requests: Box::default(),
         request_bytes,
         retained_bytes,

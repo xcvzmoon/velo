@@ -35,7 +35,7 @@ pub(crate) enum Category {
 }
 
 impl Failure {
-    fn diagnostic(self) -> (&'static str, u16) {
+    pub(crate) fn diagnostic(self) -> (&'static str, u16) {
         match self {
             Self::Timeout => ("timeout", 1 << 10),
             Self::Transport(category) => (category.name(), 1 << category as u8),
@@ -239,13 +239,22 @@ pub(crate) async fn execute(
     config: &ValidatedConfig,
     record: Option<&crate::config::PreparedRequest>,
     bytes: &mut u64,
+    observation: &mut crate::assertions::Observation,
 ) -> Result<bool, Failure> {
     let cancel = config.upload_stop.child_token();
     let _cleanup = cancel.clone().drop_guard();
     let uploads_done = TaskTracker::new();
     let result = tokio::time::timeout(
         config.timeout,
-        consume(config, record, bytes, &cancel, &uploads_done, None),
+        consume(
+            config,
+            record,
+            bytes,
+            &cancel,
+            &uploads_done,
+            None,
+            observation,
+        ),
     )
     .await
     .map_err(|_| Failure::Timeout)
@@ -265,6 +274,7 @@ pub(crate) async fn preview(
     let started = std::time::Instant::now();
     let mut response = crate::preview::PreviewResponse::default();
     let mut bytes = 0;
+    let mut observation = crate::assertions::Observation::default();
     let result = tokio::time::timeout(
         config.timeout,
         consume(
@@ -274,6 +284,7 @@ pub(crate) async fn preview(
             &cancel,
             &uploads_done,
             Some(&mut response),
+            &mut observation,
         ),
     )
     .await
@@ -283,6 +294,7 @@ pub(crate) async fn preview(
     uploads_done.close();
     uploads_done.wait().await;
     result?;
+    response.checks = observation.checks;
     response.elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
     Ok(response)
 }
@@ -294,6 +306,7 @@ async fn consume(
     cancel: &CancellationToken,
     uploads_done: &TaskTracker,
     mut preview: Option<&mut crate::preview::PreviewResponse>,
+    observation: &mut crate::assertions::Observation,
 ) -> Result<bool, Failure> {
     let template = record.map_or(&config.request, |record| &record.request);
     let mut url = template.url().clone();
@@ -309,6 +322,12 @@ async fn consume(
         let mut response = config.client.execute(request).await?;
         let status = response.status();
         let location = response.headers().get(header::LOCATION).cloned();
+        let final_response = config.max_redirects == 0
+            || !matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
+            || location.is_none();
+        if final_response {
+            observation.status = Some(status.as_u16());
+        }
         if let Some(capture) = preview.as_deref_mut() {
             capture.status = status.as_u16();
             capture.headers.clear();
@@ -328,15 +347,29 @@ async fn consume(
                 });
             }
         }
-        let mut body = Vec::new();
+        let inspect_body = final_response && config.assertions.needs_body();
+        let body_limit = if preview.is_some() {
+            65_536
+        } else {
+            config.inspection.body_bytes as usize
+        };
+        let mut body = if inspect_body || preview.is_some() {
+            Vec::with_capacity(body_limit)
+        } else {
+            Vec::new()
+        };
+        let mut truncated = false;
         while let Some(chunk) = response.chunk().await? {
             *bytes = bytes.saturating_add(chunk.len() as u64);
-            if let Some(capture) = preview.as_deref_mut() {
-                let remaining = 65_536_usize.saturating_sub(body.len());
+            if inspect_body || preview.is_some() {
+                let remaining = body_limit.saturating_sub(body.len());
                 body.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
-                if chunk.len() > remaining {
-                    capture.truncated = true;
-                    break;
+                truncated |= chunk.len() > remaining;
+                if let Some(capture) = preview.as_deref_mut() {
+                    capture.truncated |= truncated;
+                    if truncated {
+                        break;
+                    }
                 }
             }
         }
@@ -346,10 +379,14 @@ async fn consume(
         hop_cancel.cancel();
         uploads_done.close();
         uploads_done.wait().await;
-        if config.max_redirects == 0
-            || !matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
-            || location.is_none()
-        {
+        if final_response {
+            observation.truncated = truncated || body.len() > config.inspection.body_bytes as usize;
+            observation.checks = config.assertions.evaluate(
+                status.as_u16(),
+                response.headers(),
+                &body[..body.len().min(config.inspection.body_bytes as usize)],
+                observation.truncated,
+            );
             return Ok((200..400).contains(&status.as_u16()));
         }
         if followed >= config.max_redirects {

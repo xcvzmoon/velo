@@ -28,6 +28,127 @@ export type CommandError = {
    */
   field: string | null;
 };
+export type Assertion = {
+  /**
+   * Unique ASCII identifier, 1–64 letters, digits, underscores or hyphens.
+   */
+  id: string;
+  /**
+   * Condition evaluated against the final response.
+   */
+  rule: AssertionRule;
+};
+export type AssertionRule =
+  | { kind: 'status'; allowed: number[] }
+  | { kind: 'header_present'; name: string }
+  | { kind: 'header_equals'; name: string; value: string }
+  | { kind: 'json_present'; pointer: string }
+  | { kind: 'json_equals'; pointer: string; value: string }
+  | { kind: 'text_contains'; value: string }
+  | { kind: 'text_equals'; value: string };
+export type InspectionLimits = {
+  /**
+   * Body inspection bytes per worker, 1–65,536. Excess bytes are drained and discarded.
+   */
+  body_bytes: number;
+  /**
+   * Retained representative samples per run, 0–32. Zero disables samples.
+   */
+  sample_count: number;
+  /**
+   * Total serialized sample bytes per run, 0–32,768. Zero disables samples.
+   */
+  sample_bytes: number;
+};
+export type CheckOutcome =
+  | 'passed'
+  | 'status_mismatch'
+  | 'missing_header'
+  | 'header_mismatch'
+  | 'missing_field'
+  | 'json_mismatch'
+  | 'text_mismatch'
+  | 'truncated'
+  | 'invalid_json'
+  | 'invalid_utf8'
+  | 'encoded_body'
+  | 'unavailable';
+export type AssertionTotals = {
+  /**
+   * Stable configured identifier; expectations are never included.
+   */
+  id: string;
+  /**
+   * Matching complete responses.
+   */
+  passed: string;
+  /**
+   * Evaluated conditions that did not match.
+   */
+  failed: string;
+  /**
+   * Checks not evaluable, including invalid or truncated bodies and non-response attempts.
+   */
+  unavailable: string;
+};
+export type ResponseSample = {
+  /**
+   * Zero-based assertion index, or None for HTTP, transport, timeout or cancellation causes.
+   */
+  assertion: number | null;
+  /**
+   * Final response status when headers arrived; absent for connection failures.
+   */
+  status: number | null;
+  /**
+   * Stable cause, never an infrastructure message or actual/expected value.
+   */
+  cause: string;
+};
+export type FailureGroup = {
+  /**
+   * Safe representative metadata for this group.
+   */
+  example: ResponseSample;
+  /**
+   * Occurrences, including those whose sample could not be retained.
+   */
+  count: string;
+};
+export type ResponseDiagnostics = {
+  /**
+   * Per-assertion totals in configuration order.
+   */
+  assertions: AssertionTotals[];
+  /**
+   * Groups capped at 256; omitted group occurrences are counted separately.
+   */
+  groups: FailureGroup[];
+  /**
+   * First representative for each retained group, within count and serialized byte limits.
+   */
+  samples: ResponseSample[];
+  /**
+   * New representative samples omitted by retention limits.
+   */
+  dropped_samples: string;
+  /**
+   * Failure occurrences that could not fit in the group table.
+   */
+  dropped_groups: string;
+  /**
+   * Complete responses whose inspected body exceeded the cap.
+   */
+  truncated_responses: string;
+  /**
+   * Serialized bytes of the nonempty samples array, including delimiters; zero when empty.
+   */
+  retained_bytes: number;
+  /**
+   * Active run limits.
+   */
+  limits: InspectionLimits;
+};
 export type DataLifetime = 'run' | 'user' | 'iteration';
 export type DataAllocation = 'sequential' | 'random' | 'unique';
 export type DataExhaustion = 'stop' | 'repeat' | 'fail';
@@ -310,6 +431,10 @@ export type ImportedRequest = {
 };
 export type PreviewResponse = {
   /**
+   * Assertion outcomes in configuration order; expectations and actual values are omitted.
+   */
+  checks: CheckOutcome[];
+  /**
    * Final HTTP status, including non-success responses.
    */
   status: number;
@@ -463,7 +588,11 @@ export type Workload =
        */
       stages: RampStage[];
     };
-export type ThresholdMetric = 'response_p95_ms' | 'http_failure_percent' | 'request_rate';
+export type ThresholdMetric =
+  | 'response_p95_ms'
+  | 'http_failure_percent'
+  | 'assertion_failure_percent'
+  | 'request_rate';
 export type ThresholdOperator = 'less_than' | 'greater_than';
 export type Threshold = {
   /**
@@ -548,6 +677,14 @@ export type RunConfig = {
    * Final cumulative metric rules; empty by default.
    */
   thresholds: Threshold[];
+  /**
+   * Ordered response checks; at most 32, validated before load starts.
+   */
+  assertions: Assertion[];
+  /**
+   * Bounded response inspection and safe diagnostic sample retention.
+   */
+  inspection: InspectionLimits;
   /**
    * Explicit task and retained request-data limits.
    */
@@ -699,6 +836,14 @@ export type LatencySnapshot = {
   p99_us: number | null;
 };
 export type MetricsSnapshot = {
+  /**
+   * Assertion outcomes and bounded content-free diagnostic samples.
+   */
+  diagnostics: ResponseDiagnostics;
+  /**
+   * Failed assertion evaluations over all evaluations; absent if any check is unavailable.
+   */
+  assertion_failure_rate: number | null;
   /**
    * Reconciled request outcomes and received payload bytes.
    */
