@@ -416,3 +416,15 @@ fn environment_secret_references_and_arbitrary_secret_bytes_are_not_reinterprete
         matches!(config.auth, RequestAuth::Basic { password, .. } if password == "secret-{{literal}}-bytes")
     );
 }
+
+#[test]
+fn checked_in_example_round_trips_and_prepares_with_local_secret_binding() {
+    let source = include_str!("../../../docs/examples/velo.test.json");
+    let definition = TestDefinition::parse(source).unwrap();
+    for environment in [None, Some("staging")] {
+        let config = definition
+            .resolve(environment, |_| Ok("test-token".into()))
+            .unwrap();
+        RunManager::prepare(config).unwrap();
+    }
+}
