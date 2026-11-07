@@ -1,0 +1,336 @@
+<script setup lang="ts">
+  import type { DataDefinition, DataField } from '~/types/contracts';
+  import { Field, Form, getInput, reset, setInput, useForm } from '@formisch/vue';
+  import * as v from 'valibot';
+
+  const defaultFields: DataField[] = [
+    {
+      name: 'firstName',
+      generator: { kind: 'first_name' },
+    },
+    {
+      name: 'lastName',
+      generator: { kind: 'last_name' },
+    },
+    {
+      name: 'email',
+      generator: {
+        kind: 'email',
+        first: 'firstName',
+        last: 'lastName',
+        provider: 'example.test',
+      },
+    },
+  ];
+  const schema = v.object({
+    kind: v.picklist(['faker', 'csv', 'json']),
+    locale: v.picklist(['en', 'de', 'fr']),
+    count: v.pipe(
+      v.string(),
+      v.transform(Number),
+      v.number(),
+      v.integer(),
+      v.minValue(1),
+      v.maxValue(10000),
+    ),
+    seed: v.pipe(
+      v.string(),
+      v.transform(Number),
+      v.number(),
+      v.integer(),
+      v.minValue(0),
+      v.maxValue(4294967295),
+    ),
+    lifetime: v.picklist(['run', 'user', 'iteration']),
+    allocation: v.picklist(['sequential', 'random', 'unique']),
+    exhaustion: v.picklist(['stop', 'repeat', 'fail']),
+    fields: v.pipe(v.string(), v.maxLength(65536)),
+    mapping: v.pipe(v.string(), v.maxLength(65536)),
+  });
+  const selectFields = [
+    {
+      name: 'kind',
+      label: 'Source',
+      choices: ['faker', 'csv', 'json'],
+    },
+    {
+      name: 'locale',
+      label: 'Faker locale',
+      choices: ['en', 'de', 'fr'],
+    },
+    {
+      name: 'lifetime',
+      label: 'Reuse values for',
+      choices: ['run', 'user', 'iteration'],
+    },
+    {
+      name: 'allocation',
+      label: 'Record allocation',
+      choices: ['sequential', 'random', 'unique'],
+    },
+    {
+      name: 'exhaustion',
+      label: 'When records run out',
+      choices: ['stop', 'repeat', 'fail'],
+    },
+  ] as const;
+  const props = defineProps<{
+    disabled: boolean;
+    definition: DataDefinition | null;
+  }>();
+  const emit = defineEmits<{
+    apply: [definition: DataDefinition | null];
+    dirty: [value: boolean];
+  }>();
+  const form = useForm({
+    schema,
+    initialInput: {
+      kind: 'faker',
+      locale: 'en',
+      count: '100',
+      seed: '42',
+      lifetime: 'iteration',
+      allocation: 'unique',
+      exhaustion: 'stop',
+      fields: JSON.stringify(defaultFields, null, 2),
+      mapping: '{"id":"id"}',
+    },
+  });
+  const prefix = useId();
+  const error = shallowRef<string | null>(null);
+  function apply(output: v.InferOutput<typeof schema>): void {
+    try {
+      const source =
+        output.kind === 'faker'
+          ? {
+              kind: 'faker',
+              version: '10.6.0',
+              locale: output.locale,
+              count: output.count,
+              fields: JSON.parse(output.fields),
+            }
+          : {
+              kind: output.kind,
+              mapping: JSON.parse(output.mapping),
+            };
+      emit(
+        'apply',
+        parseDataDefinition(
+          JSON.stringify({
+            lifetime: output.lifetime,
+            allocation: output.allocation,
+            exhaustion: output.exhaustion,
+            seed: output.seed,
+            source,
+          }),
+        ),
+      );
+      error.value = null;
+    } catch (error_) {
+      error.value = error_ instanceof Error ? error_.message : 'INVALID_DATASET: Check the recipe.';
+    }
+  }
+  function addField(field: DataField): void {
+    try {
+      const parsed = parseDataDefinition(
+        JSON.stringify({
+          lifetime: 'iteration',
+          allocation: 'unique',
+          exhaustion: 'stop',
+          seed: 0,
+          source: {
+            kind: 'faker',
+            version: '10.6.0',
+            locale: 'en',
+            count: 1,
+            fields: JSON.parse(getInput(form).fields ?? '[]'),
+          },
+        }),
+      );
+      if (parsed.source.kind === 'faker') {
+        setInput(form, {
+          path: ['fields'],
+          input: JSON.stringify([...parsed.source.fields, field], null, 2),
+        });
+      }
+    } catch {
+      error.value = 'INVALID_DATASET: Fix the existing field JSON before adding a field.';
+    }
+  }
+  watch(
+    () => getInput(form),
+    () => emit('dirty', form.isDirty),
+    { deep: true },
+  );
+  watch(
+    () => props.definition,
+    (definition) => {
+      if (!definition) {
+        return;
+      }
+      const source = definition.source;
+      reset(form, {
+        initialInput: {
+          kind: source.kind,
+          locale:
+            source.kind === 'faker' ? v.parse(v.picklist(['en', 'de', 'fr']), source.locale) : 'en',
+          count: source.kind === 'faker' ? String(source.count) : '100',
+          seed: String(definition.seed),
+          lifetime: definition.lifetime,
+          allocation: definition.allocation,
+          exhaustion: definition.exhaustion,
+          fields: JSON.stringify(source.kind === 'faker' ? source.fields : defaultFields, null, 2),
+          mapping: JSON.stringify(source.kind === 'faker' ? { id: 'id' } : source.mapping, null, 2),
+        },
+      });
+    },
+    { immediate: true },
+  );
+</script>
+
+<template>
+  <section
+    class="space-y-4 rounded-lg border p-6"
+    aria-label="Test data"
+  >
+    <h2 class="font-medium">Test data</h2>
+    <p class="text-muted-foreground text-sm">
+      Prepare up to 10,000 records before load. Bind fields using the existing
+      <code v-text="'{{email}}'" />
+      syntax. Generated login identities need existing accounts on the target; generation does not
+      create accounts. Unique allocation reserves each record once, but generated values may contain
+      duplicates.
+    </p>
+    <Form
+      :of="form"
+      class="space-y-4"
+      @submit="apply"
+    >
+      <div class="grid gap-4 sm:grid-cols-2">
+        <Field
+          v-for="setting in selectFields"
+          v-slot="field"
+          :key="setting.name"
+          :of="form"
+          :path="[setting.name]"
+        >
+          <div class="space-y-2">
+            <Label :for="`${prefix}-${setting.name}`">{{ setting.label }}</Label>
+            <Select
+              v-model="field.input"
+              :disabled="disabled"
+            >
+              <SelectTrigger :id="`${prefix}-${setting.name}`"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem
+                  v-for="choice in setting.choices"
+                  :key="choice"
+                  :value="choice"
+                >
+                  {{ choice }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </Field>
+        <Field
+          v-for="name in ['seed', 'count'] as const"
+          v-slot="field"
+          :key="name"
+          :of="form"
+          :path="[name]"
+        >
+          <div class="space-y-2">
+            <Label :for="`${prefix}-${name}`">
+              {{ name === 'seed' ? 'Seed' : 'Faker record count' }}
+            </Label>
+            <Input
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${prefix}-${name}`"
+              :disabled="disabled"
+              inputmode="numeric"
+            />
+            <p
+              v-if="field.errors"
+              class="text-destructive text-sm"
+              role="alert"
+            >
+              {{ field.errors.join(' ') }}
+            </p>
+          </div>
+        </Field>
+      </div>
+      <Field
+        v-for="name in ['fields', 'mapping'] as const"
+        v-slot="field"
+        :key="name"
+        :of="form"
+        :path="[name]"
+      >
+        <div
+          v-if="(getInput(form).kind === 'faker') === (name === 'fields')"
+          class="space-y-2"
+        >
+          <Label :for="`${prefix}-${name}`">
+            {{
+              name === 'fields'
+                ? 'Ordered field definitions (JSON)'
+                : 'Variable-to-source-column mapping (JSON)'
+            }}
+          </Label>
+          <Textarea
+            v-model="field.input"
+            v-bind="field.props"
+            :id="`${prefix}-${name}`"
+            :disabled="disabled"
+            class="min-h-40 font-mono text-xs"
+            spellcheck="false"
+          />
+          <p
+            v-if="field.errors"
+            class="text-destructive text-sm"
+            role="alert"
+          >
+            {{ field.errors.join(' ') }}
+          </p>
+        </div>
+      </Field>
+      <div class="flex gap-3">
+        <Button
+          :disabled="disabled"
+          type="submit"
+        >
+          Apply data recipe
+        </Button>
+        <Button
+          :disabled="disabled || !definition"
+          type="button"
+          variant="outline"
+          @click="emit('apply', null)"
+        >
+          Remove dataset
+        </Button>
+      </div>
+    </Form>
+    <AuthoringDataField
+      v-if="getInput(form).kind === 'faker'"
+      :disabled="disabled"
+      @add="addField"
+    />
+    <p
+      v-if="error"
+      class="text-destructive text-sm"
+      role="alert"
+    >
+      {{ error }}
+    </p>
+    <p class="text-muted-foreground text-xs">
+      Faker 10.6.0 is pinned. Email and copy fields reference earlier fields in the same record.
+      Literal fields make invalid and boundary cases explicit. Random allocation uses a seeded
+      shuffle without replacement per cycle. Concurrent admission determines which worker receives
+      each index; network completion order is unspecified. Arrival workloads support run and
+      iteration lifetimes.
+    </p>
+  </section>
+</template>
