@@ -3,6 +3,7 @@
 mod authoring;
 mod config;
 mod http_options;
+mod imports;
 mod metrics;
 mod runner;
 mod threshold;
@@ -15,6 +16,8 @@ pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
 pub use http_options::{HttpProtocol, MultipartPart, RequestAuth};
+#[doc(inline)]
+pub use imports::{ImportFormat, ImportedRequest, import_requests};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
 pub use threshold::{

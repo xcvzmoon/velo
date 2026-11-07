@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use serde_json::json;
 use velo_engine::{
-    NameValue, RequestAuth, RequestBody, RequestMethod, RunConfig, RunManager, TestDefinition,
+    ImportFormat, NameValue, RequestAuth, RequestBody, RequestMethod, RunConfig, RunManager,
+    TestDefinition, import_requests,
 };
 
 fn definition() -> TestDefinition {
@@ -158,6 +159,80 @@ fn all_body_modes_and_workloads_round_trip_with_ordered_pairs() {
             );
         }
     }
+}
+
+#[test]
+fn curl_is_offline_and_rejects_executable_syntax_and_unsupported_flags() {
+    let requests = import_requests(ImportFormat::Curl, "curl -X POST -H 'x-a: one' -H 'x-a: two' --data-raw '$(touch /tmp/never)' -u user:pass --max-time 1.5 https://example.com").unwrap();
+    assert_eq!(requests[0].config.headers.len(), 3);
+    assert_eq!(requests[0].config.timeout_ms, 1500);
+    assert!(
+        matches!(&requests[0].config.body, RequestBody::Text(value) if value == "$(touch /tmp/never)")
+    );
+    assert!(
+        matches!(&requests[0].config.auth, RequestAuth::Basic { username, .. } if username == "user")
+    );
+    for command in [
+        "curl https://example.com ; touch file",
+        "curl -k https://example.com",
+        "curl -d @/private/file https://example.com",
+        "curl --retry 3 https://example.com",
+    ] {
+        assert_eq!(
+            import_requests(ImportFormat::Curl, command)
+                .unwrap_err()
+                .code,
+            "REQUEST_IMPORT_FAILED"
+        );
+    }
+}
+
+#[test]
+fn postman_operations_retain_duplicates_and_report_inherited_scripts_and_auth() {
+    let collection = json!({ "info": {"schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"}, "auth": {"type":"oauth2"}, "event": [{"script":{"exec":["throw new Error('never')"]}}], "item": [{"name":"folder", "event":[], "item":[{"name":"one", "request":{"method":"GET", "url":{"raw":"https://example.com?q=one&q=two", "query":[{"key":"q","value":"one"},{"key":"q","value":"two"}]}, "header":[{"key":"x-a","value":"1"},{"key":"x-a","value":"2"}]}}]}, {"name":"two", "request":{"method":"POST", "url":"https://example.com", "body":{"mode":"raw","raw":"{}","options":{"raw":{"language":"json"}}}}}] });
+    let requests = import_requests(ImportFormat::Postman, &collection.to_string()).unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].config.query.len(), 2);
+    assert_eq!(requests[0].config.headers.len(), 2);
+    assert!(
+        requests[0]
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("auth"))
+    );
+    assert!(
+        requests[0]
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("event"))
+    );
+    assert!(matches!(requests[1].config.body, RequestBody::Json(_)));
+}
+
+#[test]
+fn openapi_lists_operations_and_reports_security_references_and_bodies() {
+    let source = json!({"openapi":"3.1.0", "servers":[{"url":"https://example.com"}], "security":[{"oauth":[]}], "components":{}, "paths":{"/items/{id}":{"parameters":[{"name":"id","in":"path","required":true}], "get":{"parameters":[{"$ref":"https://never.example/parameter"}]}, "post":{"requestBody":{"$ref":"#/components/schemas/Input"}, "security":[{"key":[]}]}}}});
+    let requests = import_requests(ImportFormat::Openapi, &source.to_string()).unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].config.url, "https://example.com/items/{{id}}");
+    assert!(
+        requests[0]
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("security"))
+    );
+    assert!(
+        requests[0]
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("$ref"))
+    );
+    assert!(
+        requests[1]
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("body"))
+    );
 }
 
 #[test]
