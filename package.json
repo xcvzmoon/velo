@@ -36,6 +36,7 @@
     "bindings:check": "node scripts/bindings.ts --check"
   },
   "dependencies": {
+    "@faker-js/faker": "10.6.0",
     "@formisch/vue": "^1.2.0",
     "@lucide/vue": "^1.68.0",
     "@nuxt/icon": "2.6.2",
@@ -45,6 +46,7 @@
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
     "nuxt": "^4.6.4",
+    "papaparse": "5.5.3",
     "reka-ui": "^2.11.0",
     "shadcn-nuxt": "2.9.0",
     "uplot": "^1.6.32",
@@ -60,6 +62,7 @@
     "@tailwindcss/vite": "^4.3.4",
     "@tauri-apps/cli": "^2.12.4",
     "@types/node": "^26.6.6",
+    "@types/papaparse": "5.3.16",
     "genbumppush": "^0.0.10",
     "golar": "^0.1.11",
     "lefthook": "^2.2.2",
