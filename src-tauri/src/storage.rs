@@ -421,6 +421,7 @@ impl Store {
 #[cfg(test)]
 pub(crate) fn redacted(config: &RunConfig, origin: &str) -> RunConfig {
     RunConfig {
+        data: None,
         url: format!("{origin}/"),
         headers: Vec::new(),
         query: Vec::new(),

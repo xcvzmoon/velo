@@ -2,6 +2,7 @@
 
 mod authoring;
 mod config;
+mod dataset;
 mod http_options;
 mod imports;
 mod metrics;
@@ -15,6 +16,11 @@ mod workload;
 pub use authoring::TestDefinition;
 pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
+};
+#[doc(inline)]
+pub use dataset::{
+    DataAllocation, DataDefinition, DataExhaustion, DataField, DataGenerator, DataLifetime,
+    DataRequest, DataSource, DataSummary, PreparedData,
 };
 pub use http_options::{HttpProtocol, MultipartPart, RequestAuth};
 #[doc(inline)]

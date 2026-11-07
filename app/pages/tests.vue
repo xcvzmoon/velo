@@ -29,10 +29,8 @@
     }
 
     await $runs.start(config, settings.updateIntervalMs);
-    if (active.value) {
-      confirmation.value = null;
-      prepared.value = null;
-    }
+    confirmation.value = null;
+    prepared.value = null;
   }
 
   function cancel(): void {
@@ -102,6 +100,16 @@
           </dd>
         </div>
       </dl>
+
+      <p
+        v-if="confirmation.dataset"
+        class="text-muted-foreground text-sm"
+      >
+        Dataset: {{ confirmation.dataset.records }} records from {{ confirmation.dataset.source }}.
+        Lifetime {{ confirmation.dataset.lifetime }}, allocation
+        {{ confirmation.dataset.allocation }}, exhaustion {{ confirmation.dataset.exhaustion }},
+        seed {{ confirmation.dataset.seed }}.
+      </p>
 
       <div
         v-if="confirmation.workload.kind === 'ramping'"

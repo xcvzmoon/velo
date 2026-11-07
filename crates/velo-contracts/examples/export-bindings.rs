@@ -9,6 +9,17 @@ fn main() {
         CommandError::decl(&ts_rs::Config::default())
     );
     let config = ts_rs::Config::default();
+    println!("export {};", velo_engine::DataLifetime::decl(&config));
+    println!("export {};", velo_engine::DataAllocation::decl(&config));
+    println!("export {};", velo_engine::DataExhaustion::decl(&config));
+    println!("export {};", velo_engine::DataDefinition::decl(&config));
+    println!("export {};", velo_engine::DataSource::decl(&config));
+    println!("export {};", velo_engine::DataField::decl(&config));
+    println!("export {};", velo_engine::DataGenerator::decl(&config));
+    println!("export {};", velo_engine::DataRequest::decl(&config));
+    println!("export {};", velo_engine::PreparedData::decl(&config));
+    println!("export {};", velo_engine::DataSummary::decl(&config));
+
     println!("export {};", velo_contracts::HistoryEntry::decl(&config));
     println!(
         "export {};",

@@ -1,4 +1,7 @@
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use tauri::Manager;
 use velo_engine::{
@@ -14,6 +17,66 @@ fn failure(code: &str, message: &str, field: Option<&str>) -> RunError {
         message: message.into(),
         field: field.map(str::to_owned),
     }
+}
+
+struct Preparation<'a> {
+    state: &'a DesktopRuns,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl<'a> Preparation<'a> {
+    fn new(state: &'a DesktopRuns) -> Result<Self, RunError> {
+        if state.closing.load(Ordering::Acquire) {
+            return Err(failure(
+                "APP_EXITING",
+                "The application is shutting down.",
+                None,
+            ));
+        }
+        let mut current = state.preparation.lock().map_err(|_| {
+            failure(
+                "AUTHORING_FAILED",
+                "Preparation state is unavailable.",
+                None,
+            )
+        })?;
+        if current.is_some() {
+            return Err(failure(
+                "PREPARATION_BUSY",
+                "Wait for the current preparation to finish.",
+                None,
+            ));
+        }
+        let cancelled = Arc::new(AtomicBool::new(false));
+        *current = Some(cancelled.clone());
+        Ok(Self { state, cancelled })
+    }
+}
+
+impl Drop for Preparation<'_> {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Release);
+        if let Ok(mut current) = self.state.preparation.lock() {
+            *current = None;
+        }
+    }
+}
+
+#[tauri::command]
+pub(crate) fn cancel_data_preparation(
+    state: tauri::State<'_, Arc<DesktopRuns>>,
+) -> Result<(), RunError> {
+    let current = state.preparation.lock().map_err(|_| {
+        failure(
+            "AUTHORING_FAILED",
+            "Preparation state is unavailable.",
+            None,
+        )
+    })?;
+    if let Some(cancelled) = current.as_ref() {
+        cancelled.store(true, Ordering::Release);
+    }
+    Ok(())
 }
 
 fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
@@ -95,17 +158,24 @@ fn read_secret(
 fn resolve(
     definition: TestDefinition,
     environment: Option<String>,
+    rows: Vec<std::collections::BTreeMap<String, String>>,
+    cancelled: Arc<AtomicBool>,
 ) -> Result<(RunConfig, Vec<String>), RunError> {
     let mut cache = std::collections::BTreeMap::new();
     let mut saved = std::collections::BTreeMap::new();
-    let config = definition.resolve(environment.as_deref(), |name| {
-        if let Some(value) = cache.get(name) {
-            return Ok(String::clone(value));
-        }
-        let value = read_secret(name, &mut saved)?;
-        cache.insert(name.to_owned(), value.clone());
-        Ok(value)
-    })?;
+    let config = definition.resolve_data(
+        environment.as_deref(),
+        &rows,
+        || cancelled.load(Ordering::Acquire),
+        |name| {
+            if let Some(value) = cache.get(name) {
+                return Ok(String::clone(value));
+            }
+            let value = read_secret(name, &mut saved)?;
+            cache.insert(name.to_owned(), value.clone());
+            Ok(value)
+        },
+    )?;
     Ok((config, cache.into_values().collect()))
 }
 
@@ -113,6 +183,8 @@ async fn resolve_native(
     history: &History,
     definition: TestDefinition,
     environment: Option<String>,
+    rows: Vec<std::collections::BTreeMap<String, String>>,
+    cancelled: Arc<AtomicBool>,
 ) -> Result<(RunConfig, Vec<String>), RunError> {
     let credential_access = serde_json::to_string(&definition)
         .map_err(|_| {
@@ -125,7 +197,9 @@ async fn resolve_native(
         .contains("{{secret:");
     tokio::time::timeout(
         std::time::Duration::from_secs(5),
-        history.configuration(credential_access, move |_| resolve(definition, environment)),
+        history.configuration(credential_access, move |_| {
+            resolve(definition, environment, rows, cancelled)
+        }),
     )
     .await
     .map_err(|_| {
@@ -194,13 +268,31 @@ pub(crate) async fn parse_definition(source: String) -> Result<TestDefinition, R
 
 #[tauri::command]
 pub(crate) async fn resolve_definition(
+    runs: tauri::State<'_, Arc<DesktopRuns>>,
     state: tauri::State<'_, History>,
     definition: TestDefinition,
     environment: Option<String>,
+    rows: Option<Vec<std::collections::BTreeMap<String, String>>>,
 ) -> Result<RunConfig, RunError> {
-    let (config, _) = resolve_native(&state, definition, environment).await?;
+    let preparation = Preparation::new(&runs)?;
+    let cancelled = preparation.cancelled.clone();
+    let (config, _) = resolve_native(
+        &state,
+        definition,
+        environment,
+        rows.unwrap_or_default(),
+        cancelled.clone(),
+    )
+    .await?;
     tauri::async_runtime::spawn_blocking(move || {
         RunManager::prepare(config.clone())?;
+        if cancelled.load(Ordering::Acquire) {
+            return Err(failure(
+                "PREPARATION_CANCELLED",
+                "Prepared data was discarded.",
+                Some("dataset"),
+            ));
+        }
         Ok(config)
     })
     .await
@@ -266,6 +358,7 @@ pub(crate) async fn preview_request(
     definition: TestDefinition,
     environment: Option<String>,
     authorized: bool,
+    rows: Option<Vec<std::collections::BTreeMap<String, String>>>,
 ) -> Result<PreviewResponse, RunError> {
     let _admission = state.admission.try_lock().map_err(|_| {
         failure(
@@ -301,7 +394,22 @@ pub(crate) async fn preview_request(
             None,
         ));
     }
-    let (config, secrets) = resolve_native(&history, definition, environment).await?;
+    let preparation = Preparation::new(&state)?;
+    let (config, secrets) = resolve_native(
+        &history,
+        definition,
+        environment,
+        rows.unwrap_or_default(),
+        preparation.cancelled.clone(),
+    )
+    .await?;
+    if preparation.cancelled.load(Ordering::Acquire) {
+        return Err(failure(
+            "PREPARATION_CANCELLED",
+            "Prepared data was discarded.",
+            Some("dataset"),
+        ));
+    }
     tokio::select! {
         biased;
         _ = exiting => Err(failure("APP_EXITING", "Preview was cancelled because the application is closing.", None)),
@@ -474,6 +582,21 @@ pub(crate) async fn export_definition_file<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn preparation_guard_cancels_and_releases_owned_slot() {
+        let runs = crate::execution::DesktopRuns::default();
+        let preparation = super::Preparation::new(&runs).unwrap();
+        let cancelled = preparation.cancelled.clone();
+        assert_eq!(
+            super::Preparation::new(&runs).err().unwrap().code,
+            "PREPARATION_BUSY"
+        );
+        drop(preparation);
+        assert!(cancelled.load(std::sync::atomic::Ordering::Acquire));
+        let next = super::Preparation::new(&runs).unwrap();
+        assert!(!next.cancelled.load(std::sync::atomic::Ordering::Acquire));
+    }
+
     use super::*;
     use serde_json::json;
 
