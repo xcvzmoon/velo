@@ -1,5 +1,6 @@
 //! Desktop-independent HTTP load engine with bounded virtual-user execution.
 
+mod authoring;
 mod config;
 mod http_options;
 mod metrics;
@@ -8,6 +9,8 @@ mod threshold;
 mod transport;
 mod workload;
 
+#[doc(inline)]
+pub use authoring::TestDefinition;
 pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
