@@ -132,10 +132,16 @@ function harness() {
     },
   });
 
-  function emit(sequence: number, runId = '1'): void {
+  function emit(sequence: number, runId = '1', assertionFailureRate: number | null = null): void {
     receive?.({
       sequence: String(sequence),
-      snapshot: snapshot(runId, sequence),
+      snapshot: {
+        ...snapshot(runId, sequence),
+        metrics: {
+          ...snapshot(runId, sequence).metrics,
+          assertion_failure_rate: assertionFailureRate,
+        },
+      },
       interval_us: '1000000',
       interval_requests: '10',
       interval_failures: '1',
@@ -259,6 +265,22 @@ describe('run monitor', () => {
     emit(99, '1');
     expect(monitor.snapshot.value?.run_id).toBe('2');
     expect(monitor.points.value).toHaveLength(1);
+    monitor.dispose();
+  });
+
+  it('plots cumulative assertion failures separately from HTTP failures and preserves unavailable and event gaps', async () => {
+    const { monitor, emit } = harness();
+    await monitor.connect();
+    emit(1, '1', 0.25);
+    emit(2, '1', null);
+    emit(4, '1', 0.5);
+    expect(monitor.points.value.map(({ assertionFailures }) => assertionFailures)).toEqual([
+      25,
+      null,
+      null,
+      50,
+    ]);
+    expect(monitor.points.value[0]?.failures).toBe(10);
     monitor.dispose();
   });
 

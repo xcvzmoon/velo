@@ -4,6 +4,7 @@
   const props = defineProps<{
     title: string;
     unit: string;
+    percentage?: boolean;
     values: (number | null)[];
     seconds: number[];
     comparisonValues?: (number | null)[];
@@ -28,11 +29,14 @@
 
     chart = new uPlot(
       {
-        width: Math.max(element.clientWidth, 200),
+        width: Math.max(element.clientWidth, 100),
         height: 190,
         scales: {
           x: { time: false },
-          y: { range: (_chart, min, max) => [Math.min(0, min), Math.max(1, max * 1.1)] },
+          y: {
+            range: (_chart, min, max) =>
+              props.percentage ? [0, 100] : [Math.min(0, min), Math.max(1, max * 1.1)],
+          },
         },
         series: [
           { label: 'Elapsed (s)' },
@@ -78,7 +82,7 @@
     observer = new ResizeObserver(([entry]) => {
       if (entry) {
         chart?.setSize({
-          width: Math.max(entry.contentRect.width, 200),
+          width: Math.max(entry.contentRect.width, 100),
           height: 190,
         });
       }
@@ -87,7 +91,7 @@
   });
 
   watch(
-    () => [props.values, props.comparisonValues],
+    () => [props.seconds, props.values, props.comparisonValues],
     () => chart?.setData(data()),
   );
 
