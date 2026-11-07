@@ -33,6 +33,38 @@
       </p>
     </div>
 
+    <div
+      v-if="snapshot.dataset"
+      class="space-y-2 rounded-md border p-4 text-sm"
+    >
+      <h3 class="font-medium">Dataset outcome</h3>
+      <p>
+        {{ snapshot.dataset.records }} records from {{ snapshot.dataset.source }}
+        <template v-if="snapshot.dataset.version">
+          (Faker {{ snapshot.dataset.version }}, {{ snapshot.dataset.locale }})
+        </template>
+        ; seed {{ snapshot.dataset.seed }}.
+      </p>
+      <p>
+        Lifetime {{ snapshot.dataset.lifetime }}, allocation {{ snapshot.dataset.allocation }},
+        exhaustion policy {{ snapshot.dataset.exhaustion }}.
+      </p>
+      <p>
+        {{ snapshot.dataset.allocated }} allocations; {{ snapshot.dataset.cycles }} repeat cycles.
+        {{
+          snapshot.dataset.exhausted
+            ? 'Dataset exhausted. Admission closed and in-flight requests drained.'
+            : 'Dataset was not exhausted.'
+        }}
+      </p>
+      <p
+        v-if="snapshot.failure_code"
+        class="text-destructive"
+      >
+        {{ snapshot.failure_code }}
+      </p>
+    </div>
+
     <dl class="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
       <div
         v-for="(value, name) in snapshot.metrics.counters"
