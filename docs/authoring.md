@@ -16,7 +16,7 @@ Earlier saved configurations remain available in **Saved configurations**. Loadi
 
 ## Version 1 format
 
-A document contains exactly `version`, `config`, `variables`, and `environments`. All four are required. Unsupported versions, unknown configuration properties, wrong field types, and malformed JSON fail before execution. The file limit is 8 MiB. Local storage holds at most 1,000 named tests; replacing an existing test is still allowed at that limit. A resolved field is also limited to 8 MiB, and engine request-data budgets still apply.
+A document requires `version`, `config`, `variables`, and `environments`, with an optional `dataset` recipe. See [generated and imported test data](datasets.md) for preparation and allocation rules. Transient `config.data` requests cannot be embedded in a portable definition. Unsupported versions, unknown configuration properties, wrong field types, and malformed JSON fail before execution. The file limit is 8 MiB. Local storage holds at most 1,000 named tests; replacing an existing test is still allowed at that limit. A resolved field is also limited to 8 MiB, and engine request-data budgets still apply.
 
 `config` uses the Rust-owned `RunConfig` contract, including all existing methods, ordered header/query pairs, authentication, HTTP protocol, redirect limit, timeout, pacing, drain grace, workloads, budgets, and thresholds. See [execution and measurements](execution.md) and the generated [TypeScript contracts](../app/types/contracts.ts). Duplicate header/query names retain their order. JSON bodies are strings containing JSON; they are not embedded document objects.
 
