@@ -17,6 +17,8 @@
     "pacing_ms": 0,
     "grace_ms": 5000,
     "thresholds": [],
+    "assertions": [{ "id": "status", "rule": { "kind": "status", "allowed": [200, 201] } }],
+    "inspection": { "body_bytes": 16384, "sample_count": 16, "sample_bytes": 8192 },
     "budget": { "max_vus": 256, "max_request_bytes": 8388608 }
   },
   "variables": {
