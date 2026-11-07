@@ -101,6 +101,11 @@
       </div>
     </dl>
 
+    <RunResponseDiagnostics
+      v-if="active"
+      :diagnostics="snapshot.metrics.diagnostics"
+    />
+
     <RunArrivalMetrics :snapshot="snapshot" />
 
     <p
