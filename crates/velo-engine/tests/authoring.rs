@@ -235,6 +235,141 @@ fn openapi_lists_operations_and_reports_security_references_and_bodies() {
     );
 }
 
+#[tokio::test]
+async fn preview_uses_redirect_policy_captures_failures_and_bounds_redacted_content() {
+    use axum::{Router, http::StatusCode, response::Redirect, routing::get};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    let count = Arc::new(AtomicUsize::new(0));
+    let observed = count.clone();
+    let app = Router::new()
+        .route(
+            "/redirect",
+            get(|| async { Redirect::temporary("/response") }),
+        )
+        .route(
+            "/response",
+            get(move || {
+                observed.fetch_add(1, Ordering::SeqCst);
+                async {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        [
+                            ("set-cookie", "server-private"),
+                            ("x-echo", "PRIVATE_TOKEN"),
+                        ],
+                        format!("PRIVATE_TOKEN {}", "x".repeat(80_000)),
+                    )
+                }
+            }),
+        )
+        .route(
+            "/echo",
+            get(|| async { ([("private_token", "public")], "PRIVATE_TOKEN") }),
+        )
+        .route(
+            "/slow",
+            get(|| async {
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                "slow"
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let config = RunConfig {
+        url: format!("http://{address}/redirect"),
+        auth: RequestAuth::Bearer {
+            token: "PRIVATE_TOKEN".into(),
+        },
+        ..Default::default()
+    };
+    let response = velo_engine::preview_request(config.clone(), &[])
+        .await
+        .unwrap();
+    assert_eq!(response.status, 307);
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    let response = velo_engine::preview_request(
+        RunConfig {
+            max_redirects: 1,
+            ..config.clone()
+        },
+        &[],
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status, 400);
+    assert_eq!(count.load(Ordering::SeqCst), 1);
+    assert!(response.truncated);
+    assert!(response.redacted);
+    assert!(response.body.len() <= 65_536);
+    let encoded = serde_json::to_string(&response).unwrap();
+    assert!(!encoded.contains("PRIVATE_TOKEN"));
+    assert!(!encoded.contains("server-private"));
+    assert!(!format!("{response:?}").contains("PRIVATE_TOKEN"));
+    let secret = "PRIVATE_TOKEN".to_owned();
+    let response = velo_engine::preview_request(
+        RunConfig {
+            url: format!("http://{address}/echo"),
+            headers: vec![NameValue {
+                name: "x-private".into(),
+                value: format!("prefix-{secret}-suffix"),
+            }],
+            ..Default::default()
+        },
+        std::slice::from_ref(&secret),
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status, 200);
+    assert!(response.redacted);
+    assert!(!response.body.contains(&secret));
+    let response = velo_engine::preview_request(
+        RunConfig {
+            url: format!("http://{address}/echo"),
+            ..Default::default()
+        },
+        &["private_token".into()],
+    )
+    .await
+    .unwrap();
+    assert!(
+        response
+            .headers
+            .iter()
+            .any(|pair| pair.name == "[redacted]")
+    );
+    let response = velo_engine::preview_request(
+        RunConfig {
+            max_redirects: 1,
+            ..config.clone()
+        },
+        std::slice::from_ref(&secret),
+    )
+    .await
+    .unwrap();
+    assert!(response.truncated);
+    assert!(response.body.contains("withheld"));
+    assert!(!response.body.contains("PRIVATE"));
+    let error = velo_engine::preview_request(
+        RunConfig {
+            url: format!("http://{address}/slow"),
+            timeout_ms: 10,
+            ..config
+        },
+        &[],
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(error.code, "PREVIEW_TIMEOUT");
+    server.abort();
+    let _ = server.await;
+}
+
 #[test]
 fn resolution_errors_name_fields_and_cannot_expand_without_a_bound() {
     let mut definition = definition();

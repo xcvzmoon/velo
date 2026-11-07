@@ -5075,6 +5075,7 @@ dependencies = [
 name = "velo-engine"
 version = "0.0.0"
 dependencies = [
+ "aho-corasick",
  "axum",
  "hdrhistogram",
  "percent-encoding",

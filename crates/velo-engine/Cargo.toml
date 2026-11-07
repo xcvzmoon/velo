@@ -8,6 +8,7 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+aho-corasick.workspace = true
 shlex.workspace = true
 percent-encoding.workspace = true
 serde_path_to_error.workspace = true

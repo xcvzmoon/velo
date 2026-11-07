@@ -5,6 +5,7 @@ mod config;
 mod http_options;
 mod imports;
 mod metrics;
+mod preview;
 mod runner;
 mod threshold;
 mod transport;
@@ -19,6 +20,8 @@ pub use http_options::{HttpProtocol, MultipartPart, RequestAuth};
 #[doc(inline)]
 pub use imports::{ImportFormat, ImportedRequest, import_requests};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
+#[doc(inline)]
+pub use preview::{PreviewResponse, preview_request};
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
 pub use threshold::{
     Threshold, ThresholdMetric, ThresholdOperator, ThresholdResult, ThresholdStatus,
