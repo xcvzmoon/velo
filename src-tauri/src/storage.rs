@@ -6,7 +6,18 @@ use velo_engine::{RunConfig, RunError, RunSnapshot, RunUpdate};
 
 pub(crate) struct Store {
     connection: Connection,
-    _ownership: Option<std::fs::File>,
+    _ownership: Option<StoreOwnership>,
+}
+
+/// Releases database ownership when the store ends, even if a child inherited the descriptor.
+struct StoreOwnership(std::fs::File);
+
+impl Drop for StoreOwnership {
+    fn drop(&mut self) {
+        if let Err(error) = self.0.unlock() {
+            tracing::warn!(code = "STORAGE_UNLOCK_FAILED", kind = ?error.kind(), "Database ownership could not be released explicitly");
+        }
+    }
 }
 
 pub(crate) fn failure() -> RunError {
@@ -51,7 +62,7 @@ impl Store {
         ownership.try_lock().map_err(failure_from)?;
         let connection = Connection::open(path).map_err(failure_from)?;
         let mut store = Self::initialize(connection)?;
-        store._ownership = Some(ownership);
+        store._ownership = Some(StoreOwnership(ownership));
         Ok(store)
     }
 
@@ -576,5 +587,16 @@ mod tests {
         assert!(Store::open(&path).is_err());
         drop(first);
         assert!(Store::open(&path).is_ok());
+    }
+    #[test]
+    fn store_lifetime_releases_ownership_when_a_descriptor_is_duplicated() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.sqlite3");
+        let store = Store::open(&path).unwrap();
+        let duplicate = store._ownership.as_ref().unwrap().0.try_clone().unwrap();
+        drop(store);
+        let reopened = Store::open(&path).unwrap();
+        drop(duplicate);
+        drop(reopened);
     }
 }
