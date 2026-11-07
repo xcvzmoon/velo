@@ -8,6 +8,7 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
+cookie_store.workspace = true
 aho-corasick.workspace = true
 shlex.workspace = true
 percent-encoding.workspace = true

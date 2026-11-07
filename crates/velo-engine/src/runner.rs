@@ -1,3 +1,5 @@
+mod scenarios;
+
 use std::{
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
@@ -58,6 +60,8 @@ impl RunState {
 /// ```
 #[derive(Clone, Debug, Serialize, TS)]
 pub struct RunSnapshot {
+    /// Separate scenario iterations, fixed step populations and lifecycle outcomes.
+    pub scenarios: Option<crate::ScenarioReport>,
     /// Monotonically increasing application-instance identifier, encoded as decimal.
     pub run_id: String,
     /// Lifecycle state, terminal only after cleanup.
@@ -134,7 +138,7 @@ pub struct RunUpdate {
 
 /// Arrival admission accounting, independent of HTTP request outcomes.
 ///
-/// After cleanup, offered equals started requests plus both drop reasons. Counters
+/// After cleanup, offered equals started iterations plus drop reasons. Counters
 /// are decimal strings on IPC. No pending iteration queue or per-slot history exists.
 ///
 /// # Examples
@@ -167,6 +171,7 @@ pub struct ArrivalSnapshot {
 }
 
 struct Progress {
+    scenarios: Option<crate::scenario_metrics::ScenarioMetrics>,
     state: RunState,
     metrics: Metrics,
     arrival: ArrivalSnapshot,
@@ -176,6 +181,7 @@ struct Progress {
     deadline: Option<Instant>,
     scheduling_end: Option<Instant>,
     finished: Option<Instant>,
+    load_finished: Option<Instant>,
     desired_vus: u32,
     retiring_vus: u32,
     active_vus: u32,
@@ -193,6 +199,7 @@ struct Run {
     stop: CancellationToken,
     progress: Mutex<Progress>,
     diagnostics: crate::transport::FailureDiagnostics,
+    setup_session: Mutex<crate::scenario_runtime::Session>,
 }
 
 impl Run {
@@ -214,7 +221,10 @@ impl Run {
     }
 
     fn snapshot_locked(&self, progress: &Progress) -> RunSnapshot {
-        let now = progress.finished.unwrap_or_else(Instant::now);
+        let now = progress
+            .load_finished
+            .or(progress.finished)
+            .unwrap_or_else(Instant::now);
         let start = progress.started.unwrap_or(now);
         let end = progress.scheduling_end.unwrap_or(now);
         let elapsed = now.saturating_duration_since(start);
@@ -227,6 +237,10 @@ impl Run {
             Vec::new()
         };
         RunSnapshot {
+            scenarios: progress
+                .scenarios
+                .as_ref()
+                .map(crate::scenario_metrics::ScenarioMetrics::snapshot),
             thresholds,
             run_id: self.id.clone(),
             state: progress.state,
@@ -324,6 +338,9 @@ impl RunManager {
     /// Dataset preparation also returns INVALID_DATASET or DATASET_BUDGET_EXCEEDED.
     /// Response checks can return INVALID_ASSERTION, INVALID_INSPECTION_LIMITS, or
     /// INSPECTION_BUDGET_EXCEEDED before allocating worker inspection buffers.
+    /// Scenario validation also returns INVALID_SCENARIO, SCENARIO_BUDGET_EXCEEDED,
+    /// or SESSION_BUDGET_EXCEEDED. Every setup, load and cleanup target must share
+    /// the reviewed origin; session references cannot alter scheme or authority.
     /// All records are checked before traffic; every record must target the reviewed origin. Input
     /// secrets are omitted. Multipart preparation opens and closes files to validate
     /// readability; call this synchronous API from a blocking thread for file inputs.
@@ -384,23 +401,25 @@ impl RunManager {
                 None,
             ));
         }
-        let config =
-            if config.data.is_some() || matches!(&config.body, crate::RequestBody::Multipart(_)) {
-                tokio::task::spawn_blocking(move || validate(config))
-                    .await
-                    .map_err(|error| {
-                        if error.is_panic() {
-                            std::panic::resume_unwind(error.into_panic());
-                        }
-                        RunError::new(
-                            "RUN_PREPARATION_FAILED",
-                            "Request preparation could not complete.",
-                            None,
-                        )
-                    })??
-            } else {
-                validate(config)?
-            };
+        let config = if config.data.is_some()
+            || config.scenarios.is_some()
+            || matches!(&config.body, crate::RequestBody::Multipart(_))
+        {
+            tokio::task::spawn_blocking(move || validate(config))
+                .await
+                .map_err(|error| {
+                    if error.is_panic() {
+                        std::panic::resume_unwind(error.into_panic());
+                    }
+                    RunError::new(
+                        "RUN_PREPARATION_FAILED",
+                        "Request preparation could not complete.",
+                        None,
+                    )
+                })??
+        } else {
+            validate(config)?
+        };
         let mut state = self.state.lock().await;
         if let Some(current) = &mut state.current {
             if !current.run.lock().state.is_terminal() {
@@ -428,12 +447,23 @@ impl RunManager {
             thresholds: config.thresholds.clone(),
             stop: CancellationToken::new(),
             diagnostics: crate::transport::FailureDiagnostics::default(),
+            setup_session: Mutex::default(),
             progress: Mutex::new(Progress {
+                scenarios: config
+                    .scenarios
+                    .as_ref()
+                    .map(|plan| crate::scenario_metrics::ScenarioMetrics::new(&plan.definition)),
                 state: RunState::Starting,
-                metrics: Metrics::configured(
-                    &config.assertions.definitions,
-                    config.inspection.clone(),
-                ),
+                metrics: {
+                    let mut metrics = Metrics::configured(
+                        &config.assertions.definitions,
+                        config.inspection.clone(),
+                    );
+                    if config.scenarios.is_some() {
+                        metrics.scenarios();
+                    }
+                    metrics
+                },
                 arrival: ArrivalSnapshot::default(),
                 sequence: 0,
                 sampled_us: 0,
@@ -441,6 +471,7 @@ impl RunManager {
                 deadline: None,
                 scheduling_end: None,
                 finished: None,
+                load_finished: None,
                 desired_vus: 0,
                 retiring_vus: 0,
                 active_vus: 0,
@@ -616,6 +647,29 @@ fn task_failed(result: Result<(), JoinError>) -> bool {
 }
 
 async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
+    if let Some(plan) = &config.scenarios {
+        let mut session = crate::scenario_runtime::Session::default();
+        let outcome = scenarios::phase(
+            &run,
+            &config,
+            plan,
+            &mut session,
+            crate::ScenarioPhase::Setup,
+        )
+        .await;
+        *run.setup_session
+            .lock()
+            .expect("setup session poisoned by a programming panic") = session;
+        if matches!(
+            outcome,
+            crate::PhaseOutcome::Failed | crate::PhaseOutcome::Cancelled
+        ) {
+            if outcome == crate::PhaseOutcome::Failed {
+                run.lock().failure_code = Some("SETUP_FAILED".into());
+            }
+            run.stop.cancel();
+        }
+    }
     let started = Instant::now();
     let deadline = started + config.duration;
     {
@@ -636,7 +690,7 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
         crate::Workload::Arrival { rate, .. } => Some(rate),
         _ => None,
     };
-    if let Some(rate) = arrival_rate {
+    if let Some(rate) = arrival_rate.filter(|_| !run.stop.is_cancelled()) {
         failed = schedule_arrivals(&run, &config, &mut workers, started, rate).await;
     }
     while arrival_rate.is_none() {
@@ -742,6 +796,30 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
     while let Some(result) = workers.join_next().await {
         failed |= task_failed(result);
     }
+    run.lock().load_finished = Some(Instant::now());
+    if let Some(plan) = &config.scenarios {
+        let mut session = run
+            .setup_session
+            .lock()
+            .expect("setup session poisoned by a programming panic")
+            .clone();
+        let outcome = scenarios::phase(
+            &run,
+            &config,
+            plan,
+            &mut session,
+            crate::ScenarioPhase::Cleanup,
+        )
+        .await;
+        if matches!(
+            outcome,
+            crate::PhaseOutcome::Failed | crate::PhaseOutcome::Cancelled
+        ) {
+            run.lock()
+                .failure_code
+                .get_or_insert_with(|| "CLEANUP_FAILED".into());
+        }
+    }
     config.upload_stop.cancel();
     let mut uploads = config.uploads.lock().await;
     while let Some(result) = uploads.join_next().await {
@@ -838,7 +916,10 @@ async fn schedule_arrivals(
             progress.arrival.dataset_drops += 1;
             break;
         };
-        progress.metrics.admission();
+        let scenario = scenarios::admit(&mut progress, config.scenarios.as_ref());
+        if scenario.is_none() {
+            progress.metrics.admission();
+        }
         progress.active_vus += 1;
         progress.max_vus = progress.max_vus.max(progress.active_vus);
         let worker = Worker {
@@ -846,6 +927,10 @@ async fn schedule_arrivals(
             retire: CancellationToken::new(),
             finished: CancellationToken::new(),
         };
+        if let Some(scenario) = scenario {
+            workers.spawn(scenarios::arrival(worker, config.clone(), record, scenario));
+            continue;
+        }
         let attempt = Attempt {
             run: run.clone(),
             started: now,
@@ -989,6 +1074,10 @@ impl Drop for Attempt {
 }
 
 async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: Instant) {
+    if config.scenarios.is_some() {
+        scenarios::worker(worker, config, deadline).await;
+        return;
+    }
     let mut cached = None;
     loop {
         let record;

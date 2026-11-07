@@ -9,6 +9,9 @@ mod imports;
 mod metrics;
 mod preview;
 mod runner;
+mod scenario;
+mod scenario_metrics;
+mod scenario_runtime;
 mod threshold;
 mod transport;
 mod workload;
@@ -35,6 +38,15 @@ pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
 #[doc(inline)]
 pub use preview::{PreviewResponse, preview_request};
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
+#[doc(inline)]
+pub use scenario::{
+    Extraction, ExtractionSource, Scenario, ScenarioPlan, ScenarioRequest, ScenarioStep,
+    StepFailure,
+};
+#[doc(inline)]
+pub use scenario_metrics::{
+    PhaseOutcome, ScenarioPhase, ScenarioReport, ScenarioTotals, StepTotals,
+};
 pub use threshold::{
     Threshold, ThresholdMetric, ThresholdOperator, ThresholdResult, ThresholdStatus,
 };

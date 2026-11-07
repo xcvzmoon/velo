@@ -32,6 +32,7 @@ const population: LatencySnapshot = {
 
 function snapshot(runId = '1', seconds = 1): RunSnapshot {
   return {
+    scenarios: null,
     dataset: null,
     thresholds: [],
     run_id: runId,

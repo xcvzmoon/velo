@@ -141,6 +141,10 @@ impl Default for ResourceBudget {
 #[derive(Clone, Deserialize, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct RunConfig {
+    /// Optional multi-step journeys; absent runs the standalone request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub scenarios: Option<crate::ScenarioPlan>,
     /// Absolute HTTP(S) URL without embedded credentials or a fragment.
     pub url: String,
     /// Logical HTTP method. GET and HEAD reject request bodies.
@@ -205,6 +209,7 @@ impl std::fmt::Debug for RunConfig {
 impl Default for RunConfig {
     fn default() -> Self {
         Self {
+            scenarios: None,
             url: String::new(),
             method: RequestMethod::GET,
             headers: Vec::new(),
@@ -287,11 +292,13 @@ pub struct RunConfirmation {
 }
 
 pub(crate) struct PreparedRequest {
+    pub scenarios: Option<crate::scenario_runtime::PreparedPlan>,
     pub request: reqwest::Request,
     pub multipart: Option<Vec<crate::http_options::PreparedPart>>,
 }
 
 pub(crate) struct ValidatedConfig {
+    pub scenarios: Option<crate::scenario_runtime::PreparedPlan>,
     pub assertions: crate::assertions::PreparedAssertions,
     pub inspection: crate::InspectionLimits,
     pub dataset_requests: Box<[PreparedRequest]>,
@@ -303,7 +310,7 @@ pub(crate) struct ValidatedConfig {
     pub multipart: Option<Vec<crate::http_options::PreparedPart>>,
     pub max_redirects: u32,
     pub timeout: Duration,
-    pub uploads: tokio::sync::Mutex<tokio::task::JoinSet<()>>,
+    pub uploads: std::sync::Arc<tokio::sync::Mutex<tokio::task::JoinSet<()>>>,
     pub upload_stop: tokio_util::sync::CancellationToken,
     pub client: Client,
     pub schedule: Schedule,
@@ -313,6 +320,72 @@ pub(crate) struct ValidatedConfig {
 }
 
 pub(crate) fn validate(mut config: RunConfig) -> Result<ValidatedConfig, RunError> {
+    let plan = config.scenarios.take();
+    let mut source = config.clone();
+    source.data = None;
+    let mut validated = validate_data(config)?;
+    if let Some(plan) = plan {
+        let prepared = crate::scenario_runtime::prepare(
+            plan,
+            &source,
+            &validated.client,
+            &validated.confirmation.origin,
+        )?;
+        let mut bytes = crate::scenario_runtime::retained_bytes(&prepared)?;
+        let mut worker_bytes = bytes;
+        for record in &validated.dataset_requests {
+            let Some(record_plan) = &record.scenarios else {
+                return Err(crate::scenario_runtime::invalid(
+                    "Every dataset record must contain the scenario plan.",
+                ));
+            };
+            if !crate::scenario_runtime::same_identities(
+                &prepared.definition,
+                &record_plan.definition,
+            ) {
+                return Err(crate::scenario_runtime::invalid(
+                    "Dataset records must preserve configured identities, weights and seed.",
+                ));
+            }
+            let record_bytes = crate::scenario_runtime::retained_bytes(record_plan)?;
+            bytes = bytes.saturating_add(record_bytes);
+            worker_bytes = worker_bytes.max(record_bytes);
+        }
+        let workers = validated.confirmation.vus as usize;
+        let retained = bytes.saturating_add(worker_bytes.saturating_mul(workers));
+        if retained.saturating_add(validated.retained_bytes)
+            > source.budget.max_request_bytes.min(16_777_216) as usize
+        {
+            return Err(RunError::new(
+                "SCENARIO_BUDGET_EXCEEDED",
+                "Scenario templates and worker requests exceed the request byte budget.",
+                Some("scenarios"),
+            ));
+        }
+        if (workers + 1).saturating_mul(
+            crate::scenario_runtime::SESSION_BYTES + source.inspection.body_bytes as usize,
+        ) > 16_777_216
+        {
+            return Err(RunError::new(
+                "SESSION_BUDGET_EXCEEDED",
+                "Session state and response buffers exceed 16 MiB. Reduce peak workers or inspection bytes.",
+                Some("scenarios"),
+            ));
+        }
+        validated.scenarios = Some(prepared);
+    } else if validated
+        .dataset_requests
+        .iter()
+        .any(|record| record.scenarios.is_some())
+    {
+        return Err(crate::scenario_runtime::invalid(
+            "Dataset scenarios require a run scenario plan.",
+        ));
+    }
+    Ok(validated)
+}
+
+fn validate_data(mut config: RunConfig) -> Result<ValidatedConfig, RunError> {
     let data = config.data.take();
     let Some(data) = data else {
         return validate_request(config, None);
@@ -347,6 +420,7 @@ pub(crate) fn validate(mut config: RunConfig) -> Result<ValidatedConfig, RunErro
         input.query = record.query;
         input.body = record.body;
         input.auth = record.auth;
+        let plan = record.scenarios;
         let request = validate_request(input, Some(base.client.clone())).map_err(|mut error| {
             error.field = Some(format!(
                 "dataset.records.{index}.{}",
@@ -370,19 +444,69 @@ pub(crate) fn validate(mut config: RunConfig) -> Result<ValidatedConfig, RunErro
                 Some("dataset"),
             ));
         }
+        let scenarios = plan
+            .map(|plan| {
+                crate::scenario_runtime::prepare(
+                    plan,
+                    &config,
+                    &base.client,
+                    &base.confirmation.origin,
+                )
+            })
+            .transpose()?;
+        if let Some(plan) = &scenarios {
+            retained = retained.saturating_add(crate::scenario_runtime::retained_bytes(plan)?);
+            if retained.saturating_add(worker_bytes) > budget {
+                return Err(RunError::new(
+                    "SCENARIO_BUDGET_EXCEEDED",
+                    "Dataset scenario templates exceed the request byte budget.",
+                    Some("scenarios"),
+                ));
+            }
+        }
         requests.push(PreparedRequest {
+            scenarios,
             request: request.request,
             multipart: request.multipart,
         });
     }
     base.confirmation.dataset = Some(data.definition.summary(requests.len()));
+    base.retained_bytes = base.retained_bytes.saturating_add(
+        requests
+            .iter()
+            .map(|request| {
+                request.request.url().as_str().len()
+                    + request
+                        .request
+                        .body()
+                        .and_then(reqwest::Body::as_bytes)
+                        .map_or(0, <[u8]>::len)
+                    + request
+                        .request
+                        .headers()
+                        .iter()
+                        .map(|(name, value)| {
+                            name.as_str().len() + value.len() + std::mem::size_of::<NameValue>()
+                        })
+                        .sum::<usize>()
+            })
+            .sum::<usize>(),
+    );
     base.dataset_requests = requests.into_boxed_slice();
     Ok(base)
 }
 
-fn validate_request(
+pub(crate) fn validate_request(
     config: RunConfig,
     shared_client: Option<Client>,
+) -> Result<ValidatedConfig, RunError> {
+    validate_request_parts(config, shared_client, None)
+}
+
+pub(crate) fn validate_request_parts(
+    config: RunConfig,
+    shared_client: Option<Client>,
+    cached_parts: Option<&[crate::http_options::PreparedPart]>,
 ) -> Result<ValidatedConfig, RunError> {
     let assertions = crate::assertions::prepare(config.assertions.clone(), &config.inspection)?;
     let invalid = |message, field| RunError::new("INVALID_RUN_CONFIG", message, Some(field));
@@ -579,7 +703,10 @@ fn validate_request(
             request = request.form(&pairs);
         }
         RequestBody::Multipart(parts) => {
-            multipart = Some(crate::http_options::prepare_parts(parts)?);
+            multipart = Some(crate::http_options::prepare_parts_cached(
+                parts,
+                cached_parts,
+            )?);
         }
         RequestBody::Text(value) => {
             request = request.body(value);
@@ -623,6 +750,7 @@ fn validate_request(
         ));
     }
     Ok(ValidatedConfig {
+        scenarios: None,
         assertions,
         inspection: config.inspection,
         dataset_requests: Box::default(),
@@ -650,7 +778,7 @@ fn validate_request(
         multipart,
         max_redirects: config.max_redirects,
         timeout: Duration::from_millis(config.timeout_ms.into()),
-        uploads: tokio::sync::Mutex::new(tokio::task::JoinSet::new()),
+        uploads: std::sync::Arc::new(tokio::sync::Mutex::new(tokio::task::JoinSet::new())),
         upload_stop: tokio_util::sync::CancellationToken::new(),
         request,
         client,

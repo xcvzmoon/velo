@@ -252,7 +252,7 @@ pub(crate) async fn execute(
             bytes,
             &cancel,
             &uploads_done,
-            None,
+            Capture::default(),
             observation,
         ),
     )
@@ -283,7 +283,10 @@ pub(crate) async fn preview(
             &mut bytes,
             &cancel,
             &uploads_done,
-            Some(&mut response),
+            Capture {
+                preview: Some(&mut response),
+                exchange: None,
+            },
             &mut observation,
         ),
     )
@@ -299,15 +302,58 @@ pub(crate) async fn preview(
     Ok(response)
 }
 
+#[derive(Default)]
+struct Capture<'a, 'session> {
+    preview: Option<&'a mut crate::preview::PreviewResponse>,
+    exchange: Option<&'a mut crate::scenario_runtime::Exchange<'session>>,
+}
+
+pub(crate) async fn execute_scenario(
+    config: &ValidatedConfig,
+    bytes: &mut u64,
+    observation: &mut crate::assertions::Observation,
+    exchange: &mut crate::scenario_runtime::Exchange<'_>,
+) -> Result<bool, Failure> {
+    let cancel = config.upload_stop.child_token();
+    let _cleanup = cancel.clone().drop_guard();
+    let uploads_done = TaskTracker::new();
+    let result = tokio::time::timeout(
+        config.timeout,
+        consume(
+            config,
+            None,
+            bytes,
+            &cancel,
+            &uploads_done,
+            Capture {
+                preview: None,
+                exchange: Some(exchange),
+            },
+            observation,
+        ),
+    )
+    .await
+    .map_err(|_| Failure::Timeout)
+    .and_then(|result| result);
+    cancel.cancel();
+    uploads_done.close();
+    uploads_done.wait().await;
+    result
+}
+
 async fn consume(
     config: &ValidatedConfig,
     record: Option<&crate::config::PreparedRequest>,
     bytes: &mut u64,
     cancel: &CancellationToken,
     uploads_done: &TaskTracker,
-    mut preview: Option<&mut crate::preview::PreviewResponse>,
+    capture: Capture<'_, '_>,
     observation: &mut crate::assertions::Observation,
 ) -> Result<bool, Failure> {
+    let Capture {
+        mut preview,
+        mut exchange,
+    } = capture;
     let template = record.map_or(&config.request, |record| &record.request);
     let mut url = template.url().clone();
     let mut method = template.method().clone();
@@ -319,7 +365,25 @@ async fn consume(
         let mut request = request(config, record, include_body, &hop_cancel, uploads_done).await?;
         *request.url_mut() = url.clone();
         *request.method_mut() = method.clone();
+        if let Some(exchange) = exchange.as_deref_mut() {
+            match exchange.session.request_cookies(&url) {
+                Ok(Some(cookies)) if !request.headers().contains_key(header::COOKIE) => {
+                    request.headers_mut().insert(header::COOKIE, cookies);
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    exchange.error = Some(error);
+                    return Err(Failure::Transport(Category::Request));
+                }
+            }
+        }
         let mut response = config.client.execute(request).await?;
+        if let Some(exchange) = exchange.as_deref_mut()
+            && let Err(error) = exchange.session.response_cookies(response.headers(), &url)
+        {
+            exchange.error = Some(error);
+            return Err(Failure::Transport(Category::Request));
+        }
         let status = response.status();
         let location = response.headers().get(header::LOCATION).cloned();
         let final_response = config.max_redirects == 0
@@ -347,7 +411,13 @@ async fn consume(
                 });
             }
         }
-        let inspect_body = final_response && config.assertions.needs_body();
+        let inspect_body = final_response
+            && (config.assertions.needs_body()
+                || exchange.as_ref().is_some_and(|exchange| {
+                    exchange.step.extractions.iter().any(|extraction| {
+                        matches!(extraction.source, crate::ExtractionSource::Json { .. })
+                    })
+                }));
         let body_limit = if preview.is_some() {
             65_536
         } else {
@@ -387,6 +457,16 @@ async fn consume(
                 &body[..body.len().min(config.inspection.body_bytes as usize)],
                 observation.truncated,
             );
+            if let Some(exchange) = exchange.as_deref_mut()
+                && let Err(error) = exchange.session.extract(
+                    &exchange.step.extractions,
+                    response.headers(),
+                    &body,
+                    truncated,
+                )
+            {
+                exchange.error = Some(error);
+            }
             return Ok((200..400).contains(&status.as_u16()));
         }
         if followed >= config.max_redirects {

@@ -9,6 +9,19 @@ fn main() {
         CommandError::decl(&ts_rs::Config::default())
     );
     let config = ts_rs::Config::default();
+    println!("export {};", velo_engine::ScenarioPlan::decl(&config));
+    println!("export {};", velo_engine::Scenario::decl(&config));
+    println!("export {};", velo_engine::ScenarioStep::decl(&config));
+    println!("export {};", velo_engine::ScenarioRequest::decl(&config));
+    println!("export {};", velo_engine::StepFailure::decl(&config));
+    println!("export {};", velo_engine::Extraction::decl(&config));
+    println!("export {};", velo_engine::ExtractionSource::decl(&config));
+    println!("export {};", velo_engine::ScenarioReport::decl(&config));
+    println!("export {};", velo_engine::ScenarioTotals::decl(&config));
+    println!("export {};", velo_engine::StepTotals::decl(&config));
+    println!("export {};", velo_engine::PhaseOutcome::decl(&config));
+    println!("export {};", velo_engine::ScenarioPhase::decl(&config));
+
     println!("export {};", velo_engine::Assertion::decl(&config));
     println!("export {};", velo_engine::AssertionRule::decl(&config));
     println!("export {};", velo_engine::InspectionLimits::decl(&config));

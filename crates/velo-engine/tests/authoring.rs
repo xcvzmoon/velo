@@ -428,3 +428,115 @@ fn checked_in_example_round_trips_and_prepares_with_local_secret_binding() {
         RunManager::prepare(config).unwrap();
     }
 }
+
+fn scenario_definition() -> TestDefinition {
+    let mut definition = TestDefinition::default();
+    definition.config.url = "https://example.com/".into();
+    definition.variables = BTreeMap::from([
+        ("base".into(), "https://example.com".into()),
+        ("customer".into(), "shared".into()),
+    ]);
+    definition.environments = BTreeMap::from([(
+        "staging".into(),
+        BTreeMap::from([("customer".into(), "environment".into())]),
+    )]);
+    definition.config.scenarios = Some(serde_json::from_value(json!({
+        "scenarios": [{"id": "checkout", "weight": 1, "steps": [{
+            "id": "order", "on_failure": "stop", "request": {
+                "url": "{{base}}/orders/{{session:id}}", "method": "POST",
+                "headers": [{"name": "x-customer", "value": "{{customer}}"}],
+                "query": [], "body": {"kind": "json", "value": "{\"token\":\"{{session:token}}\",\"customer\":\"{{customer}}\"}"},
+                "auth": {"kind": "bearer", "token": "{{secret:token}}"}
+            }
+        }]}]
+    })).unwrap());
+    definition
+}
+
+#[test]
+fn scenario_static_resolution_preserves_session_tokens_and_environment_precedence() {
+    let definition = scenario_definition();
+    let config = definition
+        .resolve(Some("staging"), |_| Ok("PRIVATE_TOKEN".into()))
+        .unwrap();
+    let plan = config.scenarios.unwrap();
+    let request = &plan.scenarios[0].steps[0].request;
+    assert_eq!(request.url, "https://example.com/orders/{{session:id}}");
+    assert_eq!(request.headers[0].value, "environment");
+    let RequestBody::Json(body) = &request.body else {
+        panic!("expected JSON")
+    };
+    let body: serde_json::Value = serde_json::from_str(body).unwrap();
+    assert_eq!(body["token"], "{{session:token}}");
+    assert_eq!(body["customer"], "environment");
+    assert!(
+        !serde_json::to_string(&definition)
+            .unwrap()
+            .contains("PRIVATE_TOKEN")
+    );
+}
+
+#[test]
+fn scenario_binding_rejects_reference_injection_and_reserved_namespaces() {
+    let mut definition = scenario_definition();
+    definition
+        .variables
+        .insert("customer".into(), "{{session:injected}}".into());
+    assert_eq!(
+        definition
+            .resolve(None, |_| Ok("PRIVATE_TOKEN".into()))
+            .unwrap_err()
+            .code,
+        "INVALID_TEST_DEFINITION"
+    );
+    definition
+        .variables
+        .insert("session:token".into(), "spoofed".into());
+    assert_eq!(
+        definition
+            .resolve(None, |_| Ok("PRIVATE_TOKEN".into()))
+            .unwrap_err()
+            .field
+            .as_deref(),
+        Some("variables")
+    );
+}
+
+#[test]
+fn scenario_dataset_records_resolve_independently_and_keep_journeys() {
+    let mut definition = scenario_definition();
+    definition.dataset = Some(
+        serde_json::from_value(json!({
+            "lifetime": "iteration", "allocation": "sequential", "exhaustion": "stop", "seed": 0,
+            "source": {"kind": "json", "mapping": {"customer": "customer"}}
+        }))
+        .unwrap(),
+    );
+    let rows = vec![
+        BTreeMap::from([("customer".into(), "first".into())]),
+        BTreeMap::from([("customer".into(), "second".into())]),
+    ];
+    let config = definition
+        .resolve_data(
+            Some("staging"),
+            &rows,
+            || false,
+            |_| Ok("PRIVATE_TOKEN".into()),
+        )
+        .unwrap();
+    let data = config.data.unwrap();
+    assert_eq!(
+        data.requests[0].scenarios.as_ref().unwrap().scenarios[0].steps[0]
+            .request
+            .headers[0]
+            .value,
+        "first"
+    );
+    assert_eq!(
+        data.requests[1].scenarios.as_ref().unwrap().scenarios[0].steps[0]
+            .request
+            .headers[0]
+            .value,
+        "second"
+    );
+}
