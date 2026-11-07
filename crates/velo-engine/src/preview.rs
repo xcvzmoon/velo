@@ -56,7 +56,7 @@ impl std::fmt::Debug for PreviewResponse {
 /// Dropping the future cancels upload producers; normal completion waits for their cleanup.
 ///
 /// # Errors
-/// Returns engine validation errors before network access, `PREVIEW_TIMEOUT`, or
+/// Returns engine validation errors before network access, `RUN_PREPARATION_FAILED`, `PREVIEW_TIMEOUT`, or
 /// `PREVIEW_TRANSPORT_FAILED`. Infrastructure error messages and request data are omitted.
 ///
 /// # Examples
@@ -69,12 +69,25 @@ impl std::fmt::Debug for PreviewResponse {
 /// # Ok(()) }
 /// ```
 pub async fn preview_request(
-    config: RunConfig,
+    mut config: RunConfig,
     secrets: &[String],
 ) -> Result<PreviewResponse, RunError> {
+    let data = config.data.take();
     let request = serde_json::to_value(&config)
         .map_err(|_| RunError::new("INVALID_RUN_CONFIG", "Request could not be prepared.", None))?;
-    let validated = crate::config::validate(config)?;
+    config.data = data;
+    let validated = tokio::task::spawn_blocking(move || crate::config::validate(config))
+        .await
+        .map_err(|error| {
+            if error.is_panic() {
+                std::panic::resume_unwind(error.into_panic());
+            }
+            RunError::new(
+                "RUN_PREPARATION_FAILED",
+                "Request preparation could not complete.",
+                None,
+            )
+        })??;
     let mut response =
         crate::transport::preview(&validated)
             .await
