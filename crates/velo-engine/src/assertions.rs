@@ -111,7 +111,7 @@ impl Default for InspectionLimits {
 /// assert_eq!(serde_json::to_value(velo_engine::CheckOutcome::Truncated)?, "truncated");
 /// # Ok::<(), serde_json::Error>(())
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckOutcome {
     /// Condition matched.
@@ -189,7 +189,7 @@ pub struct AssertionTotals {
 /// assert!(sample.cause.len() <= 32);
 /// # }
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, TS)]
 pub struct ResponseSample {
     /// Zero-based assertion index, or None for HTTP, transport, timeout or cancellation causes.
     pub assertion: Option<u32>,

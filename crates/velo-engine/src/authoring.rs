@@ -466,11 +466,85 @@ impl TestDefinition {
         self.resolve_record(environment, &BTreeMap::new(), &mut secrets)
     }
 
+    /// Resolves one functional request while retaining explicit session references.
+    ///
+    /// # Arguments
+    /// * `environment` - Named environment, or `None` for shared variables only.
+    /// * `row` - One prepared dataset record, or an empty map when no dataset is configured.
+    /// * `secrets` - Retrieves referenced OS-store values; callers should cache values per run.
+    ///
+    /// # Returns
+    /// Request settings with dataset values overriding environment and shared values.
+    /// Session references remain for the shared session binder. This method sends no traffic.
+    ///
+    /// # Errors
+    /// Returns `INVALID_TEST_DEFINITION` for scenario/prepared-load input, `INVALID_DATASET`
+    /// for a mismatched record, or the same version and binding errors as [`Self::resolve`].
+    ///
+    /// # Examples
+    /// ```
+    /// let mut definition = velo_engine::TestDefinition::default();
+    /// definition.config.url = "https://example.com/{{session:item}}".into();
+    /// let config = definition.resolve_api(None, &Default::default(), |_| unreachable!())?;
+    /// assert!(config.url.contains("{{session:item}}"));
+    /// # Ok::<(), velo_engine::RunError>(())
+    /// ```
+    pub fn resolve_api(
+        &self,
+        environment: Option<&str>,
+        row: &BTreeMap<String, String>,
+        secrets: impl FnMut(&str) -> Result<String, RunError>,
+    ) -> Result<RunConfig, RunError> {
+        if self.config.scenarios.is_some() || self.config.data.is_some() {
+            return Err(invalid(
+                "config",
+                "Functional requests cannot contain a workload scenario or prepared load data.",
+            ));
+        }
+        if let Some(data) = &self.dataset {
+            data.validate()?;
+            let names: Vec<&str> = match &data.source {
+                crate::DataSource::Faker { fields, .. } => {
+                    fields.iter().map(|field| field.name.as_str()).collect()
+                }
+                crate::DataSource::Csv { mapping } | crate::DataSource::Json { mapping } => {
+                    mapping.keys().map(String::as_str).collect()
+                }
+            };
+            let bytes = row.iter().fold(0usize, |size, (name, value)| {
+                size.saturating_add(name.len()).saturating_add(value.len())
+            });
+            if row.len() != names.len()
+                || names.iter().any(|name| !row.contains_key(*name))
+                || bytes > self.config.budget.max_request_bytes.min(8_388_608) as usize
+            {
+                return Err(crate::dataset::invalid(
+                    "Prepared fields must match the dataset recipe and fit its byte budget.",
+                ));
+            }
+        } else if !row.is_empty() {
+            return Err(crate::dataset::invalid(
+                "Configure a dataset before supplying a record.",
+            ));
+        }
+        self.resolve_record_phase(environment, row, secrets, BindingPhase::Scenario)
+    }
+
     fn resolve_record(
         &self,
         environment: Option<&str>,
         row: &BTreeMap<String, String>,
         mut secrets: impl FnMut(&str) -> Result<String, RunError>,
+    ) -> Result<RunConfig, RunError> {
+        self.resolve_record_phase(environment, row, &mut secrets, BindingPhase::Standalone)
+    }
+
+    fn resolve_record_phase(
+        &self,
+        environment: Option<&str>,
+        row: &BTreeMap<String, String>,
+        mut secrets: impl FnMut(&str) -> Result<String, RunError>,
+        phase: BindingPhase,
     ) -> Result<RunConfig, RunError> {
         if self.version != 1 {
             return Err(RunError::new(
@@ -523,7 +597,7 @@ impl TestDefinition {
         }));
         let bindings = Bindings {
             values: variables,
-            phase: BindingPhase::Standalone,
+            phase,
         };
         let mut config = self.config.clone();
         resolve_request_fields(&mut config, &bindings, &mut secrets)?;
@@ -571,6 +645,10 @@ fn resolve_request_fields(
     }
     match &mut config.auth {
         RequestAuth::None => {}
+        RequestAuth::ApiKey { name, value, .. } => {
+            *name = substitute(name, "auth.name", variables, &mut secrets)?;
+            *value = substitute(value, "auth.value", variables, &mut secrets)?;
+        }
         RequestAuth::Bearer { token } => {
             *token = substitute(token, "auth.token", variables, &mut secrets)?
         }

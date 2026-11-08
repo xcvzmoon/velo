@@ -28,6 +28,16 @@ pub enum RequestAuth {
         /// Secret token, never returned in run snapshots.
         token: String,
     },
+    /// A named API key, placed in one header or one query parameter.
+    ApiKey {
+        /// Header or query parameter name; must not conflict with an explicit request field.
+        /// Header placement excludes framing, Authorization, Proxy-Authorization, and Cookie headers.
+        name: String,
+        /// Secret value, omitted from reports and Debug output.
+        value: String,
+        /// Explicit placement; query values can appear in server access logs.
+        placement: ApiKeyPlacement,
+    },
     /// Basic credentials. Username cannot contain a colon or control characters.
     Basic {
         /// User identifier; may be empty.
@@ -35,6 +45,23 @@ pub enum RequestAuth {
         /// Secret password; may be empty, but cannot contain control characters.
         password: String,
     },
+}
+
+/// Placement of an API key in a shared HTTP request.
+///
+/// # Examples
+/// ```
+/// let placement = velo_engine::ApiKeyPlacement::Header;
+/// assert_eq!(serde_json::to_value(placement)?, "header");
+/// # Ok::<(), serde_json::Error>(())
+/// ```
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, TS, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiKeyPlacement {
+    /// A single named HTTP header.
+    Header,
+    /// A single URL query parameter.
+    Query,
 }
 
 impl std::fmt::Debug for RequestAuth {
@@ -119,10 +146,33 @@ pub(crate) enum PreparedPart {
     },
 }
 
+pub(crate) fn credential_field(name: &str) -> bool {
+    let normalized = name.to_ascii_lowercase().replace(['-', '_'], "");
+    matches!(
+        normalized.as_str(),
+        "authorization"
+            | "proxyauthorization"
+            | "cookie"
+            | "apikey"
+            | "xapikey"
+            | "accesstoken"
+            | "xaccesstoken"
+            | "authtoken"
+            | "xauthtoken"
+            | "clientsecret"
+            | "password"
+            | "secret"
+            | "token"
+            | "xtoken"
+            | "sessionid"
+    )
+}
+
 pub(crate) fn auth_size(auth: &RequestAuth) -> usize {
     match auth {
         RequestAuth::None => 0,
         RequestAuth::Bearer { token } => token.len(),
+        RequestAuth::ApiKey { name, value, .. } => name.len().saturating_add(value.len()),
         RequestAuth::Basic { username, password } => username.len().saturating_add(password.len()),
     }
 }
@@ -169,6 +219,43 @@ pub(crate) fn authenticate(
     };
     match auth {
         RequestAuth::None => Ok(request),
+        RequestAuth::ApiKey {
+            name,
+            value,
+            placement,
+        } => {
+            if name.is_empty()
+                || value.is_empty()
+                || name.chars().chain(value.chars()).any(char::is_control)
+            {
+                return Err(invalid());
+            }
+            match placement {
+                ApiKeyPlacement::Header => {
+                    let name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                        .map_err(|_| invalid())?;
+                    if matches!(
+                        name,
+                        reqwest::header::HOST
+                            | reqwest::header::CONTENT_LENGTH
+                            | reqwest::header::TRANSFER_ENCODING
+                            | reqwest::header::AUTHORIZATION
+                            | reqwest::header::PROXY_AUTHORIZATION
+                            | reqwest::header::COOKIE
+                    ) {
+                        return Err(RunError::new(
+                            "INVALID_RUN_CONFIG",
+                            "Use a dedicated authentication control or an explicit credential header instead of an API key in a reserved HTTP header.",
+                            Some("auth"),
+                        ));
+                    }
+                    let mut value = HeaderValue::from_str(value).map_err(|_| invalid())?;
+                    value.set_sensitive(true);
+                    Ok(request.header(name, value))
+                }
+                ApiKeyPlacement::Query => Ok(request.query(&[(name, value)])),
+            }
+        }
         RequestAuth::Bearer { token } => {
             let base = token.trim_end_matches('=');
             if base.is_empty()
@@ -301,6 +388,37 @@ pub(crate) fn upload_buffer_bytes(parts: Option<&[PreparedPart]>) -> usize {
 mod tests {
     use super::*;
     use crate::{RequestMethod, RunConfig, RunManager};
+
+    #[test]
+    fn generated_and_explicit_authentication_headers_are_sensitive() {
+        let client = reqwest::Client::new();
+        let request = authenticate(
+            client.get("https://example.com"),
+            &RequestAuth::ApiKey {
+                name: "x-api-key".into(),
+                value: "private-key".into(),
+                placement: ApiKeyPlacement::Header,
+            },
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+        assert!(request.headers().get("x-api-key").unwrap().is_sensitive());
+        assert!(!format!("{request:?}").contains("private-key"));
+        for name in ["Authorization", "Proxy-Authorization", "Cookie"] {
+            let config = crate::config::validate(RunConfig {
+                url: "https://example.com".into(),
+                headers: vec![NameValue {
+                    name: name.into(),
+                    value: "private-value".into(),
+                }],
+                ..Default::default()
+            })
+            .unwrap();
+            assert!(config.request.headers().get(name).unwrap().is_sensitive());
+            assert!(!format!("{:?}", config.request).contains("private-value"));
+        }
+    }
 
     #[test]
     fn rejects_invalid_auth_and_conflicts_without_disclosing_credentials() {

@@ -3,8 +3,10 @@
 mod admission;
 mod assertions;
 mod authoring;
+mod collections;
 mod config;
 mod dataset;
+mod functional;
 mod http_options;
 mod imports;
 mod metrics;
@@ -28,6 +30,11 @@ pub use assertions::{
 };
 #[doc(inline)]
 pub use authoring::TestDefinition;
+#[doc(inline)]
+pub use collections::{
+    ApiCollection, CollectionDefaults, CollectionEntry, CollectionRequest,
+    validate_definition_credentials,
+};
 pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
@@ -36,12 +43,18 @@ pub use dataset::{
     DataAllocation, DataDefinition, DataExhaustion, DataField, DataGenerator, DataLifetime,
     DataRequest, DataSource, DataSummary, PreparedData,
 };
-pub use http_options::{HttpProtocol, MultipartPart, RequestAuth};
+#[doc(inline)]
+pub use functional::{
+    ApiCancellation, ApiSession, ApiSessionView, FunctionalKind, FunctionalResult, FunctionalRun,
+    FunctionalRunState, FunctionalState, api_row_indexes, send_api_request, validate_api_request,
+};
+#[doc(inline)]
+pub use http_options::{ApiKeyPlacement, HttpProtocol, MultipartPart, RequestAuth};
 #[doc(inline)]
 pub use imports::{ImportFormat, ImportedRequest, import_requests};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
 #[doc(inline)]
-pub use preview::{PreviewResponse, preview_request};
+pub use preview::{BodyFormat, PreviewResponse, preview_request, redact_response_fields};
 #[doc(inline)]
 pub use reporting::report_configuration;
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};

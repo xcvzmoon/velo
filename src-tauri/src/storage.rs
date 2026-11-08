@@ -7,7 +7,7 @@ use velo_engine::RunConfig;
 use velo_engine::{RunError, RunSnapshot, RunUpdate};
 
 pub(crate) struct Store {
-    connection: Connection,
+    pub(crate) connection: Connection,
     _ownership: Option<StoreOwnership>,
 }
 
@@ -97,6 +97,7 @@ impl Store {
                id TEXT PRIMARY KEY, name TEXT NOT NULL, remembered INTEGER NOT NULL,
                config TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS definitions (name TEXT PRIMARY KEY, source TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS api_collections (id TEXT PRIMARY KEY, source TEXT NOT NULL, position INTEGER NOT NULL);
              CREATE TABLE IF NOT EXISTS credential_cleanup (id TEXT PRIMARY KEY);
              UPDATE runs SET interrupted=1, incomplete=1 WHERE terminal=0;",
             )
@@ -105,6 +106,81 @@ impl Store {
             connection,
             _ownership: None,
         })
+    }
+
+    pub(crate) fn save_api_collection(
+        &self,
+        collection: &velo_engine::ApiCollection,
+    ) -> Result<(), RunError> {
+        collection.validate()?;
+        let allowed: bool = self.connection.query_row("SELECT (SELECT COUNT(*) FROM api_collections) < 100 OR EXISTS(SELECT 1 FROM api_collections WHERE id=?1)", [&collection.id], |row| row.get(0)).map_err(failure_from)?;
+        if !allowed {
+            return Err(RunError {
+                code: "COLLECTION_LIMIT_REACHED".into(),
+                message: "Delete a collection before adding another. The limit is 100 collections."
+                    .into(),
+                field: Some("collection".into()),
+            });
+        }
+        let source = serde_json::to_string(collection).map_err(failure_from)?;
+        self.connection.execute("INSERT INTO api_collections(id,source,position) VALUES (?1,?2,(SELECT COALESCE(MAX(position),0)+1 FROM api_collections)) ON CONFLICT(id) DO UPDATE SET source=excluded.source", params![collection.id, source]).map_err(failure_from)?;
+        Ok(())
+    }
+
+    pub(crate) fn api_collections(&self) -> Result<Vec<velo_engine::ApiCollection>, RunError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT source FROM api_collections ORDER BY position,id LIMIT 100")
+            .map_err(failure_from)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(failure_from)?;
+        let mut collections = Vec::new();
+        for source in rows {
+            let collection: velo_engine::ApiCollection =
+                serde_json::from_str(&source.map_err(failure_from)?).map_err(failure_from)?;
+            collection.validate()?;
+            collections.push(collection);
+        }
+        Ok(collections)
+    }
+
+    pub(crate) fn reorder_api_collections(&self, ids: &[String]) -> Result<(), RunError> {
+        let existing = self.api_collections()?;
+        let unique: std::collections::BTreeSet<&str> = ids.iter().map(String::as_str).collect();
+        if ids.len() != existing.len()
+            || unique.len() != ids.len()
+            || existing
+                .iter()
+                .any(|collection| !unique.contains(collection.id.as_str()))
+        {
+            return Err(RunError {
+                code: "COLLECTION_ORDER_INVALID".into(),
+                message: "Reorder the complete current list of collections.".into(),
+                field: Some("ids".into()),
+            });
+        }
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(failure_from)?;
+        for (position, id) in ids.iter().enumerate() {
+            transaction
+                .execute(
+                    "UPDATE api_collections SET position=?1 WHERE id=?2",
+                    params![u32::try_from(position).map_err(failure_from)?, id],
+                )
+                .map_err(failure_from)?;
+        }
+        transaction.commit().map_err(failure_from)?;
+        Ok(())
+    }
+
+    pub(crate) fn delete_api_collection(&self, id: &str) -> Result<(), RunError> {
+        self.connection
+            .execute("DELETE FROM api_collections WHERE id=?1", [id])
+            .map_err(failure_from)?;
+        Ok(())
     }
 
     pub(crate) fn save_definition(&self, name: &str, source: &str) -> Result<(), RunError> {
@@ -1107,5 +1183,91 @@ mod tests {
                 .update_metadata("missing", &Default::default())
                 .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod collection_tests {
+    use super::Store;
+    use velo_engine::{ApiCollection, CollectionEntry, RequestAuth};
+
+    #[test]
+    fn collections_reopen_preserve_order_and_delete_without_affecting_saved_tests() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.sqlite3");
+        {
+            let store = Store::open(&path).unwrap();
+            store.save_definition("saved-test", "source").unwrap();
+            let first = ApiCollection {
+                id: "first".into(),
+                name: "First".into(),
+                entries: vec![CollectionEntry::Request {
+                    id: "request".into(),
+                    name: "Saved request".into(),
+                    description: "Description".into(),
+                    notes: "Notes".into(),
+                    definition: Box::default(),
+                    inherit_auth: true,
+                    extractions: Vec::new(),
+                }],
+                ..Default::default()
+            };
+            store.save_api_collection(&first).unwrap();
+            store
+                .save_api_collection(&ApiCollection {
+                    id: "second".into(),
+                    ..Default::default()
+                })
+                .unwrap();
+            store
+                .reorder_api_collections(&["second".into(), "first".into()])
+                .unwrap();
+            let renamed = ApiCollection {
+                name: "Renamed".into(),
+                ..first
+            };
+            store.save_api_collection(&renamed).unwrap();
+            assert!(
+                store
+                    .reorder_api_collections(&["first".into(), "first".into()])
+                    .is_err()
+            );
+        }
+        let store = Store::open(&path).unwrap();
+        let collections = store.api_collections().unwrap();
+        assert_eq!(
+            collections
+                .iter()
+                .map(|collection| collection.id.as_str())
+                .collect::<Vec<_>>(),
+            ["second", "first"]
+        );
+        assert_eq!(collections[1].name, "Renamed");
+        assert_eq!(
+            collections[1].request("request").unwrap().name,
+            "Saved request"
+        );
+        store.delete_api_collection("first").unwrap();
+        assert_eq!(store.api_collections().unwrap().len(), 1);
+        assert_eq!(store.definition("saved-test").unwrap(), "source");
+    }
+
+    #[test]
+    fn collections_refuse_literal_credentials_before_persistence() {
+        let store = Store::initialize(rusqlite::Connection::open_in_memory().unwrap()).unwrap();
+        let collection = ApiCollection {
+            defaults: velo_engine::CollectionDefaults {
+                auth: Some(RequestAuth::Bearer {
+                    token: "private-token".into(),
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            store.save_api_collection(&collection).unwrap_err().code,
+            "COLLECTION_SECRET_REQUIRED"
+        );
+        assert!(store.api_collections().unwrap().is_empty());
     }
 }

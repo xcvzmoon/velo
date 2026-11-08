@@ -510,6 +510,24 @@ fn validate_data(mut config: RunConfig) -> Result<ValidatedConfig, RunError> {
     Ok(base)
 }
 
+/// Only literal loopback IPs are trusted for cleartext local credential tests; hostnames may resolve elsewhere.
+pub(crate) fn insecure_auth_target(url: &Url) -> bool {
+    if url.scheme() != "http" {
+        return false;
+    }
+    let loopback = url
+        .host_str()
+        .and_then(|host| {
+            let host = host
+                .strip_prefix('[')
+                .and_then(|host| host.strip_suffix(']'))
+                .unwrap_or(host);
+            host.parse::<std::net::IpAddr>().ok()
+        })
+        .is_some_and(|address| address.is_loopback());
+    !loopback
+}
+
 pub(crate) fn validate_request(
     config: RunConfig,
     shared_client: Option<Client>,
@@ -627,14 +645,42 @@ pub(crate) fn validate_request_parts(
                 "headers",
             ));
         }
-        let value = header::HeaderValue::from_str(value)
+        if matches!(
+            name,
+            header::AUTHORIZATION | header::PROXY_AUTHORIZATION | header::COOKIE
+        ) && headers.contains_key(&name)
+        {
+            return Err(invalid(
+                "Use a single Authorization, Proxy-Authorization, or Cookie header.",
+                "headers",
+            ));
+        }
+        let mut value = header::HeaderValue::from_str(value)
             .map_err(|_| invalid("Invalid HTTP header value.", "headers"))?;
+        if crate::http_options::credential_field(name.as_str()) {
+            value.set_sensitive(true);
+        }
         headers.try_append(name, value).map_err(|_| {
             invalid(
                 "Too many HTTP headers for the transport representation.",
                 "headers",
             )
         })?;
+    }
+    if insecure_auth_target(&url)
+        && (!matches!(config.auth, crate::RequestAuth::None)
+            || headers
+                .keys()
+                .any(|name| crate::http_options::credential_field(name.as_str()))
+            || url
+                .query_pairs()
+                .any(|(name, _)| crate::http_options::credential_field(&name)))
+    {
+        return Err(RunError::new(
+            "INSECURE_AUTH_TARGET",
+            "Use HTTPS for authentication. Cleartext credentials are allowed only on literal loopback IP addresses for local testing.",
+            Some("url"),
+        ));
     }
     let method = match config.method {
         RequestMethod::GET => Method::GET,
@@ -658,6 +704,21 @@ pub(crate) fn validate_request_parts(
             "Choose authentication or a custom Authorization header, not both.",
             "auth",
         ));
+    }
+    if let crate::RequestAuth::ApiKey {
+        name, placement, ..
+    } = &config.auth
+    {
+        let conflict = match placement {
+            crate::ApiKeyPlacement::Header => headers.contains_key(name.as_str()),
+            crate::ApiKeyPlacement::Query => url.query_pairs().any(|(key, _)| key == name.as_str()),
+        };
+        if conflict {
+            return Err(invalid(
+                "Remove the field that conflicts with the API key placement.",
+                "auth",
+            ));
+        }
     }
     if matches!(config.body, RequestBody::Multipart(_))
         && headers.contains_key(header::CONTENT_TYPE)

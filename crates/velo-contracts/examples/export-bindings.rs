@@ -90,6 +90,17 @@ fn main() {
         "export {};",
         velo_contracts::SavedConfiguration::decl(&config)
     );
+    println!("export {};", velo_engine::ApiSessionView::decl(&config));
+    println!("export {};", velo_engine::FunctionalState::decl(&config));
+    println!("export {};", velo_engine::FunctionalResult::decl(&config));
+    println!("export {};", velo_engine::FunctionalRun::decl(&config));
+    println!("export {};", velo_engine::FunctionalKind::decl(&config));
+    println!("export {};", velo_engine::FunctionalRunState::decl(&config));
+    println!("export {};", velo_engine::BodyFormat::decl(&config));
+    println!("export {};", velo_engine::ApiCollection::decl(&config));
+    println!("export {};", velo_engine::CollectionDefaults::decl(&config));
+    println!("export {};", velo_engine::CollectionEntry::decl(&config));
+    println!("export {};", velo_engine::CollectionRequest::decl(&config));
     println!("export {};", velo_engine::TestDefinition::decl(&config));
     println!("export {};", velo_engine::ImportFormat::decl(&config));
     println!("export {};", velo_engine::ImportedRequest::decl(&config));
@@ -97,6 +108,7 @@ fn main() {
     println!("export {};", velo_engine::NameValue::decl(&config));
     println!("export {};", velo_engine::RequestMethod::decl(&config));
     println!("export {};", velo_engine::RequestAuth::decl(&config));
+    println!("export {};", velo_engine::ApiKeyPlacement::decl(&config));
     println!("export {};", velo_engine::HttpProtocol::decl(&config));
     println!("export {};", velo_engine::MultipartPart::decl(&config));
     println!("export {};", velo_engine::RequestBody::decl(&config));

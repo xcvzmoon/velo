@@ -19,9 +19,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { workspace = true, features = [] }
 
 [dependencies]
-reqwest = { workspace = true, features = ["rustls", "stream"] }
+reqwest = { workspace = true, features = ["rustls", "stream", "form"] }
 tokio-util = { workspace = true, features = ["rt"] }
+url.workspace = true
 sha2.workspace = true
+oauth2.workspace = true
+tauri-plugin-opener.workspace = true
 tempfile.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
 keyring = { workspace = true, features = [
@@ -31,7 +34,7 @@ keyring = { workspace = true, features = [
   "crypto-rust",
 ] }
 uuid = { workspace = true, features = ["v4"] }
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "net", "io-util", "time"] }
 velo-contracts.workspace = true
 velo-engine.workspace = true
 thiserror.workspace = true

@@ -773,6 +773,217 @@ export type SavedConfiguration = {
    */
   config: RunConfig;
 };
+export type ApiSessionView = {
+  /**
+   * Extracted variable names; values remain in memory only.
+   */
+  variables: string[];
+  /**
+   * Cookie metadata, with masked values and domain/path scope.
+   */
+  cookies: NameValue[];
+};
+export type FunctionalState = 'passed' | 'failed' | 'cancelled' | 'skipped';
+export type FunctionalResult = {
+  /**
+   * Saved request identity.
+   */
+  request_id: string;
+  /**
+   * Authored display name, never a resolved target URL.
+   */
+  name: string;
+  /**
+   * One-based iteration number.
+   */
+  iteration: number;
+  /**
+   * Final step state.
+   */
+  state: FunctionalState;
+  /**
+   * Bounded masked response, absent before headers or for cancellation.
+   */
+  response: PreviewResponse | null;
+  /**
+   * Stable safe failure code, without response values.
+   */
+  error: string | null;
+};
+export type FunctionalRun = {
+  /**
+   * Always `functional`, including exported evidence.
+   */
+  kind: FunctionalKind;
+  /**
+   * Operation identity, also used for cancellation.
+   */
+  id: string;
+  /**
+   * Collection identity used to reopen a saved request without sending it.
+   */
+  collection_id: string;
+  /**
+   * Selected environment, or shared values when absent.
+   */
+  environment: string | null;
+  /**
+   * `running`, `completed`, or `cancelled`.
+   */
+  state: FunctionalRunState;
+  /**
+   * Planned step count, including skipped outcomes.
+   */
+  total: number;
+  /**
+   * Portable authored snapshots for history restoration, without resolved secrets or local file paths.
+   */
+  requests: CollectionRequest[];
+  /**
+   * Outcomes in displayed execution order.
+   */
+  results: FunctionalResult[];
+  /**
+   * Safe final session view; never a persisted cookie jar.
+   */
+  session: ApiSessionView;
+  /**
+   * Local persistence failure, if execution completed but history could not be retained.
+   */
+  storage_error: string | null;
+};
+export type FunctionalKind = 'functional';
+export type FunctionalRunState = 'running' | 'completed' | 'cancelled';
+export type BodyFormat = 'text' | 'binary' | 'unsupported_encoding' | 'invalid_utf8';
+export type ApiCollection = {
+  /**
+   * Portable format version, currently 1.
+   */
+  version: number;
+  /**
+   * Stable local identity, 1 to 80 ASCII letters, digits, underscores or hyphens.
+   */
+  id: string;
+  /**
+   * Display name, at most 160 bytes.
+   */
+  name: string;
+  /**
+   * Purpose and context, at most 16 KiB.
+   */
+  description: string;
+  /**
+   * Usage notes, at most 16 KiB.
+   */
+  notes: string;
+  /**
+   * Root inherited scope.
+   */
+  defaults: CollectionDefaults;
+  /**
+   * Named overrides applied after inherited and request variables.
+   */
+  environments: Record<string, Record<string, string>>;
+  /**
+   * JSON pointers masked after assertions and extraction, before display, history or export.
+   */
+  sensitive_response_fields: string[];
+  /**
+   * Ordered folders and saved requests.
+   */
+  entries: CollectionEntry[];
+};
+export type CollectionDefaults = {
+  /**
+   * Ordered headers overridden case-insensitively by an inner scope.
+   */
+  headers: NameValue[];
+  /**
+   * Explicit authentication override; absence inherits the parent.
+   */
+  auth: RequestAuth | null;
+  /**
+   * Shared values or secret references, overridden by inner scopes and environments.
+   */
+  variables: Record<string, string>;
+};
+export type CollectionEntry =
+  | {
+      kind: 'folder';
+      /**
+       * Identity unique across the entire collection.
+       */
+      id: string;
+      /**
+       * Display name, at most 160 bytes.
+       */
+      name: string;
+      /**
+       * Purpose and context, at most 16 KiB.
+       */
+      description: string;
+      /**
+       * Usage notes, at most 16 KiB.
+       */
+      notes: string;
+      /**
+       * Defaults applied after the parent scope.
+       */
+      defaults: CollectionDefaults;
+      /**
+       * Ordered folders and saved requests.
+       */
+      entries: CollectionEntry[];
+    }
+  | {
+      kind: 'request';
+      /**
+       * Identity unique across the entire collection.
+       */
+      id: string;
+      /**
+       * Display name, at most 160 bytes.
+       */
+      name: string;
+      /**
+       * Purpose and context, at most 16 KiB.
+       */
+      description: string;
+      /**
+       * Usage notes, at most 16 KiB.
+       */
+      notes: string;
+      /**
+       * Canonical shared request, variables, environment overrides and dataset recipe.
+       */
+      definition: TestDefinition;
+      /**
+       * Inherit defaults when request authentication is None; false explicitly disables auth.
+       */
+      inherit_auth: boolean;
+      /**
+       * Response values made available to later requests in the session namespace.
+       */
+      extractions: Extraction[];
+    };
+export type CollectionRequest = {
+  /**
+   * Original saved request identity.
+   */
+  id: string;
+  /**
+   * Original saved request name.
+   */
+  name: string;
+  /**
+   * Shared request with inherited settings applied.
+   */
+  definition: TestDefinition;
+  /**
+   * Ordered response extraction rules.
+   */
+  extractions: Extraction[];
+};
 export type TestDefinition = {
   /**
    * Format version; only 1 is supported.
@@ -832,6 +1043,22 @@ export type PreviewResponse = {
    */
   body: string;
   /**
+   * Bytes received across response hops before bounded capture stopped; a lower bound when truncated.
+   */
+  received_bytes: bigint;
+  /**
+   * Maximum retained body bytes, independent of the assertion inspection limit.
+   */
+  body_limit: number;
+  /**
+   * Body representation; non-text and unsupported encodings are withheld.
+   */
+  body_format: BodyFormat;
+  /**
+   * True for live capture or opted-in history; false when retention omitted response content.
+   */
+  content_retained: boolean;
+  /**
    * Whether body or header capture exceeded its limit.
    */
   truncated: boolean;
@@ -861,6 +1088,22 @@ export type RequestAuth =
       token: string;
     }
   | {
+      kind: 'api_key';
+      /**
+       * Header or query parameter name; must not conflict with an explicit request field.
+       * Header placement excludes framing, Authorization, Proxy-Authorization, and Cookie headers.
+       */
+      name: string;
+      /**
+       * Secret value, omitted from reports and Debug output.
+       */
+      value: string;
+      /**
+       * Explicit placement; query values can appear in server access logs.
+       */
+      placement: ApiKeyPlacement;
+    }
+  | {
       kind: 'basic';
       /**
        * User identifier; may be empty.
@@ -871,6 +1114,7 @@ export type RequestAuth =
        */
       password: string;
     };
+export type ApiKeyPlacement = 'header' | 'query';
 export type HttpProtocol = 'auto' | 'http1' | 'http2';
 export type MultipartPart =
   | {

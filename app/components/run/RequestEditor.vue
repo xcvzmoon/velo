@@ -60,11 +60,13 @@
     loaded?: RunConfig | null;
     stepMode?: boolean;
     scenarioMode?: boolean;
+    apiMode?: boolean;
   }>();
   const emit = defineEmits<{
     prepare: [config: RunConfig];
     change: [config: RunConfig];
     valid: [value: boolean];
+    dirty: [value: boolean];
   }>();
 
   const form = useForm({
@@ -76,6 +78,9 @@
       authToken: '',
       authUsername: '',
       authPassword: '',
+      apiKeyName: '',
+      apiKeyValue: '',
+      apiKeyPlacement: 'header',
       protocol: 'auto',
       max_redirects: 0,
       formPairs: [],
@@ -123,13 +128,19 @@
       setInput(form, {
         input: {
           ...request,
-          warmup_ms: config.warmup_ms,
-          abort_policies: config.abort_policies,
+          warmup_ms: props.apiMode ? 0 : config.warmup_ms,
+          thresholds: props.apiMode ? [] : config.thresholds,
+          pacing_ms: props.apiMode ? 0 : config.pacing_ms,
+          grace_ms: props.apiMode ? 5000 : config.grace_ms,
+          abort_policies: props.apiMode ? [] : config.abort_policies,
           assertions: config.assertions.map((assertion) => assertionInput(assertion)),
           authKind: auth.kind,
           authToken: auth.kind === 'bearer' ? auth.token : '',
           authUsername: auth.kind === 'basic' ? auth.username : '',
           authPassword: auth.kind === 'basic' ? auth.password : '',
+          apiKeyName: auth.kind === 'api_key' ? auth.name : '',
+          apiKeyValue: auth.kind === 'api_key' ? auth.value : '',
+          apiKeyPlacement: auth.kind === 'api_key' ? auth.placement : 'header',
           bodyKind: body.kind,
           bodyValue: body.kind === 'text' || body.kind === 'json' ? body.value : '',
           formPairs: body.kind === 'form' ? body.value : [],
@@ -144,15 +155,19 @@
                   content_type: part.kind === 'file' ? part.content_type : '',
                 }))
               : [],
-          workloadKind: workload.kind,
-          vus: workload.kind === 'constant' ? workload.vus : 1,
-          duration_ms: workload.kind === 'ramping' ? 10000 : workload.duration_ms,
+          workloadKind: props.apiMode ? 'constant' : workload.kind,
+          vus: !props.apiMode && workload.kind === 'constant' ? workload.vus : 1,
+          duration_ms: props.apiMode
+            ? 1000
+            : workload.kind === 'ramping'
+              ? 10000
+              : workload.duration_ms,
           start_vus: workload.kind === 'ramping' ? workload.start_vus : 0,
           stages: workload.kind === 'ramping' ? workload.stages : [],
           rate: workload.kind === 'arrival' ? workload.rate : 10,
           capacity: workload.kind === 'arrival' ? workload.capacity : 10,
-          max_vus: budget.max_vus,
-          max_request_bytes: budget.max_request_bytes,
+          max_vus: props.apiMode ? 256 : budget.max_vus,
+          max_request_bytes: props.apiMode ? 8388608 : budget.max_request_bytes,
         },
       });
     },
@@ -164,6 +179,13 @@
     (input) => {
       const result = v.safeParse(requestEditorSchema, input);
       emit('valid', result.success);
+      emit(
+        'dirty',
+        !result.success ||
+          (Boolean(props.loaded) &&
+            result.success &&
+            JSON.stringify(result.output) !== JSON.stringify(props.loaded)),
+      );
       if (result.success) {
         emit('change', result.output);
       }
@@ -188,11 +210,11 @@
       id="request-editor-heading"
       class="text-base font-medium"
     >
-      {{ stepMode ? 'Step request' : 'Request configuration' }}
+      {{ apiMode ? 'API request' : stepMode ? 'Step request' : 'Request configuration' }}
     </h2>
 
     <p
-      v-if="!stepMode"
+      v-if="!stepMode && !apiMode"
       class="text-muted-foreground mt-2 text-sm leading-relaxed"
     >
       <template v-if="scenarioMode">
@@ -417,16 +439,22 @@
           v-if="!stepMode"
           class="space-y-4 border-t pt-6"
         >
-          <h3 class="text-sm font-medium">Workload and local resource budgets</h3>
+          <h3
+            v-if="!apiMode"
+            class="text-sm font-medium"
+          >
+            Workload and local resource budgets
+          </h3>
 
           <RunWorkloadEditor
+            v-if="!apiMode"
             :form="form"
             :disabled="disabled"
           />
 
           <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <FormischField
-              v-for="option in numericFields"
+              v-for="option in apiMode ? numericFields.slice(0, 1) : numericFields"
               :key="option.name"
               v-slot="field"
               :of="form"
@@ -458,7 +486,10 @@
             </FormischField>
           </div>
 
-          <p class="text-muted-foreground text-xs leading-relaxed">
+          <p
+            v-if="!apiMode"
+            class="text-muted-foreground text-xs leading-relaxed"
+          >
             Budgets bound owned workers and retained request data, including VU clones. They do not
             limit total process memory or certify this machine's load capacity. Stop closes new
             requests, drains for the configured grace, then cancels remaining requests.
@@ -472,19 +503,19 @@
         />
 
         <RunPolicyEditor
-          v-if="!stepMode"
+          v-if="!stepMode && !apiMode"
           :form="form"
           :disabled="disabled"
         />
 
         <RunThresholdEditor
-          v-if="!stepMode"
+          v-if="!stepMode && !apiMode"
           :form="form"
           :disabled="disabled"
         />
 
         <Button
-          v-if="!stepMode"
+          v-if="!stepMode && !apiMode"
           :disabled="disabled || form.isSubmitting"
           type="submit"
         >

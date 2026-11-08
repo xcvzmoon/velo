@@ -79,8 +79,9 @@ pub(crate) fn cancel_data_preparation(
     Ok(())
 }
 
-fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
+pub(crate) fn validate_secret_name(name: &str) -> Result<(), RunError> {
     if name.starts_with("saved.")
+        || name.starts_with("oauth.")
         || name.is_empty()
         || name.len() > 80
         || !name
@@ -89,10 +90,15 @@ fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
     {
         return Err(failure(
             "INVALID_SECRET_NAME",
-            "Use 1 to 80 letters, digits, dots, underscores or hyphens.",
+            "Use 1 to 80 letters, digits, dots, underscores or hyphens. The saved. and oauth. prefixes are reserved.",
             Some("secret"),
         ));
     }
+    Ok(())
+}
+
+fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
+    validate_secret_name(name)?;
     keyring::Entry::new("app.velo.authoring", name).map_err(|_| {
         failure(
             "SECRET_UNAVAILABLE",
@@ -102,11 +108,24 @@ fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
     })
 }
 
-fn read_secret(
+pub(crate) fn read_named_secret(name: &str) -> Result<String, RunError> {
+    secret_entry(name)?.get_password().map_err(|_| {
+        failure(
+            "SECRET_UNAVAILABLE",
+            "Set the referenced secret in the OS credential store.",
+            Some("secret"),
+        )
+    })
+}
+
+pub(crate) fn read_secret(
     name: &str,
     saved: &mut std::collections::BTreeMap<String, serde_json::Value>,
 ) -> Result<String, RunError> {
     use crate::credentials::Credentials;
+    if name.starts_with("oauth.") {
+        return crate::oauth::read_access(name);
+    }
     if let Some(reference) = name.strip_prefix("saved.") {
         let (id, pointer) = reference.split_once('.').ok_or_else(|| {
             failure(
@@ -225,7 +244,7 @@ fn reference_values(value: &mut serde_json::Value, id: &str, pointer: &str) {
             for (key, value) in items {
                 if key == "path" {
                     *value = serde_json::Value::String(String::new());
-                } else if key != "kind" {
+                } else if key != "kind" && key != "placement" {
                     reference_values(value, id, &format!("{pointer}-{key}"));
                 }
             }
@@ -431,6 +450,7 @@ pub(crate) async fn save_definition<R: tauri::Runtime>(
     source: String,
 ) -> Result<(), RunError> {
     let definition = TestDefinition::parse(&source)?;
+    velo_engine::validate_definition_credentials(&definition)?;
     let source = serde_json::to_string(&definition).map_err(|_| {
         failure(
             "AUTHORING_FAILED",
@@ -551,6 +571,7 @@ pub(crate) async fn export_definition_file<R: tauri::Runtime>(
 ) -> Result<bool, RunError> {
     use tauri_plugin_dialog::DialogExt;
     let mut definition = TestDefinition::parse(&source)?;
+    velo_engine::validate_definition_credentials(&definition)?;
     unbind_uploads(&mut definition);
     let source = serde_json::to_string_pretty(&definition)
         .map_err(|_| failure("AUTHORING_FAILED", "Definition encoding failed.", None))?;
@@ -602,6 +623,52 @@ pub(crate) async fn export_definition_file<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn definitions_reject_literal_credentials_before_persistence_or_export_dialog() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(crate::history::History::new(Some(
+                directory.path().join("definitions.sqlite3"),
+            )))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let mut definition = TestDefinition::default();
+        definition.config.auth = velo_engine::RequestAuth::Bearer {
+            token: "RAW_SECRET".into(),
+        };
+        let source = serde_json::to_string(&definition).unwrap();
+        let error = tauri::async_runtime::block_on(save_definition(
+            app.handle().clone(),
+            "unsafe".into(),
+            source.clone(),
+        ))
+        .unwrap_err();
+        assert_eq!(error.code, "DEFINITION_SECRET_REQUIRED");
+        let error =
+            tauri::async_runtime::block_on(export_definition_file(app.handle().clone(), source))
+                .unwrap_err();
+        assert_eq!(error.code, "DEFINITION_SECRET_REQUIRED");
+        let names = tauri::async_runtime::block_on(list_definitions(app.handle().clone())).unwrap();
+        assert!(names.is_empty());
+        definition.config.auth = velo_engine::RequestAuth::Bearer {
+            token: "{{secret:api-token}}".into(),
+        };
+        tauri::async_runtime::block_on(save_definition(
+            app.handle().clone(),
+            "safe".into(),
+            serde_json::to_string(&definition).unwrap(),
+        ))
+        .unwrap();
+        let saved =
+            tauri::async_runtime::block_on(load_definition(app.handle().clone(), "safe".into()))
+                .unwrap();
+        assert!(
+            serde_json::to_string(&saved)
+                .unwrap()
+                .contains("{{secret:api-token}}")
+        );
+    }
+
     #[test]
     fn preparation_guard_cancels_and_releases_owned_slot() {
         let runs = crate::execution::DesktopRuns::default();

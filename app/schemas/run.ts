@@ -85,7 +85,10 @@ const requestFieldsSchema = v.object({
     }, 'Use HTTP(S) without URL credentials or a fragment.'),
   ),
   method: v.picklist(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']),
-  authKind: v.picklist(['none', 'bearer', 'basic']),
+  authKind: v.picklist(['none', 'bearer', 'basic', 'api_key']),
+  apiKeyName: v.optional(v.string(), ''),
+  apiKeyValue: v.optional(v.string(), ''),
+  apiKeyPlacement: v.optional(v.picklist(['header', 'query']), 'header'),
   authToken: v.string(),
   authUsername: v.string(),
   authPassword: v.string(),
@@ -277,21 +280,46 @@ export const requestEditorSchema = v.pipe(
     ['stages'],
   ),
   v.forward(
-    v.check(({ authKind, authToken, authUsername, authPassword, headers }) => {
-      if (authKind === 'none') {
-        return true;
-      }
+    v.check(
+      ({
+        authKind,
+        authToken,
+        authUsername,
+        authPassword,
+        apiKeyName,
+        apiKeyValue,
+        apiKeyPlacement,
+        headers,
+        query,
+      }) => {
+        if (authKind === 'none') {
+          return true;
+        }
 
-      if (headers.some(({ name }) => name.toLowerCase() === 'authorization')) {
-        return false;
-      }
+        if (headers.some(({ name }) => name.toLowerCase() === 'authorization')) {
+          return false;
+        }
 
-      return authKind === 'bearer'
-        ? /\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}/.test(authToken) ||
-            /^[A-Za-z0-9._~+/-]+=*$/.test(authToken)
-        : !authUsername.replace(/\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}/g, '').includes(':') &&
-            !/\p{Cc}/u.test(authUsername + authPassword);
-    }, 'Enter valid credentials and remove conflicting Authorization headers.'),
+        if (authKind === 'api_key') {
+          return (
+            apiKeyName.length > 0 &&
+            apiKeyValue.length > 0 &&
+            !/\p{Cc}/u.test(apiKeyName + apiKeyValue) &&
+            (apiKeyPlacement === 'header'
+              ? /^[!#$%&'*+.^_`|~\w-]+$/.test(apiKeyName) &&
+                !headers.some(({ name }) => name.toLowerCase() === apiKeyName.toLowerCase())
+              : !query.some(({ name }) => name === apiKeyName))
+          );
+        }
+
+        return authKind === 'bearer'
+          ? /\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}/.test(authToken) ||
+              /^[A-Za-z0-9._~+/-]+=*$/.test(authToken)
+          : !authUsername.replace(/\{\{(?:secret:)?[A-Za-z0-9_.-]+\}\}/g, '').includes(':') &&
+              !/\p{Cc}/u.test(authUsername + authPassword);
+      },
+      'Enter valid credentials and remove conflicting Authorization headers.',
+    ),
     ['authKind'],
   ),
   v.forward(
@@ -325,6 +353,9 @@ export const requestEditorSchema = v.pipe(
       authToken,
       authUsername,
       authPassword,
+      apiKeyName,
+      apiKeyValue,
+      apiKeyPlacement,
       max_vus,
       max_request_bytes,
       workloadKind,
@@ -341,16 +372,23 @@ export const requestEditorSchema = v.pipe(
       auth:
         authKind === 'none'
           ? { kind: 'none' }
-          : authKind === 'bearer'
+          : authKind === 'api_key'
             ? {
-                kind: 'bearer',
-                token: authToken,
+                kind: 'api_key',
+                name: apiKeyName,
+                value: apiKeyValue,
+                placement: apiKeyPlacement,
               }
-            : {
-                kind: 'basic',
-                username: authUsername,
-                password: authPassword,
-              },
+            : authKind === 'bearer'
+              ? {
+                  kind: 'bearer',
+                  token: authToken,
+                }
+              : {
+                  kind: 'basic',
+                  username: authUsername,
+                  password: authPassword,
+                },
       workload:
         workloadKind === 'arrival'
           ? {
