@@ -73,6 +73,17 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
     max_in_flight: '1',
   };
   return {
+    telemetry: {
+      status: 'warming_up',
+      sampled_at_us: null,
+      interval_us: null,
+      logical_cpus: null,
+      process_cpu_percent: null,
+      process_memory_bytes: null,
+      system_cpu_percent: null,
+      system_available_memory_bytes: null,
+      system_total_memory_bytes: null,
+    },
     automatic_stop: null,
     measurement: {
       warmup_ms: 0,

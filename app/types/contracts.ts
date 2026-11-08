@@ -1212,7 +1212,50 @@ export type ArrivalSnapshot = {
    */
   max_lateness_us: string;
 };
+export type TelemetryStatus = 'warming_up' | 'available' | 'unavailable' | 'unsupported';
+export type HostTelemetry = {
+  /**
+   * Sampler availability; a short run may finish while still warming up.
+   */
+  status: TelemetryStatus;
+  /**
+   * Workload-relative end of the native sample, as decimal microseconds.
+   */
+  sampled_at_us: string | null;
+  /**
+   * Actual native refresh window, as decimal microseconds, excluding initialization.
+   */
+  interval_us: string | null;
+  /**
+   * Logical CPUs used to normalize process CPU; null when unavailable.
+   */
+  logical_cpus: number | null;
+  /**
+   * Native process CPU divided by logical CPU count, in percent.
+   */
+  process_cpu_percent: number | null;
+  /**
+   * Native process resident memory in decimal bytes.
+   */
+  process_memory_bytes: string | null;
+  /**
+   * Host-wide CPU usage across logical CPUs, in percent.
+   */
+  system_cpu_percent: number | null;
+  /**
+   * Host RAM available for allocation, in decimal bytes; OS accounting varies.
+   */
+  system_available_memory_bytes: string | null;
+  /**
+   * Total host physical RAM, in decimal bytes.
+   */
+  system_total_memory_bytes: string | null;
+};
 export type RunSnapshot = {
+  /**
+   * Latest native resource sample; its window is independent of aggregate publishing.
+   */
+  telemetry: HostTelemetry;
   /**
    * Separate scenario iterations, fixed step populations and lifecycle outcomes.
    */

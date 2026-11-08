@@ -11,6 +11,7 @@ authors = ["Mon Albert Gamil <mrgamilmonalbert@gmail.com>"]
 repository = "https://github.com/xcvzmoon/velo"
 
 [workspace.dependencies]
+sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }
 cookie_store = { version = "0.22", default-features = false }
 aho-corasick = "1"
 percent-encoding = "2"

@@ -65,6 +65,8 @@ impl RunState {
 /// ```
 #[derive(Clone, Debug, Serialize, TS)]
 pub struct RunSnapshot {
+    /// Latest native resource sample; its window is independent of aggregate publishing.
+    pub telemetry: crate::HostTelemetry,
     /// Separate scenario iterations, fixed step populations and lifecycle outcomes.
     pub scenarios: Option<crate::ScenarioReport>,
     /// Monotonically increasing application-instance identifier, encoded as decimal.
@@ -207,6 +209,7 @@ struct Progress {
 }
 
 struct Run {
+    telemetry: tokio::sync::watch::Receiver<crate::HostTelemetry>,
     id: String,
     confirmation: RunConfirmation,
     thresholds: Vec<crate::Threshold>,
@@ -235,6 +238,7 @@ impl Run {
     }
 
     fn snapshot_locked(&self, progress: &Progress) -> RunSnapshot {
+        let telemetry = self.telemetry.borrow().clone();
         let now = progress
             .load_finished
             .or(progress.finished)
@@ -254,6 +258,7 @@ impl Run {
             Vec::new()
         };
         RunSnapshot {
+            telemetry,
             scenarios: progress
                 .scenarios
                 .as_ref()
@@ -513,7 +518,10 @@ impl RunManager {
                 None,
             )
         })?;
+        let (telemetry_sender, telemetry) =
+            tokio::sync::watch::channel(crate::HostTelemetry::default());
         let run = Arc::new(Run {
+            telemetry,
             id: id.to_string(),
             confirmation: config.confirmation.clone(),
             thresholds: config.thresholds.clone(),
@@ -576,7 +584,7 @@ impl RunManager {
             }),
         });
         let snapshot = run.snapshot();
-        let task = tokio::spawn(supervise(run.clone(), config));
+        let task = tokio::spawn(supervise(run.clone(), config, telemetry_sender));
         state.last_id = id;
         state.current = Some(OwnedRun {
             run,
@@ -732,7 +740,11 @@ fn task_failed(result: Result<(), JoinError>) -> bool {
     }
 }
 
-async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
+async fn supervise(
+    run: Arc<Run>,
+    config: ValidatedConfig,
+    telemetry: tokio::sync::watch::Sender<crate::HostTelemetry>,
+) {
     if let Some(plan) = &config.scenarios {
         let mut session = crate::scenario_runtime::Session::default();
         let outcome = scenarios::phase(
@@ -757,6 +769,7 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
         }
     }
     let started = Instant::now();
+    let sampler = crate::telemetry::Sampler::start(telemetry, started.into_std());
     let deadline = started + config.duration;
     {
         let mut progress = run.lock();
@@ -884,6 +897,7 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
         failed |= task_failed(result);
     }
     run.lock().load_finished = Some(Instant::now());
+    sampler.finish().await;
     if let Some(plan) = &config.scenarios {
         let mut session = run
             .setup_session
@@ -1395,7 +1409,17 @@ mod tests {
         assert_eq!(current.active_vus, 0);
         assert_eq!(current.metrics.counters.started, 0);
         tokio::time::advance(Duration::from_secs(2)).await;
-        tokio::task::yield_now().await;
+        let task = manager
+            .state
+            .lock()
+            .await
+            .current
+            .as_mut()
+            .unwrap()
+            .task
+            .take()
+            .unwrap();
+        task.await.unwrap();
         let summary = manager.current().await.unwrap();
         assert_eq!(summary.state, RunState::Completed);
         assert_eq!(summary.scheduling_us, 3_000_000);
