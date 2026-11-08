@@ -189,18 +189,31 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Test data"
   >
-    <h2 class="font-medium">Test data</h2>
-    <p class="text-muted-foreground text-sm">
-      Prepare up to 10,000 records before load. Bind fields using the existing
+    <template #header>
+      <h2 class="text-highlighted text-xl font-semibold tracking-tight">Test data</h2>
+    </template>
+
+    <p class="text-default max-w-3xl text-base leading-relaxed">
+      Prepare up to
+      <strong class="text-highlighted font-semibold">10,000 records</strong>
+      before load. Bind fields using
       <code v-text="'{{email}}'" />
-      syntax. Generated login identities need existing accounts on the target; generation does not
-      create accounts. Unique allocation reserves each record once, but generated values may contain
-      duplicates.
+      .
     </p>
+
+    <UAlert
+      :ui="{ title: 'text-highlighted', description: 'text-default leading-relaxed opacity-100' }"
+      title="Generated data does not create accounts"
+      description="Login identities must already exist on the target. Unique allocation reserves each record once, but generated values may contain duplicates."
+      icon="i-hugeicons-alert-circle"
+      color="warning"
+      variant="soft"
+    />
+
     <Form
       :of="form"
       class="space-y-4"
@@ -215,24 +228,25 @@
           :path="[setting.name]"
         >
           <div class="space-y-2">
-            <Label :for="`${prefix}-${setting.name}`">{{ setting.label }}</Label>
-            <Select
-              v-model="field.input"
-              :disabled="disabled"
-            >
-              <SelectTrigger :id="`${prefix}-${setting.name}`"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem
-                  v-for="choice in setting.choices"
-                  :key="choice"
-                  :value="choice"
-                >
-                  {{ choice }}
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`${prefix}-${setting.name}`"
+                class="text-sm font-medium"
+              >
+                {{ setting.label }}
+              </label>
+
+              <USelect
+                v-model="field.input"
+                :disabled="disabled"
+                :id="`${prefix}-${setting.name}`"
+                :items="[...setting.choices.map((choice) => ({ label: choice, value: choice }))]"
+                class="w-full"
+              />
+            </div>
           </div>
         </Field>
+
         <Field
           v-for="name in ['seed', 'count'] as const"
           v-slot="field"
@@ -241,19 +255,26 @@
           :path="[name]"
         >
           <div class="space-y-2">
-            <Label :for="`${prefix}-${name}`">
-              {{ name === 'seed' ? 'Seed' : 'Faker record count' }}
-            </Label>
-            <Input
-              v-model="field.input"
-              v-bind="field.props"
-              :id="`${prefix}-${name}`"
-              :disabled="disabled"
-              inputmode="numeric"
-            />
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`${prefix}-${name}`"
+                class="text-sm font-medium"
+              >
+                {{ name === 'seed' ? 'Seed' : 'Faker record count' }}
+              </label>
+
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :id="`${prefix}-${name}`"
+                :disabled="disabled"
+                inputmode="numeric"
+              />
+            </div>
+
             <p
               v-if="field.errors"
-              class="text-destructive text-sm"
+              class="text-error text-sm"
               role="alert"
             >
               {{ field.errors.join(' ') }}
@@ -261,6 +282,7 @@
           </div>
         </Field>
       </div>
+
       <Field
         v-for="name in ['fields', 'mapping'] as const"
         v-slot="field"
@@ -272,65 +294,76 @@
           v-if="(getInput(form).kind === 'faker') === (name === 'fields')"
           class="space-y-2"
         >
-          <Label :for="`${prefix}-${name}`">
-            {{
-              name === 'fields'
-                ? 'Ordered field definitions (JSON)'
-                : 'Variable-to-source-column mapping (JSON)'
-            }}
-          </Label>
-          <Textarea
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${prefix}-${name}`"
-            :disabled="disabled"
-            class="min-h-40 font-mono text-xs"
-            spellcheck="false"
-          />
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${prefix}-${name}`"
+              class="text-sm font-medium"
+            >
+              {{
+                name === 'fields'
+                  ? 'Ordered field definitions (JSON)'
+                  : 'Variable-to-source-column mapping (JSON)'
+              }}
+            </label>
+
+            <UTextarea
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${prefix}-${name}`"
+              :disabled="disabled"
+              :ui="{ base: 'font-mono' }"
+              spellcheck="false"
+            />
+          </div>
+
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
             role="alert"
           >
             {{ field.errors.join(' ') }}
           </p>
         </div>
       </Field>
+
       <div class="flex gap-3">
-        <Button
+        <UButton
           :disabled="disabled"
           type="submit"
-        >
-          Apply data recipe
-        </Button>
-        <Button
+          label="Apply data recipe"
+        />
+
+        <UButton
           :disabled="disabled || !definition"
           type="button"
           variant="outline"
+          color="neutral"
+          label="Remove dataset"
           @click="emit('apply', null)"
-        >
-          Remove dataset
-        </Button>
+        />
       </div>
     </Form>
+
     <AuthoringDataField
       v-if="getInput(form).kind === 'faker'"
       :disabled="disabled"
       @add="addField"
     />
+
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
     </p>
-    <p class="text-muted-foreground text-xs">
+
+    <p class="text-muted text-xs">
       Faker 10.6.0 is pinned. Email and copy fields reference earlier fields in the same record.
       Literal fields make invalid and boundary cases explicit. Random allocation uses a seeded
       shuffle without replacement per cycle. Concurrent admission determines which worker receives
       each index; network completion order is unspecified. Arrival workloads support run and
       iteration lifetimes.
     </p>
-  </section>
+  </ShellPanel>
 </template>

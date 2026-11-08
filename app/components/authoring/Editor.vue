@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import type { FileUploadItem } from '@nuxt/ui';
   import type {
     DataDefinition,
     PreviewResponse,
@@ -7,6 +8,34 @@
     TestDefinition,
   } from '~/types/contracts';
   import { invoke } from '@tauri-apps/api/core';
+
+  const sections = [
+    {
+      label: 'Request',
+      value: 'request',
+      slot: 'request',
+    },
+    {
+      label: 'Data',
+      value: 'data',
+      slot: 'data',
+    },
+    {
+      label: 'Preview & run',
+      value: 'preview',
+      slot: 'preview',
+    },
+    {
+      label: 'Library & secrets',
+      value: 'library',
+      slot: 'library',
+    },
+    {
+      label: 'AI assistance',
+      value: 'assistant',
+      slot: 'assistant',
+    },
+  ];
 
   const props = defineProps<{
     disabled: boolean;
@@ -149,17 +178,12 @@
     });
     emitInvalidation();
   }
-  async function readDataFile(event: Event): Promise<void> {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement)) {
-      return;
-    }
-    const file = input.files?.[0];
+  async function readDataFile(file: FileUploadItem | null | undefined): Promise<void> {
     importedData.value = '';
     dataPreview.value = [];
     preparedCount.value = 0;
     emitInvalidation();
-    if (!file) {
+    if (!(file instanceof File)) {
       return;
     }
     await perform(async () => {
@@ -177,7 +201,6 @@
       }
       importedData.value = importedSource;
     });
-    input.value = '';
   }
   async function prepareRows(): Promise<Record<string, string>[]> {
     if (!definition.value?.dataset) {
@@ -245,6 +268,7 @@
         applyDefinition(value);
       }
     },
+    { immediate: true },
   );
   watch(
     () => props.disabled,
@@ -269,304 +293,435 @@
 </script>
 
 <template>
-  <div class="space-y-6">
-    <section
-      class="space-y-4 rounded-lg border p-6"
+  <div class="authoring-workspace space-y-6">
+    <ShellPanel
+      variant="section"
       aria-label="Test definition"
     >
-      <h2 class="font-medium">Unified test authoring</h2>
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-highlighted text-xl font-semibold tracking-tight">Test definition</h2>
+          <p class="text-muted font-mono text-xs">velo.test.json · v1</p>
+        </div>
+      </template>
 
-      <p class="text-muted-foreground text-sm">
-        Visual and JSON editors share a version 1 definition. Changes in JSON apply only after
-        parsing succeeds. Use
-        <code v-text="'{{name}}'" />
-        for variables and
-        <code v-text="'{{secret:name}}'" />
-        for OS secrets. JSON body placeholders belong inside strings. Exports clear local upload
-        paths; select files again after importing.
+      <p class="text-default max-w-3xl text-base leading-relaxed">
+        Visual and JSON editors share a
+        <strong class="text-highlighted font-semibold">version 1 definition.</strong>
+        Changes in JSON apply only after parsing succeeds.
       </p>
 
+      <UAlert
+        :ui="{ title: 'text-highlighted', description: 'text-default leading-relaxed opacity-100' }"
+        title="Variables and secret references"
+        icon="i-hugeicons-code"
+        color="info"
+        variant="soft"
+      >
+        <template #description>
+          <div class="mt-2 grid gap-4 sm:grid-cols-2">
+            <p>
+              Use
+              <code v-text="'{{name}}'" />
+              for shared or environment values.
+            </p>
+
+            <p>
+              Use
+              <code v-text="'{{secret:name}}'" />
+              for OS-store references.
+            </p>
+          </div>
+
+          <p class="mt-3 text-sm leading-relaxed">
+            JSON body placeholders belong inside strings. Exports clear local upload paths; select
+            files again after importing.
+          </p>
+        </template>
+      </UAlert>
+
       <div class="flex flex-wrap gap-3">
-        <Button
-          :disabled="disabled || busy || scenarioDirty"
-          variant="outline"
-          @click="
-            visual = definition?.config ?? null;
-            mode = 'visual';
-          "
-        >
-          Visual editor
-        </Button>
-        <Button
-          :disabled="disabled || busy || !definition || scenarioDirty"
-          variant="outline"
-          @click="mode = 'json'"
-        >
-          JSON and environments
-        </Button>
-        <Button
-          :disabled="disabled || busy || !definition || draftInvalid"
-          variant="outline"
-          @click="mode = 'scenarios'"
-        >
-          Scenarios
-        </Button>
-        <Button
+        <UButton
           :disabled="disabled || busy"
           variant="outline"
+          color="neutral"
+          label="Import velo.test.json"
           @click="importFile"
-        >
-          Import velo.test.json
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled || busy || !definition || draftInvalid"
           variant="outline"
+          color="neutral"
+          label="Export velo.test.json"
           @click="exportFile"
-        >
-          Export velo.test.json
-        </Button>
+        />
       </div>
 
       <template v-if="definition">
-        <Label for="authoring-environment">Active environment</Label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            class="text-sm font-medium"
+            for="authoring-environment"
+          >
+            Active environment
+          </label>
 
-        <Select
-          v-model="environment"
-          :disabled="disabled || busy"
-        >
-          <SelectTrigger id="authoring-environment"><SelectValue /></SelectTrigger>
+          <USelect
+            v-model="environment"
+            :disabled="disabled || busy"
+            :items="[
+              { label: 'Shared variables only', value: '__shared__' },
+              ...environments.map((name) => ({ label: name, value: `env:${name}` })),
+            ]"
+            id="authoring-environment"
+            class="w-full"
+          />
+        </div>
 
-          <SelectContent>
-            <SelectItem value="__shared__">Shared variables only</SelectItem>
-            <SelectItem
-              v-for="name in environments"
-              :key="name"
-              :value="`env:${name}`"
-            >
-              {{ name }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        <p class="text-muted-foreground text-xs">
+        <p class="text-muted max-w-3xl text-xs leading-relaxed">
           Manage shared variables and named environments in JSON. Environment entries override
           shared values. Put secret references in request fields and keep secret values in the OS
           store.
         </p>
       </template>
 
-      <p
+      <UAlert
         v-if="error"
-        class="text-destructive text-sm"
+        :description="error"
+        :ui="{ title: 'text-highlighted', description: 'text-default leading-relaxed opacity-100' }"
+        title="Test definition needs attention"
+        icon="i-hugeicons-alert-circle"
+        color="error"
+        variant="soft"
         role="alert"
-      >
-        {{ error }}
-      </p>
-    </section>
-
-    <AiAssistant
-      task="draft"
-      :definition="definition"
-      :disabled="disabled || busy"
-      @apply="applyDefinition"
-    />
-
-    <RunRequestEditor
-      v-if="mode === 'visual'"
-      :loaded="visual"
-      :scenario-mode="Boolean(definition?.config.scenarios)"
-      :disabled="disabled || busy"
-      @change="update"
-      @valid="
-        visualValid = $event;
-        emitInvalidation();
-      "
-      @prepare="
-        update($event);
-        review();
-      "
-    />
-
-    <AuthoringScenarios
-      v-if="mode === 'scenarios' && definition"
-      :plan="definition.config.scenarios ?? null"
-      :base="definition.config"
-      :disabled="disabled || busy"
-      @change="applyScenarios"
-      @dirty="
-        scenarioDirty = $event;
-        emitInvalidation();
-      "
-    />
-
-    <section
-      v-if="mode === 'json'"
-      class="rounded-lg border p-6"
-    >
-      <AuthoringTextForm
-        :source="source"
-        label="Version 1 test definition"
-        action="Apply JSON"
-        :disabled="disabled || busy"
-        @apply="applyJson"
-        @dirty="
-          jsonDirty = $event;
-          emitInvalidation();
-        "
       />
-    </section>
+    </ShellPanel>
 
-    <AuthoringDataset
-      v-if="definition"
-      :disabled="disabled || busy"
-      :definition="definition.dataset ?? null"
-      @apply="applyData"
-      @dirty="
-        dataDirty = $event;
-        emitInvalidation();
-      "
-    />
-
-    <section
-      v-if="definition?.dataset"
-      class="space-y-4 rounded-lg border p-6"
-      aria-label="Prepared data preview"
+    <UTabs
+      :items="sections"
+      :unmount-on-hide="false"
+      :ui="{
+        list: 'max-w-full overflow-x-auto rounded-xl bg-elevated/60 ring ring-inset ring-default',
+        trigger: 'shrink-0',
+        content: 'min-w-0 space-y-6',
+      }"
+      default-value="request"
+      variant="pill"
+      color="neutral"
+      class="gap-6"
     >
-      <h2 class="font-medium">Prepared data preview</h2>
-      <p class="text-muted-foreground text-sm">
-        Preview shows the first five records, including intentional invalid values. Rows stay in
-        memory and are discarded when preparation ends. Imported files must be selected again after
-        loading a saved test.
-      </p>
-      <template v-if="definition.dataset.source.kind !== 'faker'">
-        <Label for="dataset-file">CSV or JSON file (up to 8 MiB)</Label>
-        <Input
-          id="dataset-file"
+      <template #request>
+        <div
+          class="mb-5 flex flex-wrap gap-2"
+          aria-label="Definition editor"
+          role="group"
+        >
+          <UButton
+            :disabled="disabled || busy || scenarioDirty"
+            :aria-pressed="mode === 'visual'"
+            :variant="mode === 'visual' ? 'soft' : 'ghost'"
+            label="Visual editor"
+            @click="
+              visual = definition?.config ?? null;
+              mode = 'visual';
+            "
+          />
+
+          <UButton
+            :disabled="disabled || busy || !definition || scenarioDirty"
+            :aria-pressed="mode === 'json'"
+            :variant="mode === 'json' ? 'soft' : 'ghost'"
+            label="JSON and environments"
+            @click="mode = 'json'"
+          />
+
+          <UButton
+            :disabled="disabled || busy || !definition || draftInvalid"
+            :aria-pressed="mode === 'scenarios'"
+            :variant="mode === 'scenarios' ? 'soft' : 'ghost'"
+            label="Scenarios"
+            @click="mode = 'scenarios'"
+          />
+        </div>
+
+        <RunRequestEditor
+          v-if="mode === 'visual'"
+          :loaded="visual"
+          :scenario-mode="Boolean(definition?.config.scenarios)"
           :disabled="disabled || busy"
-          type="file"
-          :accept="
-            definition.dataset.source.kind === 'csv' ? '.csv,text/csv' : '.json,application/json'
+          @change="update"
+          @valid="
+            visualValid = $event;
+            emitInvalidation();
           "
-          @change="readDataFile"
+          @prepare="
+            update($event);
+            review();
+          "
+        />
+
+        <AuthoringScenarios
+          v-if="mode === 'scenarios' && definition"
+          :plan="definition.config.scenarios ?? null"
+          :base="definition.config"
+          :disabled="disabled || busy"
+          @change="applyScenarios"
+          @dirty="
+            scenarioDirty = $event;
+            emitInvalidation();
+          "
+        />
+
+        <ShellPanel
+          v-if="mode === 'json'"
+          variant="inset"
+        >
+          <AuthoringTextForm
+            :source="source"
+            :disabled="disabled || busy"
+            label="Version 1 test definition"
+            action="Apply JSON"
+            @apply="applyJson"
+            @dirty="
+              jsonDirty = $event;
+              emitInvalidation();
+            "
+          />
+        </ShellPanel>
+      </template>
+
+      <template #data>
+        <div class="space-y-6">
+          <AuthoringDataset
+            v-if="definition"
+            :disabled="disabled || busy"
+            :definition="definition.dataset ?? null"
+            @apply="applyData"
+            @dirty="
+              dataDirty = $event;
+              emitInvalidation();
+            "
+          />
+
+          <ShellPanel
+            v-if="definition?.dataset"
+            variant="inset"
+            aria-label="Prepared data preview"
+          >
+            <template #header>
+              <h2 class="text-highlighted text-lg font-semibold tracking-tight">
+                Prepared data preview
+              </h2>
+            </template>
+
+            <UAlert
+              :ui="{
+                title: 'text-highlighted',
+                description: 'text-default leading-relaxed opacity-100',
+              }"
+              title="Preview scope"
+              description="Preview shows the first five records, including intentional invalid values. Rows stay in memory and are discarded when preparation ends. Imported files must be selected again after loading a saved test."
+              icon="i-hugeicons-information-circle"
+              color="neutral"
+              variant="soft"
+            />
+
+            <template v-if="definition.dataset.source.kind !== 'faker'">
+              <div class="grid min-w-0 gap-2">
+                <label
+                  class="text-sm font-medium"
+                  for="dataset-file"
+                >
+                  CSV or JSON file (up to 8 MiB)
+                </label>
+
+                <UFileUpload
+                  :disabled="disabled || busy"
+                  :accept="
+                    definition.dataset.source.kind === 'csv'
+                      ? '.csv,text/csv'
+                      : '.json,application/json'
+                  "
+                  :model-value="null"
+                  :preview="false"
+                  id="dataset-file"
+                  label="Choose a CSV or JSON file"
+                  reset
+                  @update:model-value="readDataFile"
+                />
+              </div>
+            </template>
+
+            <UButton
+              :disabled="disabled || busy || dataDirty"
+              variant="outline"
+              color="neutral"
+              label="Prepare and preview records"
+              @click="previewData"
+            />
+
+            <UButton
+              v-if="busy"
+              variant="outline"
+              color="neutral"
+              label="Cancel data preparation"
+              @click="cancelPreparation"
+            />
+
+            <p
+              v-if="preparedCount"
+              class="text-muted text-sm"
+            >
+              {{ preparedCount }} records prepared. Preview may contain private data.
+            </p>
+
+            <pre
+              v-if="dataPreview.length"
+              class="border-default max-h-80 overflow-auto rounded-md border p-3 text-xs"
+              >{{ JSON.stringify(dataPreview, null, 2) }}</pre>
+          </ShellPanel>
+
+          <ShellEmptyState
+            v-if="!definition"
+            title="Configure a request first"
+            description="Your data recipe will bind generated or imported records to the test definition."
+          />
+        </div>
+      </template>
+
+      <template #preview>
+        <ShellPanel
+          variant="section"
+          aria-label="Single request preview"
+        >
+          <template #header>
+            <h2 class="text-highlighted text-xl font-semibold tracking-tight">
+              Preview one request
+            </h2>
+          </template>
+
+          <UAlert
+            :ui="{
+              title: 'text-highlighted',
+              description: 'text-default leading-relaxed opacity-100',
+            }"
+            title="Preview sends one request"
+            description="Preview sends one logical request with the configured timeout and redirects. Clicking confirms that you are authorized to send it. The response is bounded and known request values are redacted. Preview is separate from load-test history."
+            icon="i-hugeicons-information-circle"
+            color="info"
+            variant="soft"
+          />
+
+          <div class="flex flex-wrap gap-3">
+            <UButton
+              :disabled="
+                disabled ||
+                busy ||
+                !definition ||
+                draftInvalid ||
+                Boolean(definition.config.scenarios)
+              "
+              variant="outline"
+              color="neutral"
+              label="I am authorized. Preview request"
+              @click="inspect"
+            />
+
+            <UButton
+              :disabled="disabled || busy || !definition || draftInvalid"
+              label="Review load"
+              @click="review"
+            />
+          </div>
+
+          <p
+            v-if="definition?.config.scenarios"
+            class="text-muted text-sm"
+          >
+            Single-request preview is unavailable for scenarios. Review load to validate every
+            configured step before authorization.
+          </p>
+
+          <template v-if="preview">
+            <ul
+              v-if="preview.checks.length"
+              class="space-y-1 text-sm"
+              aria-label="Preview assertion outcomes"
+            >
+              <li
+                v-for="(outcome, index) in preview.checks"
+                :key="index"
+              >
+                {{ definition?.config.assertions[index]?.id ?? `Assertion ${index + 1}` }}:
+                {{ outcome.replaceAll('_', ' ') }}
+              </li>
+            </ul>
+
+            <p class="font-mono text-sm">
+              HTTP {{ preview.status }} · {{ preview.elapsed_ms.toFixed(1) }} ms
+            </p>
+
+            <p class="text-muted text-xs">
+              Truncated: {{ preview.truncated ? 'yes' : 'no' }} · Redacted:
+              {{ preview.redacted ? 'yes' : 'no' }}
+            </p>
+
+            <pre
+              class="border-default max-h-64 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
+              >{{ preview.headers.map(({ name, value }) => `${name}: ${value}`).join('\n') }}</pre>
+
+            <pre
+              class="border-default max-h-96 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
+              >{{ preview.body }}</pre>
+          </template>
+        </ShellPanel>
+      </template>
+
+      <template #library>
+        <div class="space-y-6">
+          <AuthoringSavedTests
+            :source="source"
+            :disabled="disabled || busy"
+            :can-save="definition !== null && !draftInvalid"
+            @load="applyDefinition"
+          />
+
+          <AuthoringSecrets
+            :disabled="disabled || busy"
+            @change="
+              preview = null;
+              emitInvalidation();
+            "
+          />
+
+          <AuthoringImports
+            :disabled="disabled || busy"
+            @apply="
+              update($event);
+              visual = $event;
+              mode = 'visual';
+            "
+          />
+        </div>
+      </template>
+
+      <template #assistant>
+        <AiAssistant
+          :definition="definition"
+          :disabled="disabled || busy"
+          task="draft"
+          @apply="applyDefinition"
         />
       </template>
-      <Button
-        :disabled="disabled || busy || dataDirty"
-        variant="outline"
-        @click="previewData"
-      >
-        Prepare and preview records
-      </Button>
-      <Button
-        v-if="busy"
-        variant="outline"
-        @click="cancelPreparation"
-      >
-        Cancel data preparation
-      </Button>
-      <p
-        v-if="preparedCount"
-        class="text-muted-foreground text-sm"
-      >
-        {{ preparedCount }} records prepared. Preview may contain private data.
-      </p>
-      <pre
-        v-if="dataPreview.length"
-        class="max-h-80 overflow-auto rounded-md border p-3 text-xs"
-        >{{ JSON.stringify(dataPreview, null, 2) }}</pre>
-    </section>
-
-    <AuthoringSavedTests
-      :source="source"
-      :disabled="disabled || busy"
-      :can-save="definition !== null && !draftInvalid"
-      @load="applyDefinition"
-    />
-
-    <AuthoringSecrets
-      :disabled="disabled || busy"
-      @change="
-        preview = null;
-        emitInvalidation();
-      "
-    />
-    <AuthoringImports
-      :disabled="disabled || busy"
-      @apply="
-        update($event);
-        visual = $event;
-        mode = 'visual';
-      "
-    />
-
-    <section
-      class="space-y-4 rounded-lg border p-6"
-      aria-label="Single request preview"
-    >
-      <h2 class="font-medium">Preview one request</h2>
-
-      <p class="text-muted-foreground text-sm">
-        Preview sends one logical request with the configured timeout and redirects. Clicking
-        confirms that you are authorized to send it. The response is bounded and known request
-        values are redacted. Preview is separate from load-test history.
-      </p>
-
-      <div class="flex flex-wrap gap-3">
-        <Button
-          :disabled="
-            disabled || busy || !definition || draftInvalid || Boolean(definition.config.scenarios)
-          "
-          variant="outline"
-          @click="inspect"
-        >
-          I am authorized. Preview request
-        </Button>
-        <Button
-          :disabled="disabled || busy || !definition || draftInvalid"
-          @click="review"
-        >
-          Review load
-        </Button>
-      </div>
-
-      <p
-        v-if="definition?.config.scenarios"
-        class="text-muted-foreground text-sm"
-      >
-        Single-request preview is unavailable for scenarios. Review load to validate every
-        configured step before authorization.
-      </p>
-
-      <template v-if="preview">
-        <ul
-          v-if="preview.checks.length"
-          class="space-y-1 text-sm"
-          aria-label="Preview assertion outcomes"
-        >
-          <li
-            v-for="(outcome, index) in preview.checks"
-            :key="index"
-          >
-            {{ definition?.config.assertions[index]?.id ?? `Assertion ${index + 1}` }}:
-            {{ outcome.replaceAll('_', ' ') }}
-          </li>
-        </ul>
-
-        <p class="font-mono text-sm">
-          HTTP {{ preview.status }} · {{ preview.elapsed_ms.toFixed(1) }} ms
-        </p>
-        <p class="text-muted-foreground text-xs">
-          Truncated: {{ preview.truncated ? 'yes' : 'no' }} · Redacted:
-          {{ preview.redacted ? 'yes' : 'no' }}
-        </p>
-
-        <pre
-          class="max-h-64 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
-          >{{ preview.headers.map(({ name, value }) => `${name}: ${value}`).join('\n') }}</pre>
-        <pre
-          class="max-h-96 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
-          >{{ preview.body }}</pre>
-      </template>
-    </section>
+    </UTabs>
   </div>
 </template>
+
+<style scoped>
+  @reference '../../assets/css/tailwind.css';
+
+  .authoring-workspace :deep(p code) {
+    @apply bg-default text-highlighted rounded px-1.5 py-0.5 font-mono text-xs;
+  }
+</style>

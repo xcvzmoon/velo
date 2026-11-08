@@ -6,7 +6,7 @@
 
 <template>
   <div
-    class="space-y-2 rounded-md border p-4 text-sm"
+    class="border-default space-y-2 rounded-md border p-4 text-sm"
     role="status"
   >
     <p>
@@ -28,7 +28,7 @@
 
     <div
       v-if="snapshot.automatic_stop"
-      class="text-destructive space-y-1"
+      class="text-error space-y-1"
     >
       <p>
         Automatic stop at {{ (Number(snapshot.automatic_stop.at_us) / 1e6).toFixed(3) }} s. Partial

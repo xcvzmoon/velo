@@ -115,30 +115,32 @@
 </script>
 
 <template>
-  <section
-    class="mt-8 space-y-5 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Run history"
   >
-    <div class="flex items-center justify-between gap-4">
-      <h2 class="font-medium">Run history</h2>
+    <template #header>
+      <div class="flex items-center justify-between gap-4">
+        <h2 class="text-highlighted font-semibold">Run history</h2>
 
-      <Button
-        :disabled="busy"
-        variant="outline"
-        @click="refresh()"
-      >
-        Refresh latest
-      </Button>
-    </div>
+        <UButton
+          :disabled="busy"
+          variant="outline"
+          color="neutral"
+          label="Refresh latest"
+          @click="refresh()"
+        />
+      </div>
+    </template>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Summaries remain until deletion. Select up to two runs to compare observed results. Matching
       origin, method, and workload does not guarantee identical request data or target conditions.
     </p>
 
     <p
       v-if="error || status"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{
@@ -147,9 +149,16 @@
       }}
     </p>
 
+    <USkeleton
+      v-if="busy"
+      class="h-16 w-full"
+      aria-label="Loading run history"
+      role="status"
+    />
+
     <p
-      v-if="!entries.length"
-      class="text-muted-foreground text-sm"
+      v-if="!busy && !entries.length"
+      class="text-muted text-sm"
     >
       No stored runs on this page.
     </p>
@@ -163,21 +172,21 @@
         }}
       </p>
 
-      <Button
+      <UButton
         v-if="baseline"
         :disabled="busy"
         variant="outline"
+        color="neutral"
+        label="Remove baseline"
         @click="pin(null)"
-      >
-        Remove baseline
-      </Button>
+      />
     </div>
 
     <ul class="space-y-3">
       <li
         v-for="entry in entries"
         :key="entry.id"
-        class="flex flex-wrap items-center gap-3 border-b pb-3 text-sm"
+        class="border-default flex flex-wrap items-center gap-3 border-b pb-3 text-sm"
       >
         <span class="flex-1">
           {{ new Date(Number(entry.created_at) * 1000).toLocaleString() }} · {{ entry.method }}
@@ -189,49 +198,49 @@
           {{ entry.metadata.tags.length ? ` · ${entry.metadata.tags.join(', ')}` : '' }}
         </span>
 
-        <Button
+        <UButton
           :disabled="
             busy ||
             baseline === entry.id ||
             (['starting', 'running', 'stopping'].includes(entry.snapshot.state) &&
               !entry.interrupted)
           "
+          :label="baseline === entry.id ? 'Baseline' : 'Pin baseline'"
           variant="outline"
+          color="neutral"
           @click="pin(entry.id)"
-        >
-          {{ baseline === entry.id ? 'Baseline' : 'Pin baseline' }}
-        </Button>
+        />
 
-        <Button
+        <UButton
           :disabled="busy"
           :aria-pressed="selected.some((item) => item.id === entry.id)"
+          :label="selected.some((item) => item.id === entry.id) ? 'Remove selection' : 'Select'"
           variant="outline"
+          color="neutral"
           @click="select(entry.id)"
-        >
-          {{ selected.some((item) => item.id === entry.id) ? 'Remove selection' : 'Select' }}
-        </Button>
+        />
 
-        <Button
+        <ShellConfirmAction
           :disabled="
             busy ||
             (!entry.interrupted &&
               ['starting', 'running', 'stopping'].includes(entry.snapshot.state))
           "
-          variant="ghost"
-          @click="remove(entry.id)"
-        >
-          Delete
-        </Button>
+          label="Delete"
+          title="Delete stored run?"
+          description="The stored measurements will be removed. Comparisons using this run will become unavailable."
+          @confirm="remove(entry.id)"
+        />
       </li>
     </ul>
 
-    <Button
+    <UButton
       :disabled="busy || entries.length < 25"
       variant="outline"
+      color="neutral"
+      label="Older runs"
       @click="refresh(true)"
-    >
-      Older runs
-    </Button>
+    />
 
     <RunComparison
       v-if="candidate"
@@ -252,5 +261,5 @@
         :entry="entry"
       />
     </div>
-  </section>
+  </ShellPanel>
 </template>

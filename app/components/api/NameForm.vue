@@ -30,20 +30,27 @@
       :path="['name']"
     >
       <div class="min-w-0 flex-1 space-y-1">
-        <Label :for="inputId">{{ label }}</Label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="inputId"
+            class="text-sm font-medium"
+          >
+            {{ label }}
+          </label>
 
-        <Input
-          v-model="field.input"
-          v-bind="field.props"
-          :id="inputId"
-          :disabled="disabled"
-          :aria-invalid="Boolean(field.errors)"
-          autocomplete="off"
-        />
+          <UInput
+            v-model="field.input"
+            v-bind="field.props"
+            :id="inputId"
+            :disabled="disabled"
+            :aria-invalid="Boolean(field.errors)"
+            autocomplete="off"
+          />
+        </div>
 
         <p
           v-if="field.errors"
-          class="text-destructive text-xs"
+          class="text-error text-xs"
           role="alert"
         >
           {{ field.errors.join(' ') }}
@@ -51,11 +58,10 @@
       </div>
     </Field>
 
-    <Button
+    <UButton
       :disabled="disabled"
       type="submit"
-    >
-      Create
-    </Button>
+      label="Create"
+    />
   </Form>
 </template>

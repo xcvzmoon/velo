@@ -10,7 +10,27 @@
   import { invoke } from '@tauri-apps/api/core';
   import * as v from 'valibot';
 
+  const sections = [
+    {
+      label: 'Requests',
+      slot: 'requests',
+    },
+    {
+      label: 'Run collection',
+      slot: 'runner',
+    },
+    {
+      label: 'History',
+      slot: 'history',
+    },
+    {
+      label: 'Secrets',
+      slot: 'secrets',
+    },
+  ];
+
   const workspace = useApiWorkspace();
+  const confirm = useConfirmation();
   const { state, collection, request, dirty } = workspace;
   const searchForm = useForm({
     schema: v.object({ search: v.string() }),
@@ -118,7 +138,7 @@
     }
     return count;
   });
-  function closeTab(id: string): void {
+  async function closeTab(id: string): Promise<void> {
     const tab = state.value.tabs.find(
       (entry) => entry.collection_id === collection.value?.id && entry.request_id === id,
     );
@@ -130,9 +150,10 @@
         rawDirty.value[tab.instance_id] ||
         invalid.value[tab.instance_id] ||
         invalid.value[`${tab.instance_id}:data`]) &&
-      !window.confirm(
-        'Close this tab? Valid changes remain in the collection draft; unapplied form edits will be discarded.',
-      )
+      !(await confirm(
+        'Close request tab?',
+        'Valid changes remain in the collection draft; unapplied form edits will be discarded.',
+      ))
     ) {
       return;
     }
@@ -141,8 +162,14 @@
     rawDirty.value[tab.instance_id] = false;
     workspace.close(id);
   }
-  function create(name: string): void {
-    if (documentDirty.value && !window.confirm('Discard unapplied collection JSON edits?')) {
+  async function create(name: string): Promise<void> {
+    if (
+      documentDirty.value &&
+      !(await confirm(
+        'Discard collection edits?',
+        'Unapplied collection JSON edits will be discarded.',
+      ))
+    ) {
       return;
     }
     documentDirty.value = false;
@@ -162,8 +189,14 @@
       ? selection.value.filter((item) => item !== id)
       : [...selection.value, id];
   }
-  function switchCollection(id: string): void {
-    if (documentDirty.value && !window.confirm('Discard unapplied collection JSON edits?')) {
+  async function switchCollection(id: string): Promise<void> {
+    if (
+      documentDirty.value &&
+      !(await confirm(
+        'Discard collection edits?',
+        'Unapplied collection JSON edits will be discarded.',
+      ))
+    ) {
       return;
     }
     state.value.selected = id;
@@ -206,8 +239,14 @@
     documentSource.value = JSON.stringify(collection.value, null, 2);
     documentMode.value = true;
   }
-  function closeDocument(): void {
-    if (documentDirty.value && !window.confirm('Discard unapplied collection JSON edits?')) {
+  async function closeDocument(): Promise<void> {
+    if (
+      documentDirty.value &&
+      !(await confirm(
+        'Discard collection edits?',
+        'Unapplied collection JSON edits will be discarded.',
+      ))
+    ) {
       return;
     }
     documentDirty.value = false;
@@ -376,385 +415,449 @@
   <div class="space-y-6">
     <p
       v-if="state.error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ state.error }}
     </p>
 
-    <section
-      class="space-y-4 rounded-lg border p-5"
-      aria-label="API collections"
-    >
-      <div class="flex flex-wrap gap-2">
-        <Button
-          :disabled="state.busy"
-          variant="outline"
-          @click="creation = { parent: null, kind: 'collection' }"
-        >
-          New collection
-        </Button>
-        <Button
-          :disabled="state.busy"
-          variant="outline"
-          @click="workspace.importFile"
-        >
-          Import collection
-        </Button>
-        <Button
-          :disabled="state.busy"
-          variant="outline"
-          @click="workspace.refresh"
-        >
-          Refresh local collections
-        </Button>
-      </div>
-
-      <ApiNameForm
-        :label="`New ${creation.kind} name`"
-        :disabled="state.busy"
-        @submit="create"
-      />
-
-      <div
-        class="flex flex-wrap gap-2"
-        aria-label="Collections"
-      >
-        <Button
-          v-for="item in state.collections"
-          :key="item.id"
-          :disabled="state.busy"
-          :variant="item.id === state.selected ? 'secondary' : 'ghost'"
-          @click="switchCollection(item.id)"
-        >
-          {{ item.name }}{{ JSON.stringify(item) !== state.saved[item.id] ? ' •' : '' }}
-        </Button>
-      </div>
-
-      <template v-if="collection">
-        <div class="flex flex-wrap gap-2">
-          <Button
-            :disabled="blocked"
-            @click="save"
-          >
-            Save collection{{ dirty ? ' •' : '' }}
-          </Button>
-          <Button
-            :disabled="state.busy || documentDirty"
-            variant="outline"
-            @click="workspace.duplicate"
-          >
-            Duplicate collection
-          </Button>
-          <Button
-            :disabled="blocked"
-            variant="outline"
-            @click="workspace.exportFile"
-          >
-            Export collection
-          </Button>
-          <Button
-            :disabled="state.busy"
-            variant="outline"
-            @click="reorder(-1)"
-          >
-            Move collection up
-          </Button>
-          <Button
-            :disabled="state.busy"
-            variant="outline"
-            @click="reorder(1)"
-          >
-            Move collection down
-          </Button>
-          <Button
-            :disabled="state.busy || documentDirty"
-            variant="outline"
-            @click="workspace.remove"
-          >
-            Delete collection
-          </Button>
-        </div>
-
-        <p class="text-sm">{{ collection.description }}</p>
-        <p class="text-muted-foreground text-xs whitespace-pre-wrap">{{ collection.notes }}</p>
+    <div class="grid min-w-0 items-start gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
+      <ShellPanel aria-label="API collections">
+        <template #header>
+          <h2 class="text-highlighted text-sm font-semibold">Collections</h2>
+          <p class="text-muted mt-1 text-xs">Organize requests and shared environments.</p>
+        </template>
 
         <div class="flex flex-wrap gap-2">
-          <Button
+          <UButton
             :disabled="state.busy"
             variant="outline"
-            @click="add(null, 'request')"
-          >
-            New request
-          </Button>
-          <Button
-            :disabled="state.busy"
-            variant="outline"
-            @click="add(null, 'folder')"
-          >
-            New folder
-          </Button>
-          <Button
-            :disabled="state.busy || documentDirty"
-            variant="outline"
-            @click="editDocument"
-          >
-            Edit collection JSON, defaults, environments, and extractions
-          </Button>
-          <Button
-            :disabled="blocked"
-            variant="outline"
-            @click="selection = []"
-          >
-            Select entire collection
-          </Button>
-          <Button
-            :disabled="blocked"
-            variant="outline"
-            @click="workspace.load(selection, true)"
-          >
-            Review as load scenario
-          </Button>
-        </div>
-
-        <Form
-          :of="searchForm"
-          @submit="() => {}"
-        >
-          <Field
-            v-slot="field"
-            :of="searchForm"
-            :path="['search']"
-          >
-            <div class="space-y-2">
-              <Label for="api-collection-search">Search requests and folders</Label>
-              <Input
-                v-model="field.input"
-                v-bind="field.props"
-                id="api-collection-search"
-                type="search"
-              />
-            </div>
-          </Field>
-        </Form>
-
-        <ApiCollectionTree
-          :entries="collection.entries"
-          :selected-ids="selection"
-          :active="state.active"
-          :query="getInput(searchForm).search ?? ''"
-          :disabled="state.busy || documentMode"
-          @open="workspace.open"
-          @change="workspace.change"
-          @add="add"
-          @run="changeSelection"
-        />
-      </template>
-    </section>
-
-    <section
-      v-if="documentMode"
-      class="space-y-4 rounded-lg border p-5"
-    >
-      <p class="text-muted-foreground text-sm">
-        Edit names, descriptions, usage notes, folder defaults, variables, environments, response
-        JSON pointers to redact, assertions, and extraction rules. Apply validates the complete
-        versioned document. Secret values belong in the OS credential store. Request and folder IDs
-        must remain unique.
-      </p>
-      <AuthoringTextForm
-        :source="documentSource"
-        :disabled="state.busy"
-        label="Version 1 API collection"
-        action="Apply collection JSON"
-        @apply="applyDocument"
-        @dirty="documentDirty = $event"
-      />
-      <Button
-        variant="outline"
-        @click="closeDocument"
-      >
-        Back to requests
-      </Button>
-    </section>
-
-    <section
-      v-show="!documentMode"
-      class="space-y-4"
-      aria-label="Request tabs"
-    >
-      <div class="flex flex-wrap gap-2">
-        <div
-          v-for="tab in tabs"
-          :key="tab.id"
-          class="flex gap-1"
-        >
-          <Button
-            :disabled="state.busy"
-            :variant="tab.id === state.active ? 'secondary' : 'ghost'"
-            @click="workspace.open(tab.id)"
-          >
-            {{ tab.entry.name
-            }}{{
-              tab.dirty ||
-              rawDirty[state.tabs.find((item) => item.request_id === tab.id)?.instance_id ?? '']
-                ? ' •'
-                : ''
-            }}
-          </Button>
-          <Button
-            :disabled="state.busy"
-            :aria-label="`Close ${tab.entry.name}`"
-            variant="ghost"
-            @click="closeTab(tab.id)"
-          >
-            ×
-          </Button>
-        </div>
-      </div>
-
-      <KeepAlive>
-        <ApiRequestTab
-          v-if="request"
-          :key="activeKey"
-          :entry="request"
-          :collection-id="collection?.id ?? ''"
-          :tab-key="activeKey"
-          :disabled="state.busy"
-          @change="updateRequest"
-          @metadata="metadata"
-          @valid="(key, value) => (invalid[key] = !value)"
-          @dirty="(key, value) => (rawDirty[key] = value)"
-        />
-      </KeepAlive>
-
-      <template v-if="request">
-        <div class="flex flex-wrap gap-3">
-          <Button
-            :disabled="blocked"
-            variant="outline"
-            @click="resolvedPreview"
-          >
-            Preview resolved request (masked)
-          </Button>
-          <Button
-            :disabled="blocked"
-            variant="outline"
-            @click="workspace.load([request.id], false)"
-          >
-            Open in load-test editor
-          </Button>
-        </div>
-
-        <pre
-          v-if="preview"
-          class="bg-muted max-h-80 overflow-auto rounded-md p-4 font-mono text-xs break-all whitespace-pre-wrap"
-          >{{ JSON.stringify(preview, null, 2) }}</pre>
-        <KeepAlive>
-          <ApiData
-            :key="activeKey"
-            :definition="request.definition.dataset ?? null"
-            :disabled="state.busy"
-            @apply="applyData"
-            @rows="rowsByTab[activeKey] = $event"
-            @dirty="invalid[`${activeKey}:data`] = $event"
+            color="neutral"
+            label="New collection"
+            @click="creation = { parent: null, kind: 'collection' }"
           />
-        </KeepAlive>
-      </template>
-    </section>
 
-    <ApiRunnerForm
-      v-if="collection"
-      :environments="environments"
-      :disabled="blocked"
-      :has-request="Boolean(request)"
-      :selection="scope"
-      :prepared-rows="rows"
-      @run="run"
-      @environment="
-        environment = $event;
-        preview = null;
-      "
-    />
+          <UButton
+            :disabled="state.busy"
+            variant="outline"
+            color="neutral"
+            label="Import collection"
+            @click="workspace.importFile"
+          />
 
-    <Button
-      v-if="state.busy"
-      variant="destructive"
-      @click="workspace.cancel"
-    >
-      Cancel API execution
-    </Button>
+          <UButton
+            :disabled="state.busy"
+            variant="outline"
+            color="neutral"
+            label="Refresh local collections"
+            @click="workspace.refresh"
+          />
+        </div>
 
-    <ApiSession
-      v-if="collection"
-      :collection-id="collection.id"
-      :environment="environment"
-      :disabled="state.busy"
-      :revision="state.result?.id ?? null"
-    />
-
-    <section
-      v-if="state.result"
-      class="space-y-4 rounded-lg border p-5"
-      aria-label="Functional run evidence"
-    >
-      <h2 class="font-medium">Functional run · {{ state.result.state }}</h2>
-      <p
-        class="text-sm"
-        aria-live="polite"
-      >
-        {{ state.result.results.length }} / {{ state.result.total }} request outcomes recorded.
-        {{ summary.passed }} passed, {{ summary.failed }} failed, {{ summary.cancelled }} cancelled,
-        {{ summary.skipped }} skipped. Assertions: {{ summary.checksPassed }} passed,
-        {{ summary.checksFailed }} failed or unavailable.
-      </p>
-      <p
-        v-if="state.result.storage_error"
-        class="text-destructive text-sm"
-        role="alert"
-      >
-        History could not be saved: {{ state.result.storage_error }}
-      </p>
-      <Button
-        variant="outline"
-        @click="exportEvidence"
-      >
-        Export redacted functional evidence
-      </Button>
-
-      <details
-        v-for="(result, index) in state.result.results"
-        :key="index"
-        class="space-y-3 border-t pt-3"
-        :open="state.result.results.length === 1"
-      >
-        <summary class="cursor-pointer text-sm">
-          Iteration {{ result.iteration }} · {{ result.name }} · {{ result.state }}
-        </summary>
-        <p
-          v-if="result.error"
-          class="text-destructive text-xs"
-          role="alert"
-        >
-          {{ result.error }}
-        </p>
-        <ApiResponse
-          v-if="result.response"
-          :response="result.response"
-          :assertions="
-            state.result.requests.find((request) => request.id === result.request_id)?.definition
-              .config.assertions
-          "
+        <ApiNameForm
+          :label="`New ${creation.kind} name`"
+          :disabled="state.busy"
+          @submit="create"
         />
-      </details>
-    </section>
 
-    <ApiHistory
-      :disabled="state.busy"
-      :revision="state.result?.state === 'running' ? null : (state.result?.id ?? null)"
-      @restore="restore"
-      @inspect="state.result = $event"
-    />
-    <AuthoringSecrets :disabled="state.busy" />
+        <div
+          class="flex flex-wrap gap-2"
+          aria-label="Collections"
+          role="group"
+        >
+          <UButton
+            v-for="item in state.collections"
+            :key="item.id"
+            :disabled="state.busy"
+            :variant="item.id === state.selected ? 'soft' : 'ghost'"
+            :label="`${item.name}${JSON.stringify(item) !== state.saved[item.id] ? ' •' : ''}`"
+            @click="switchCollection(item.id)"
+          />
+        </div>
+
+        <template v-if="collection">
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              :disabled="blocked"
+              :label="`Save collection${dirty ? ' •' : ''}`"
+              @click="save"
+            />
+
+            <UButton
+              :disabled="state.busy || documentDirty"
+              variant="outline"
+              color="neutral"
+              label="Duplicate collection"
+              @click="workspace.duplicate"
+            />
+
+            <UButton
+              :disabled="blocked"
+              variant="outline"
+              color="neutral"
+              label="Export collection"
+              @click="workspace.exportFile"
+            />
+
+            <UButton
+              :disabled="state.busy"
+              variant="outline"
+              color="neutral"
+              label="Move collection up"
+              @click="reorder(-1)"
+            />
+
+            <UButton
+              :disabled="state.busy"
+              variant="outline"
+              color="neutral"
+              label="Move collection down"
+              @click="reorder(1)"
+            />
+
+            <ShellConfirmAction
+              :disabled="state.busy || documentDirty"
+              label="Delete collection"
+              title="Delete collection?"
+              description="This removes the collection and every request it contains."
+              @confirm="workspace.remove"
+            />
+          </div>
+
+          <p class="text-sm">{{ collection.description }}</p>
+          <p class="text-muted text-xs whitespace-pre-wrap">{{ collection.notes }}</p>
+
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              :disabled="state.busy"
+              variant="outline"
+              color="neutral"
+              label="New request"
+              @click="add(null, 'request')"
+            />
+
+            <UButton
+              :disabled="state.busy"
+              variant="outline"
+              color="neutral"
+              label="New folder"
+              @click="add(null, 'folder')"
+            />
+
+            <UButton
+              :disabled="state.busy || documentDirty"
+              variant="outline"
+              color="neutral"
+              label="Edit collection JSON"
+              @click="editDocument"
+            />
+
+            <UButton
+              :disabled="blocked"
+              variant="outline"
+              color="neutral"
+              label="Select entire collection"
+              @click="selection = []"
+            />
+
+            <UButton
+              :disabled="blocked"
+              variant="outline"
+              color="neutral"
+              label="Review as load scenario"
+              @click="workspace.load(selection, true)"
+            />
+          </div>
+
+          <Form
+            :of="searchForm"
+            @submit="() => {}"
+          >
+            <Field
+              v-slot="field"
+              :of="searchForm"
+              :path="['search']"
+            >
+              <div class="space-y-2">
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    class="text-sm font-medium"
+                    for="api-collection-search"
+                  >
+                    Search requests and folders
+                  </label>
+
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    id="api-collection-search"
+                    type="search"
+                  />
+                </div>
+              </div>
+            </Field>
+          </Form>
+
+          <ApiCollectionTree
+            :entries="collection.entries"
+            :selected-ids="selection"
+            :active="state.active"
+            :query="getInput(searchForm).search ?? ''"
+            :disabled="state.busy || documentMode"
+            @open="workspace.open"
+            @change="workspace.change"
+            @add="add"
+            @run="changeSelection"
+          />
+        </template>
+      </ShellPanel>
+
+      <UTabs
+        :items="sections"
+        :unmount-on-hide="false"
+        :ui="{
+          list: 'max-w-full overflow-x-auto rounded-xl bg-elevated/60 ring ring-inset ring-default',
+          trigger: 'shrink-0',
+          content: 'min-w-0 space-y-6',
+        }"
+        variant="pill"
+        color="neutral"
+        class="min-w-0 gap-5"
+      >
+        <template #requests>
+          <div class="space-y-5">
+            <ShellPanel v-if="documentMode">
+              <p class="text-muted text-sm">
+                Edit names, descriptions, usage notes, folder defaults, variables, environments,
+                response JSON pointers to redact, assertions, and extraction rules. Apply validates
+                the complete versioned document. Secret values belong in the OS credential store.
+                Request and folder IDs must remain unique.
+              </p>
+
+              <AuthoringTextForm
+                :source="documentSource"
+                :disabled="state.busy"
+                label="Version 1 API collection"
+                action="Apply collection JSON"
+                @apply="applyDocument"
+                @dirty="documentDirty = $event"
+              />
+
+              <UButton
+                variant="outline"
+                color="neutral"
+                label="Back to requests"
+                @click="closeDocument"
+              />
+            </ShellPanel>
+
+            <section
+              v-show="!documentMode"
+              class="space-y-4"
+              aria-label="Request tabs"
+            >
+              <div class="flex flex-wrap gap-2">
+                <div
+                  v-for="tab in tabs"
+                  :key="tab.id"
+                  class="flex gap-1"
+                >
+                  <UButton
+                    :disabled="state.busy"
+                    :variant="tab.id === state.active ? 'soft' : 'ghost'"
+                    :label="`${tab.entry.name}${tab.dirty || rawDirty[state.tabs.find((item) => item.request_id === tab.id)?.instance_id ?? ''] ? ' •' : ''}`"
+                    @click="workspace.open(tab.id)"
+                  />
+
+                  <UButton
+                    :disabled="state.busy"
+                    :aria-label="`Close ${tab.entry.name}`"
+                    variant="ghost"
+                    color="neutral"
+                    label="×"
+                    @click="closeTab(tab.id)"
+                  />
+                </div>
+              </div>
+
+              <KeepAlive>
+                <ApiRequestTab
+                  v-if="request"
+                  :key="activeKey"
+                  :entry="request"
+                  :collection-id="collection?.id ?? ''"
+                  :tab-key="activeKey"
+                  :disabled="state.busy"
+                  @change="updateRequest"
+                  @metadata="metadata"
+                  @valid="(key, value) => (invalid[key] = !value)"
+                  @dirty="(key, value) => (rawDirty[key] = value)"
+                />
+              </KeepAlive>
+
+              <template v-if="request">
+                <div class="flex flex-wrap gap-3">
+                  <UButton
+                    :disabled="blocked"
+                    variant="outline"
+                    color="neutral"
+                    label="Preview resolved request (masked)"
+                    @click="resolvedPreview"
+                  />
+
+                  <UButton
+                    :disabled="blocked"
+                    variant="outline"
+                    color="neutral"
+                    label="Open in load-test editor"
+                    @click="workspace.load([request.id], false)"
+                  />
+                </div>
+
+                <pre
+                  v-if="preview"
+                  class="bg-muted max-h-80 overflow-auto rounded-md p-4 font-mono text-xs break-all whitespace-pre-wrap"
+                  >{{ JSON.stringify(preview, null, 2) }}</pre>
+
+                <KeepAlive>
+                  <ApiData
+                    :key="activeKey"
+                    :definition="request.definition.dataset ?? null"
+                    :disabled="state.busy"
+                    @apply="applyData"
+                    @rows="rowsByTab[activeKey] = $event"
+                    @dirty="invalid[`${activeKey}:data`] = $event"
+                  />
+                </KeepAlive>
+              </template>
+            </section>
+
+            <ShellEmptyState
+              v-if="!request && !documentMode"
+              title="Select a request"
+              description="Open a request from your collection, or create one to start authoring."
+            />
+          </div>
+        </template>
+
+        <template #runner>
+          <div class="space-y-5">
+            <ApiRunnerForm
+              v-if="collection"
+              :environments="environments"
+              :disabled="blocked"
+              :has-request="Boolean(request)"
+              :selection="scope"
+              :prepared-rows="rows"
+              @run="run"
+              @environment="
+                environment = $event;
+                preview = null;
+              "
+            />
+
+            <UButton
+              v-if="state.busy"
+              color="error"
+              label="Cancel API execution"
+              @click="workspace.cancel"
+            />
+
+            <ApiSession
+              v-if="collection"
+              :collection-id="collection.id"
+              :environment="environment"
+              :disabled="state.busy"
+              :revision="state.result?.id ?? null"
+            />
+
+            <ShellPanel
+              v-if="state.result"
+              aria-label="Functional run evidence"
+            >
+              <template #header>
+                <h2 class="text-highlighted font-semibold">
+                  Functional run · {{ state.result.state }}
+                </h2>
+              </template>
+
+              <p
+                class="text-sm"
+                aria-live="polite"
+              >
+                {{ state.result.results.length }} / {{ state.result.total }} request outcomes
+                recorded. {{ summary.passed }} passed, {{ summary.failed }} failed,
+                {{ summary.cancelled }} cancelled, {{ summary.skipped }} skipped. Assertions:
+                {{ summary.checksPassed }} passed, {{ summary.checksFailed }} failed or unavailable.
+              </p>
+
+              <p
+                v-if="state.result.storage_error"
+                class="text-error text-sm"
+                role="alert"
+              >
+                History could not be saved: {{ state.result.storage_error }}
+              </p>
+
+              <UButton
+                variant="outline"
+                color="neutral"
+                label="Export redacted functional evidence"
+                @click="exportEvidence"
+              />
+
+              <details
+                v-for="(result, index) in state.result.results"
+                :key="index"
+                :open="state.result.results.length === 1"
+                class="border-default border-t pt-4"
+              >
+                <summary class="cursor-pointer text-sm">
+                  Iteration {{ result.iteration }} · {{ result.name }} · {{ result.state }}
+                </summary>
+
+                <div class="min-w-0 space-y-4 pt-4">
+                  <p
+                    v-if="result.error"
+                    class="text-error text-xs"
+                    role="alert"
+                  >
+                    {{ result.error }}
+                  </p>
+
+                  <ApiResponse
+                    v-if="result.response"
+                    :response="result.response"
+                    :assertions="
+                      state.result.requests.find((request) => request.id === result.request_id)
+                        ?.definition.config.assertions
+                    "
+                  />
+                </div>
+              </details>
+            </ShellPanel>
+
+            <ShellEmptyState
+              v-if="!collection"
+              title="Choose a collection"
+              description="Create or select a collection before reviewing functional execution."
+            />
+          </div>
+        </template>
+
+        <template #history>
+          <ApiHistory
+            :disabled="state.busy"
+            :revision="state.result?.state === 'running' ? null : (state.result?.id ?? null)"
+            @restore="restore"
+            @inspect="state.result = $event"
+          />
+        </template>
+
+        <template #secrets>
+          <AuthoringSecrets :disabled="state.busy" />
+        </template>
+      </UTabs>
+    </div>
   </div>
 </template>

@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1290" viewBox="0 0 1600 1290" role="img" aria-labelledby="title desc">
+<title id="title">Velo architecture</title><desc id="desc">A local Tauri desktop app with a Nuxt and Vue frontend, a Rust execution engine, SQLite history and OS credential storage. A standalone CLI shares the engine; MCP supports offline authoring and redacted evidence.</desc>
+<defs><pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0H0V28" fill="none" stroke="#dfe4eb" stroke-width="1"/></pattern><filter id="shadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#10293e" flood-opacity=".07"/></filter><marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#147dce"/></marker><marker id="gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#64717e"/></marker></defs>
+<rect width="1600" height="1290" fill="#f8fafc"/><rect width="1600" height="1290" fill="url(#grid)"/>
+<text x="48" y="53" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="37" font-weight="750" text-anchor="start">velo</text>
+<text x="150" y="52" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start">Architecture</text>
+<text x="1552" y="51" fill="#697686" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="500" text-anchor="end">LOCAL API TESTING STUDIO</text>
+<rect x="220" y="100" width="1110" height="670" rx="18" stroke="#d68b43" stroke-width="1.3" fill="#fff9f12e"/>
+<text x="242" y="131" fill="#9a591b" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="650" text-anchor="start">Desktop application · Tauri 2</text>
+<rect x="250" y="160" width="260" height="575" rx="18" stroke="#d7ac7f" stroke-width="1.3" fill="#fffdf955" stroke-dasharray="4 4"/>
+<rect x="550" y="160" width="285" height="575" rx="18" stroke="#d7ac7f" stroke-width="1.3" fill="#fffdf955" stroke-dasharray="4 4"/>
+<rect x="975" y="160" width="325" height="575" rx="18" stroke="#d7ac7f" stroke-width="1.3" fill="#fffdf955" stroke-dasharray="4 4"/>
+<text x="269" y="190" fill="#9a591b" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="650" text-anchor="start">Webview</text>
+<text x="570" y="190" fill="#9a591b" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="650" text-anchor="start">Native Rust host</text>
+<text x="995" y="190" fill="#9a591b" font-family="Inter, Arial, sans-serif" font-size="15" font-weight="650" text-anchor="start">Local persistence</text>
+<rect x="53" y="248" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="67" y="262" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#17212d" stroke="#17212d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></g></svg>
+<text x="90" y="349" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">User</text>
+<text x="90" y="371" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Desktop app</text>
+<rect x="343" y="248" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<path d="M355 266h10l15 26 15-26h10L380 309z" fill="#42b883"/><path d="M365 266h9l6 10 6-10h9L380 292z" fill="#35495e"/>
+<text x="380" y="349" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Nuxt 4 / Vue 3</text>
+<text x="380" y="371" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Client-rendered UI · Nuxt UI</text>
+<rect x="343" y="418" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="357" y="432" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#8564c6" stroke="#8564c6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5h8m-8 7h8m-8 7h8M3 17l2 2l4-4M3 7l2 2l4-4"/></svg>
+<text x="380" y="519" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Formisch + Valibot</text>
+<text x="380" y="541" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Form state · input validation</text>
+<rect x="343" y="593" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="357" y="607" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#147dce" stroke="#147dce" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16v5m4-6.361V21m4-10.344V21m2-18l-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15m2 3.463V21m4-6.344V21"/></svg>
+<text x="380" y="694" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">uPlot</text>
+<text x="380" y="716" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Live charts · result comparison</text>
+<rect x="655" y="248" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="669" y="262" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#1eabc0" stroke="#1eabc0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></g></svg>
+<text x="692" y="349" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Tauri commands</text>
+<text x="692" y="371" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Validation · run ownership</text>
+<rect x="655" y="418" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="669" y="432" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#c46a30" stroke="#c46a30" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11 10.27L7 3.34m4 10.39l-4 6.93M12 22v-2m0-18v2m2 8h8m-5 8.66l-1-1.73m1-15.59l-1 1.73M2 12h2m16.66 5l-1.73-1m1.73-9l-1.73 1M3.34 17l1.73-1M3.34 7l1.73 1"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="12" r="8"/></g></svg>
+<text x="692" y="462" fill="#984416" font-family="Inter, Arial, sans-serif" font-size="19" font-weight="700" text-anchor="middle">R</text>
+<text x="692" y="519" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">velo-engine</text>
+<text x="692" y="541" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Tokio · Reqwest · HDR metrics</text>
+<text x="692" y="558" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Scheduling · cancellation · thresholds</text>
+<rect x="655" y="593" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="669" y="607" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#147dce" stroke="#147dce" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M16.247 7.761a6 6 0 0 1 0 8.478m2.828-11.306a10 10 0 0 1 0 14.134m-14.15 0a10 10 0 0 1 0-14.134m2.828 11.306a6 6 0 0 1 0-8.478"/><circle cx="12" cy="12" r="2"/></g></svg>
+<text x="692" y="694" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Native events</text>
+<text x="692" y="716" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Bounded run snapshots</text>
+<rect x="1100" y="248" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="1114" y="262" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#438fb8" stroke="#438fb8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></g></svg>
+<text x="1137" y="349" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">SQLite / rusqlite</text>
+<text x="1137" y="371" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Tests · collections · run history</text>
+<rect x="1100" y="593" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="1114" y="607" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#d49725" stroke="#d49725" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></g></svg>
+<text x="1137" y="694" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">OS credential store</text>
+<text x="1137" y="716" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Secret references · keyring</text>
+<rect x="1423" y="418" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="1437" y="432" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#64717e" stroke="#64717e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01M6 18h.01"/></g></svg>
+<text x="1460" y="519" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Target API</text>
+<text x="1460" y="541" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">HTTP(S) requests</text>
+<path d="M132 285H335" fill="none" stroke="#147dce" stroke-width="1.8" marker-end="url(#blue)"/>
+<text x="230" y="270" fill="#147dce" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="middle">Interact</text>
+<path d="M425 285H647" fill="none" stroke="#147dce" stroke-width="1.8" marker-end="url(#blue)"/>
+<text x="536" y="270" fill="#147dce" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="middle">invoke()</text>
+<text x="706" y="399" fill="#64717e" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="start">execute</text>
+<path d="M692 385V409" fill="none" stroke="#147dce" stroke-width="1.8" marker-end="url(#blue)"/>
+<path d="M737 455H1414" fill="none" stroke="#147dce" stroke-width="1.8" marker-end="url(#blue)"/>
+<text x="1255" y="439" fill="#147dce" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="middle">HTTP(S)</text>
+<text x="1055" y="483" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Streamed load responses are discarded</text>
+<path d="M737 285H1091" fill="none" stroke="#64717e" stroke-width="1.8" marker-end="url(#gray)"/>
+<text x="911" y="270" fill="#64717e" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="middle">Read / write</text>
+<path d="M737 305H891V630H1091" fill="none" stroke="#64717e" stroke-width="1.8" marker-end="url(#gray)"/>
+<text x="989" y="615" fill="#64717e" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="middle">Resolve secrets</text>
+<path d="M692 566V584" fill="none" stroke="#147dce" stroke-width="1.8" marker-end="url(#blue)"/>
+<text x="709" y="570" fill="#147dce" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="start">sample</text>
+<path d="M647 630H425" fill="none" stroke="#147dce" stroke-width="1.8" marker-end="url(#blue)"/>
+<text x="536" y="614" fill="#147dce" font-family="ui-monospace, Menlo, monospace" font-size="12" font-weight="400" text-anchor="middle">run-update</text>
+<text x="90" y="413" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="400" text-anchor="middle">One machine.</text>
+<text x="90" y="434" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="400" text-anchor="middle">Native execution.</text>
+<text x="90" y="455" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="13" font-weight="400" text-anchor="middle">Local history.</text>
+<rect x="46" y="812" width="1508" height="202" rx="18" stroke="#8bb9d9" stroke-width="1.3" fill="#eef6fc66"/>
+<text x="66" y="842" fill="#1766a0" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="650" text-anchor="start">Automation &amp; shared contracts</text>
+<rect x="208" y="868" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="222" y="882" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#17212d" stroke="#17212d" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19h8M4 17l6-6l-6-6"/></svg>
+<text x="245" y="969" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">velo-cli</text>
+<text x="245" y="991" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Headless runs · shared engine</text>
+<rect x="573" y="868" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="587" y="882" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#8564c6" stroke="#8564c6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 22v-5m3-9V2m2 6a1 1 0 0 1 1 1v4a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1zM9 8V2"/></svg>
+<text x="610" y="969" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">velo-mcp</text>
+<text x="610" y="991" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Offline drafts · redacted evidence</text>
+<rect x="938" y="868" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="952" y="882" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#147dce" stroke="#147dce" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5m-10 4.5L8 15l2 2.5m4-5l2 2.5l-2 2.5"/></g></svg>
+<text x="975" y="969" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">velo-contracts</text>
+<text x="975" y="991" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Rust contracts → TypeScript · ts-rs</text>
+<rect x="1303" y="868" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="1317" y="882" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#438fb8" stroke="#438fb8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"/><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706zM5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"/></g></svg>
+<text x="1340" y="969" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Files &amp; reports</text>
+<text x="1340" y="991" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">JSON definitions · JSON / JUnit / HTML</text>
+<rect x="46" y="1053" width="1508" height="190" rx="18" stroke="#8bb9d9" stroke-width="1.3" fill="#eef6fc66"/>
+<text x="66" y="1083" fill="#1766a0" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="650" text-anchor="start">Development</text>
+<rect x="143" y="1100" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<text x="180" y="1149" fill="#3178c6" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="700" text-anchor="middle">TS</text>
+<text x="180" y="1201" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">TypeScript</text>
+<text x="180" y="1223" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Frontend language</text>
+<rect x="388" y="1100" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="402" y="1114" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#c46a30" stroke="#c46a30" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11 10.27L7 3.34m4 10.39l-4 6.93M12 22v-2m0-18v2m2 8h8m-5 8.66l-1-1.73m1-15.59l-1 1.73M2 12h2m16.66 5l-1.73-1m1.73-9l-1.73 1M3.34 17l1.73-1M3.34 7l1.73 1"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="12" r="8"/></g></svg>
+<text x="425" y="1144" fill="#984416" font-family="Inter, Arial, sans-serif" font-size="19" font-weight="700" text-anchor="middle">R</text>
+<text x="425" y="1201" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Rust / Cargo</text>
+<text x="425" y="1223" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Native workspace</text>
+<rect x="633" y="1100" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="647" y="1114" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#d99722" stroke="#d99722" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73zm1 .27V12"/><path d="M3.29 7L12 12l8.71-5M7.5 4.27l9 5.15"/></g></svg>
+<text x="670" y="1201" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">pnpm</text>
+<text x="670" y="1223" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Package management</text>
+<rect x="878" y="1100" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="892" y="1114" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#bc3b45" stroke="#bc3b45" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12l2 2l4-4"/></g></svg>
+<text x="915" y="1201" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Lefthook</text>
+<text x="915" y="1223" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Git hooks</text>
+<rect x="1123" y="1100" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="1137" y="1114" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#0caabb" stroke="#0caabb" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594zM20 2v4m2-2h-4"/><circle cx="4" cy="20" r="2"/></g></svg>
+<text x="1160" y="1201" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Oxlint / Oxfmt</text>
+<text x="1160" y="1223" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Linting · formatting</text>
+<rect x="1368" y="1100" width="74" height="74" rx="16" fill="#fff" stroke="#c7cdd5" stroke-width="1.3" filter="url(#shadow)"/>
+<svg x="1382" y="1114" width="46" height="46" viewBox="0 0 24 24" fill="none" color="#609a43" stroke="#609a43" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2M6.453 15h11.094M8.5 2h7"/></svg>
+<text x="1405" y="1201" fill="#17212d" font-family="Inter, Arial, sans-serif" font-size="17" font-weight="650" text-anchor="middle">Vitest / Cargo test</text>
+<text x="1405" y="1223" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="middle">Web · Rust verification</text>
+<text x="48" y="1271" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="start">Solid arrows show the primary desktop data flow. Supporting tools are grouped below.</text>
+<text x="1552" y="1271" fill="#697686" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="400" text-anchor="end">velo · repository architecture</text>
+</svg>

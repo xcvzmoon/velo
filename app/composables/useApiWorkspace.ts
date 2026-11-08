@@ -1,4 +1,3 @@
-import type { ComputedRef, Ref } from 'vue';
 import type {
   ApiCollection,
   CollectionEntry,
@@ -64,6 +63,7 @@ type ApiWorkspace = {
 };
 /**
  * Owns local API drafts, explicit execution, and collection persistence.
+ * Destructive actions require confirmation in the calling UI.
  * @returns Shared in-memory drafts and actions; creating or editing never sends a request.
  * @example
  * ```ts
@@ -72,6 +72,7 @@ type ApiWorkspace = {
  * ```
  */
 export function useApiWorkspace(): ApiWorkspace {
+  const confirm = useConfirmation();
   const state = useState<ApiWorkspaceState>('api-workspace', () => ({
     collections: [],
     snapshots: [],
@@ -144,7 +145,7 @@ export function useApiWorkspace(): ApiWorkspace {
   }
   async function remove(): Promise<void> {
     const current = collection.value;
-    if (!current || !window.confirm(`Delete ${current.name} and all its requests?`)) {
+    if (!current) {
       return;
     }
     await perform(async () => {
@@ -226,9 +227,6 @@ export function useApiWorkspace(): ApiWorkspace {
   }
   function change(id: string, action: 'duplicate' | 'delete' | 'up' | 'down'): void {
     if (!collection.value) {
-      return;
-    }
-    if (action === 'delete' && !window.confirm('Delete this entry and its contents?')) {
       return;
     }
     changeApiEntry(collection.value.entries, id, action);
@@ -326,9 +324,10 @@ export function useApiWorkspace(): ApiWorkspace {
           ).definition;
       if (
         scenario &&
-        !window.confirm(
-          'Review this ordered flow as a load scenario? You must review workload, transport, extraction, and failure settings before starting load.',
-        )
+        !(await confirm(
+          'Review as a load scenario?',
+          'Review workload, transport, extraction, and failure settings in Test studio before starting load.',
+        ))
       ) {
         return;
       }

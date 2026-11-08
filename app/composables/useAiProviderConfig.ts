@@ -1,4 +1,3 @@
-import type { Ref } from 'vue';
 import type { AiProviderConfig } from '~/types/ai';
 import { defaultAiProviderConfig } from '~/schemas/ai';
 

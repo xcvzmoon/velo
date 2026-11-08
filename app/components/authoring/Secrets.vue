@@ -42,13 +42,13 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-6"
+  <ShellPanel
+    variant="inset"
     aria-label="Secret references"
   >
-    <h2 class="font-medium">OS secrets</h2>
+    <template #header><h2 class="text-highlighted font-semibold">OS secrets</h2></template>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Use
       <code v-text="'{{secret:name}}'" />
       in request fields. Values stay in the OS credential store and are excluded from definitions
@@ -66,19 +66,26 @@
         :path="['name']"
       >
         <div class="space-y-2">
-          <Label for="secret-name">Secret name</Label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="secret-name"
+            >
+              Secret name
+            </label>
 
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled || busy"
-            id="secret-name"
-            autocomplete="off"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :disabled="disabled || busy"
+              id="secret-name"
+              autocomplete="off"
+            />
+          </div>
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
           >
             {{ field.errors.join(' ') }}
           </p>
@@ -91,32 +98,38 @@
         :path="['value']"
       >
         <div class="space-y-2">
-          <Label for="secret-value">Value</Label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="secret-value"
+            >
+              Value
+            </label>
 
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled || busy"
-            id="secret-value"
-            type="password"
-            autocomplete="new-password"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :disabled="disabled || busy"
+              id="secret-value"
+              type="password"
+              autocomplete="new-password"
+            />
+          </div>
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
           >
             {{ field.errors.join(' ') }}
           </p>
         </div>
       </FormischField>
 
-      <Button
+      <UButton
         :disabled="disabled || busy"
         type="submit"
-      >
-        Update OS secret
-      </Button>
+        label="Update OS secret"
+      />
     </FormischForm>
 
     <p
@@ -126,5 +139,5 @@
     >
       {{ message }}
     </p>
-  </section>
+  </ShellPanel>
 </template>

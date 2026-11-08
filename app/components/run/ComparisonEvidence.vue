@@ -8,7 +8,7 @@
       Baseline {{ report.baseline_id }} · regression verdict: {{ report.verdict }}
     </p>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Safe configuration identity: {{ report.candidate.definition_identity ?? 'unavailable' }}.
       Request paths and content are withheld. Review the target conditions and omitted request
       context before accepting a conclusion.
@@ -32,7 +32,7 @@
 
       <p
         v-if="!report.differences.length"
-        class="text-muted-foreground text-sm"
+        class="text-muted text-sm"
       >
         No differences in retained configuration. Omitted request content may differ.
       </p>
@@ -40,9 +40,10 @@
       <dl
         v-for="difference in report.differences"
         :key="difference.field"
-        class="rounded-md border p-3 text-sm"
+        class="border-default rounded-md border p-3 text-sm"
       >
         <dt class="font-medium">{{ difference.field }}</dt>
+
         <dd class="mt-2 overflow-auto font-mono text-xs break-all whitespace-pre-wrap">
           Baseline: {{ JSON.stringify(difference.baseline) }}
           <br />
@@ -54,34 +55,46 @@
     <RunComparisonCharts :deltas="report.deltas" />
 
     <div class="overflow-auto">
-      <table class="w-full text-left text-sm">
-        <caption class="text-muted-foreground mb-2 text-left">
-          Evaluated measurements. Absolute change = candidate − baseline. Relative change = 100 ×
-          change / baseline. Values retain measurement precision.
-        </caption>
-        <thead>
-          <tr>
-            <th class="p-2">Metric</th>
-            <th class="p-2">Baseline</th>
-            <th class="p-2">Candidate</th>
-            <th class="p-2">Absolute change</th>
-            <th class="p-2">Relative %</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="delta in report.deltas"
-            :key="delta.metric"
-            class="border-t"
-          >
-            <th class="p-2">{{ delta.metric }}</th>
-            <td class="p-2">{{ delta.baseline ?? 'unavailable' }}</td>
-            <td class="p-2">{{ delta.candidate ?? 'unavailable' }}</td>
-            <td class="p-2">{{ delta.absolute ?? 'unavailable' }}</td>
-            <td class="p-2">{{ delta.percentage ?? 'unavailable' }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <UTable
+        :data="report.deltas"
+        :columns="[
+          { id: 'metric', header: 'Metric' },
+          { id: 'baseline', header: 'Baseline' },
+          { id: 'candidate', header: 'Candidate' },
+          { id: 'absolute', header: 'Absolute change' },
+          { id: 'percentage', header: 'Relative %' },
+        ]"
+        :ui="{ td: 'text-xs font-mono', th: 'text-xs' }"
+        tabindex="0"
+        class="w-full"
+      >
+        <template #caption>
+          <span class="text-muted mb-2 text-left">
+            Evaluated measurements. Absolute change = candidate − baseline. Relative change = 100 ×
+            change / baseline. Values retain measurement precision.
+          </span>
+        </template>
+
+        <template #metric-cell="{ row }">
+          <span>{{ row.original.metric }}</span>
+        </template>
+
+        <template #baseline-cell="{ row }">
+          <span>{{ row.original.baseline ?? 'unavailable' }}</span>
+        </template>
+
+        <template #candidate-cell="{ row }">
+          <span>{{ row.original.candidate ?? 'unavailable' }}</span>
+        </template>
+
+        <template #absolute-cell="{ row }">
+          <span>{{ row.original.absolute ?? 'unavailable' }}</span>
+        </template>
+
+        <template #percentage-cell="{ row }">
+          <span>{{ row.original.percentage ?? 'unavailable' }}</span>
+        </template>
+      </UTable>
     </div>
   </div>
 </template>

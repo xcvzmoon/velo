@@ -18,17 +18,18 @@
     :path="['multipartParts']"
   >
     <div class="space-y-4">
-      <p class="text-muted-foreground text-xs leading-relaxed">
+      <p class="text-muted text-xs leading-relaxed">
         Files stream from disk for each request and body-preserving redirect. Keep files unchanged
         during the run. Upload buffers count toward the request-data budget. The multipart boundary
         is managed by the client. File paths and contents are excluded from run reports.
       </p>
 
-      <Button
+      <UButton
         :disabled="disabled"
         type="button"
-        size="sm"
         variant="outline"
+        color="neutral"
+        label="Add multipart field"
         @click="
           insert(form, {
             path: ['multipartParts'],
@@ -42,14 +43,12 @@
             },
           })
         "
-      >
-        Add multipart field
-      </Button>
+      />
 
       <div
         v-for="(item, index) in fieldArray.items"
         :key="item"
-        class="space-y-3 rounded-md border p-4"
+        class="border-default space-y-3 rounded-md border p-4"
       >
         <div class="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <FormischField
@@ -58,15 +57,22 @@
             :path="['multipartParts', index, 'name']"
           >
             <div class="space-y-2">
-              <Label :for="`multipart-${item}-name`">Field name</Label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`multipart-${item}-name`"
+                  class="text-sm font-medium"
+                >
+                  Field name
+                </label>
 
-              <Input
-                v-model="field.input"
-                v-bind="field.props"
-                :id="`multipart-${item}-name`"
-                autocomplete="off"
-                spellcheck="false"
-              />
+                <UInput
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="`multipart-${item}-name`"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -76,38 +82,39 @@
             :path="['multipartParts', index, 'kind']"
           >
             <div class="space-y-2">
-              <Label :for="`multipart-${item}-kind`">Content</Label>
-
-              <Select
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-              >
-                <SelectTrigger
-                  :id="`multipart-${item}-kind`"
-                  class="w-full"
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`multipart-${item}-kind`"
+                  class="text-sm font-medium"
                 >
-                  <SelectValue />
-                </SelectTrigger>
+                  Content
+                </label>
 
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="file">File</SelectItem>
-                </SelectContent>
-              </Select>
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :id="`multipart-${item}-kind`"
+                  :items="[
+                    { label: 'Text', value: 'text' },
+                    { label: 'File', value: 'file' },
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
-          <Button
+          <UButton
             :disabled="disabled"
             :aria-label="`Remove multipart field ${index + 1}`"
             type="button"
             variant="ghost"
             class="sm:mt-6"
+            color="neutral"
+            label="Remove"
             @click="remove(form, { path: ['multipartParts'], at: index })"
-          >
-            Remove
-          </Button>
+          />
         </div>
 
         <FormischField
@@ -130,15 +137,22 @@
             :path="['multipartParts', index, 'value']"
           >
             <div class="space-y-2">
-              <Label :for="`multipart-${item}-value`">Value</Label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`multipart-${item}-value`"
+                  class="text-sm font-medium"
+                >
+                  Value
+                </label>
 
-              <Textarea
-                v-model="field.input"
-                v-bind="field.props"
-                :id="`multipart-${item}-value`"
-                autocomplete="off"
-                spellcheck="false"
-              />
+                <UTextarea
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="`multipart-${item}-value`"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
             </div>
           </FormischField>
         </FormischField>

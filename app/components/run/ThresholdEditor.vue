@@ -12,10 +12,10 @@
 </script>
 
 <template>
-  <div class="space-y-4 border-t pt-6">
+  <div class="border-default space-y-4 border-t pt-6">
     <h3 class="text-sm font-medium">Final thresholds</h3>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       Evaluate the measurement population after cleanup, excluding requests admitted during warm-up.
       Response p95 covers completed HTTP responses of all statuses. HTTP failure percentage covers
       status, transport, and timeout failures over non-cancelled terminal attempts. Request rate
@@ -31,11 +31,12 @@
       :path="['thresholds']"
     >
       <div class="space-y-4">
-        <Button
+        <UButton
           :disabled="disabled"
           type="button"
-          size="sm"
           variant="outline"
+          color="neutral"
+          label="Add threshold"
           @click="
             insert(form, {
               path: ['thresholds'],
@@ -46,13 +47,11 @@
               },
             })
           "
-        >
-          Add threshold
-        </Button>
+        />
 
         <p
           v-if="!fieldArray.items.length"
-          class="text-muted-foreground text-xs"
+          class="text-muted text-xs"
         >
           No thresholds configured.
         </p>
@@ -68,27 +67,28 @@
             :path="['thresholds', index, 'metric']"
           >
             <div class="space-y-2">
-              <Label :for="`threshold-${item}-metric`">Metric and unit</Label>
-
-              <Select
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-              >
-                <SelectTrigger
-                  :id="`threshold-${item}-metric`"
-                  class="w-full"
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`threshold-${item}-metric`"
+                  class="text-sm font-medium"
                 >
-                  <SelectValue />
-                </SelectTrigger>
+                  Metric and unit
+                </label>
 
-                <SelectContent>
-                  <SelectItem value="response_p95_ms">Response p95 (ms)</SelectItem>
-                  <SelectItem value="http_failure_percent">HTTP failure (%)</SelectItem>
-                  <SelectItem value="assertion_failure_percent">Assertion failure (%)</SelectItem>
-                  <SelectItem value="request_rate">Requests/s</SelectItem>
-                </SelectContent>
-              </Select>
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :id="`threshold-${item}-metric`"
+                  :items="[
+                    { label: 'Response p95 (ms)', value: 'response_p95_ms' },
+                    { label: 'HTTP failure (%)', value: 'http_failure_percent' },
+                    { label: 'Assertion failure (%)', value: 'assertion_failure_percent' },
+                    { label: 'Requests/s', value: 'request_rate' },
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -98,25 +98,26 @@
             :path="['thresholds', index, 'operator']"
           >
             <div class="space-y-2">
-              <Label :for="`threshold-${item}-operator`">Comparison</Label>
-
-              <Select
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-              >
-                <SelectTrigger
-                  :id="`threshold-${item}-operator`"
-                  class="w-full"
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`threshold-${item}-operator`"
+                  class="text-sm font-medium"
                 >
-                  <SelectValue />
-                </SelectTrigger>
+                  Comparison
+                </label>
 
-                <SelectContent>
-                  <SelectItem value="less_than">Strictly less than</SelectItem>
-                  <SelectItem value="greater_than">Strictly greater than</SelectItem>
-                </SelectContent>
-              </Select>
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :id="`threshold-${item}-operator`"
+                  :items="[
+                    { label: 'Strictly less than', value: 'less_than' },
+                    { label: 'Strictly greater than', value: 'greater_than' },
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -126,23 +127,30 @@
             :path="['thresholds', index, 'limit']"
           >
             <div class="space-y-2">
-              <Label :for="`threshold-${item}-limit`">Limit</Label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`threshold-${item}-limit`"
+                  class="text-sm font-medium"
+                >
+                  Limit
+                </label>
 
-              <Input
-                v-model="field.input"
-                v-bind="field.props"
-                :id="`threshold-${item}-limit`"
-                :aria-invalid="Boolean(field.errors)"
-                :aria-describedby="`threshold-${item}-error`"
-                type="number"
-                min="0"
-                step="any"
-              />
+                <UInput
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="`threshold-${item}-limit`"
+                  :aria-invalid="Boolean(field.errors)"
+                  :aria-describedby="`threshold-${item}-error`"
+                  type="number"
+                  min="0"
+                  step="any"
+                />
+              </div>
 
               <p
                 v-if="field.errors"
                 :id="`threshold-${item}-error`"
-                class="text-destructive text-xs"
+                class="text-error text-xs"
                 role="alert"
               >
                 {{ field.errors[0] }}
@@ -150,16 +158,16 @@
             </div>
           </FormischField>
 
-          <Button
+          <UButton
             :disabled="disabled"
             :aria-label="`Remove threshold ${index + 1}`"
             type="button"
             variant="ghost"
             class="sm:mt-6"
+            color="neutral"
+            label="Remove"
             @click="remove(form, { path: ['thresholds'], at: index })"
-          >
-            Remove
-          </Button>
+          />
         </div>
       </div>
     </FormischFieldArray>

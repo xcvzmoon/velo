@@ -68,13 +68,12 @@
 </script>
 
 <template>
-  <section
-    class="space-y-5 rounded-lg border p-6"
-    :aria-label="title"
-  >
-    <h2 class="font-medium">{{ title }}</h2>
+  <ShellPanel :aria-label="title">
+    <template #header>
+      <h2 class="text-highlighted font-semibold">{{ title }}</h2>
+    </template>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Optional assistance from your selected provider. Configure provider keys in Settings, or use a
       keyless local service. Describe a test, paste a non-sensitive example request or API excerpt,
       or ask for supported assertions and Faker recipes. Nothing is sent until you review the
@@ -97,20 +96,27 @@
         :path="['description']"
       >
         <div class="space-y-2">
-          <Label :for="`${inputId}-description`">Instructions and optional API context</Label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${inputId}-description`"
+              class="text-sm font-medium"
+            >
+              Instructions and optional API context
+            </label>
 
-          <Textarea
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${inputId}-description`"
-            :disabled="disabled || busy"
-            placeholder="Describe the endpoint, workload goals, assertions, and data you need."
-            autocomplete="off"
-          />
+            <UTextarea
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${inputId}-description`"
+              :disabled="disabled || busy"
+              placeholder="Describe the endpoint, workload goals, assertions, and data you need."
+              autocomplete="off"
+            />
+          </div>
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -124,30 +130,33 @@
         :path="['includeContext']"
       >
         <div class="flex items-center gap-2">
-          <Checkbox
+          <UCheckbox
             :id="`${inputId}-context`"
             :model-value="field.input"
             :disabled="disabled || busy || (!definition && !evidence)"
             @update:model-value="field.input = $event === true"
           />
 
-          <Label :for="`${inputId}-context`">
+          <label
+            :for="`${inputId}-context`"
+            class="text-sm font-medium"
+          >
             Include
             {{
               task === 'draft' ? 'the current definition structure' : 'the selected measurements'
             }}
             after native redaction
-          </Label>
+          </label>
         </div>
       </FormischField>
 
-      <Button
+      <UButton
         :disabled="disabled || busy || providerDirty"
         type="submit"
         variant="outline"
-      >
-        Review provider payload
-      </Button>
+        color="neutral"
+        label="Review provider payload"
+      />
     </FormischForm>
 
     <div
@@ -159,22 +168,25 @@
         class="space-y-2 text-sm"
       >
         <div>
-          <dt class="text-muted-foreground">Provider and model</dt>
+          <dt class="text-muted">Provider and model</dt>
           <dd>{{ reviewedProvider }} · {{ destination.model }}</dd>
         </div>
+
         <div>
-          <dt class="text-muted-foreground">Destination</dt>
+          <dt class="text-muted">Destination</dt>
           <dd class="font-mono text-xs break-all">{{ destination.endpoint }}</dd>
         </div>
+
         <div>
-          <dt class="text-muted-foreground">Authentication</dt>
+          <dt class="text-muted">Authentication</dt>
+
           <dd>
             {{ destination.use_key ? 'Stored key for this provider and endpoint' : 'No API key' }}
           </dd>
         </div>
       </dl>
 
-      <p class="text-muted-foreground text-sm">
+      <p class="text-muted text-sm">
         Only the payload below and Velo's fixed output instructions are sent to the reviewed
         destination. Request values and string evidence are excluded. Free text can still contain
         private information; inspect it carefully and remove secrets before submission. AI has no
@@ -197,31 +209,30 @@
       <pre
         :id="evidenceId"
         tabindex="0"
-        class="max-h-96 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
+        class="border-default max-h-96 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
         >{{ reviewedContent }}</pre>
 
-      <Button
+      <UButton
         v-if="review"
         :disabled="disabled || busy || providerDirty"
+        :label="`Send reviewed payload to ${reviewedProvider} (${destination?.model})`"
         type="button"
         @click="generate()"
-      >
-        Send reviewed payload to {{ reviewedProvider }} ({{ destination?.model }})
-      </Button>
+      />
     </div>
 
-    <Button
+    <UButton
       v-if="busy"
       type="button"
       variant="outline"
+      color="neutral"
+      label="Cancel AI request"
       @click="cancel"
-    >
-      Cancel AI request
-    </Button>
+    />
 
     <p
       v-if="busy"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
       role="status"
     >
       Preparing assistance…
@@ -229,7 +240,7 @@
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
@@ -237,7 +248,7 @@
 
     <p
       v-if="task === 'explain'"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
     >
       Measurements can be incomplete. Aggregate metrics cannot prove database or network causes.
       Check cited values in the reviewed payload; hypotheses are suggestions to investigate.
@@ -251,5 +262,5 @@
       :evidence-id="evidenceId"
       @apply="emit('apply', $event)"
     />
-  </section>
+  </ShellPanel>
 </template>

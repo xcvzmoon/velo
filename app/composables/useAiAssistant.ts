@@ -1,4 +1,3 @@
-import type { ShallowRef } from 'vue';
 import type { AiEvidence, AiProviderConfig, AiResult, AiReview, AiTask } from '~/types/ai';
 import type { TestDefinition } from '~/types/contracts';
 import { invoke } from '@tauri-apps/api/core';

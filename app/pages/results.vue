@@ -1,33 +1,74 @@
 <script setup lang="ts">
+  const sections = [
+    {
+      label: 'Latest run',
+      slot: 'latest',
+    },
+    {
+      label: 'History & comparisons',
+      slot: 'history',
+    },
+  ];
+
+  definePageMeta({ keepalive: true });
+
   const { $runs } = useNuxtApp();
   const { snapshot } = $runs;
 </script>
 
 <template>
-  <div>
+  <div class="mx-auto max-w-7xl min-w-0 space-y-6">
     <ShellPageHeading
       title="Results"
-      description="Inspect the current run and its final measurements."
-    />
-
-    <template v-if="snapshot">
-      <RunMonitor />
-      <RunSummary />
-    </template>
-
-    <ShellEmptyState
-      v-else
-      title="No results yet"
-      description="Configure and run a request in Tests. Stored runs appear in history below."
+      description="Inspect measurements, compare against a baseline, and export run evidence."
     >
-      <Button
+      <UButton
+        to="/tests"
+        label="Configure a test"
+        icon="i-hugeicons-test-tube-01"
+        color="neutral"
         variant="outline"
-        as-child
-      >
-        <NuxtLink to="/tests">Configure a test</NuxtLink>
-      </Button>
-    </ShellEmptyState>
+      />
+    </ShellPageHeading>
 
-    <RunHistory />
+    <UTabs
+      :items="sections"
+      :unmount-on-hide="false"
+      :ui="{
+        list: 'max-w-full overflow-x-auto rounded-xl bg-elevated/60 ring ring-inset ring-default',
+        trigger: 'shrink-0',
+        content: 'min-w-0 space-y-6',
+      }"
+      variant="pill"
+      color="neutral"
+      class="gap-6"
+    >
+      <template #latest>
+        <div
+          v-if="snapshot"
+          class="space-y-6"
+        >
+          <RunMonitor />
+          <RunSummary />
+        </div>
+
+        <ShellEmptyState
+          v-else
+          title="No results yet"
+          description="Configure and run a request in Tests. Stored runs appear in history below."
+        >
+          <UButton
+            variant="outline"
+            to="/tests"
+            color="neutral"
+            label="Configure a test"
+          />
+        </ShellEmptyState>
+      </template>
+
+      <template #history>
+        <RunHistory />
+      </template>
+    </UTabs>
   </div>
 </template>

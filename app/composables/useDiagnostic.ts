@@ -1,4 +1,3 @@
-import type { ComputedRef, ShallowRef } from 'vue';
 import type { DiagnosticInput, DiagnosticReport } from '../types/contracts';
 import { invoke } from '@tauri-apps/api/core';
 import * as v from 'valibot';

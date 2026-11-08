@@ -177,10 +177,10 @@
       "wellKnownDigest": "sha256:65499f92ab66c5c5a7aa5e0ac260ab990ef19dd9922663930742c8061a9f9a46"
     },
     "nuxt-ui": {
-      "source": "onmax/nuxt-skills",
+      "source": "nuxt/ui",
       "sourceType": "github",
       "skillPath": "skills/nuxt-ui/SKILL.md",
-      "computedHash": "72acbf25ef51d20a455b96ec834592855b2982964fe87f7d8620291c95a53301"
+      "computedHash": "6669bdad8c0a11f8cb28195652d03e1888be1b0ec9d714276e52aa241fd01bab"
     },
     "optimise-github-actions": {
       "source": "enesgules/dotfiles",

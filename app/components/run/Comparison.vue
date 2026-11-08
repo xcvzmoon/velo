@@ -140,17 +140,19 @@
 </script>
 
 <template>
-  <section
-    class="space-y-5 rounded-md border p-4"
+  <ShellPanel
+    variant="inset"
     aria-label="Baseline comparison"
   >
-    <h3 class="font-medium">Candidate release and regression report</h3>
+    <template #header>
+      <h3 class="font-medium">Candidate release and regression report</h3>
+    </template>
 
-    <p class="text-muted-foreground text-sm">Candidate {{ candidate.id }}</p>
+    <p class="text-muted text-sm">Candidate {{ candidate.id }}</p>
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
@@ -158,7 +160,7 @@
 
     <p
       v-if="message"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
       role="status"
     >
       {{ message }}
@@ -172,17 +174,17 @@
       @dirty="metadataDirty = true"
     />
 
-    <Button
+    <UButton
       :disabled="busy || !pinnedBaseline || pinnedBaseline === settings?.baseline_id"
       variant="outline"
+      color="neutral"
+      label="Use pinned baseline"
       @click="usePinned"
-    >
-      Use pinned baseline
-    </Button>
+    />
 
     <p
       v-if="!settings && !busy"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
     >
       Pin a historical run to compare this candidate.
     </p>
@@ -191,9 +193,9 @@
       <RunComparisonEvidence :report="report" />
 
       <AiAssistant
-        task="explain"
         :evidence="selectAiEvidence(candidate, report)"
         :disabled="busy || metadataDirty || budgetsDirty"
+        task="explain"
       />
 
       <RunRegressionSettingsForm
@@ -220,36 +222,36 @@
 
       <p
         v-if="metadataDirty || budgetsDirty"
-        class="text-muted-foreground text-sm"
+        class="text-muted text-sm"
       >
         Save release context and budget edits before exporting.
       </p>
 
       <div class="flex flex-wrap gap-2">
-        <Button
+        <UButton
           :disabled="busy || metadataDirty || budgetsDirty"
           variant="outline"
+          color="neutral"
+          label="Export readable report"
           @click="exportReport('html')"
-        >
-          Export readable report
-        </Button>
+        />
 
-        <Button
+        <UButton
           :disabled="busy || metadataDirty || budgetsDirty"
           variant="outline"
+          color="neutral"
+          label="Export JSON v1"
           @click="exportReport('json')"
-        >
-          Export JSON v1
-        </Button>
+        />
 
-        <Button
+        <UButton
           :disabled="busy || metadataDirty || budgetsDirty"
           variant="outline"
+          color="neutral"
+          label="Export JUnit"
           @click="exportReport('junit')"
-        >
-          Export JUnit
-        </Button>
+        />
       </div>
     </template>
-  </section>
+  </ShellPanel>
 </template>

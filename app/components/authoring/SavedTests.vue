@@ -63,21 +63,21 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Saved test definitions"
   >
-    <h2 class="font-medium">Saved tests</h2>
+    <template #header><h2 class="text-highlighted font-semibold">Saved tests</h2></template>
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
     </p>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Definitions store literal request fields and non-secret variables locally. Use secret
       references for private values. Saving under an existing name replaces that definition.
     </p>
@@ -93,68 +93,74 @@
         :path="['name']"
       >
         <div class="space-y-2">
-          <Label for="test-name">Test name</Label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="test-name"
+            >
+              Test name
+            </label>
 
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled || busy"
-            id="test-name"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :disabled="disabled || busy"
+              id="test-name"
+            />
+          </div>
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
           >
             {{ field.errors.join(' ') }}
           </p>
         </div>
       </FormischField>
 
-      <Button
+      <UButton
         :disabled="disabled || busy || !canSave"
         type="submit"
-      >
-        Save test
-      </Button>
+        label="Save test"
+      />
     </FormischForm>
 
     <template v-if="names.length">
-      <Label for="saved-test">Saved test</Label>
+      <div class="grid min-w-0 gap-2">
+        <label
+          class="text-sm font-medium"
+          for="saved-test"
+        >
+          Saved test
+        </label>
 
-      <Select
-        v-model="chosen"
-        :disabled="disabled || busy"
-      >
-        <SelectTrigger id="saved-test"><SelectValue placeholder="Choose a test" /></SelectTrigger>
-
-        <SelectContent>
-          <SelectItem
-            v-for="name in names"
-            :key="name"
-            :value="name"
-          >
-            {{ name }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
+        <USelect
+          v-model="chosen"
+          :disabled="disabled || busy"
+          :items="[...names.map((name) => ({ label: name, value: name }))]"
+          id="saved-test"
+          placeholder="Choose a test"
+          class="w-full"
+        />
+      </div>
 
       <div class="flex gap-3">
-        <Button
+        <UButton
           :disabled="disabled || busy || !chosen"
           variant="outline"
+          color="neutral"
+          label="Load test"
           @click="load"
-        >
-          Load test
-        </Button>
-        <Button
+        />
+
+        <ShellConfirmAction
           :disabled="disabled || busy || !chosen"
-          variant="ghost"
-          @click="remove"
-        >
-          Delete test
-        </Button>
+          label="Delete test"
+          title="Delete saved test?"
+          description="This removes the saved definition. Your current editor and stored results are kept."
+          @confirm="remove"
+        />
       </div>
     </template>
-  </section>
+  </ShellPanel>
 </template>

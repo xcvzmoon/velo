@@ -57,7 +57,7 @@
 <template>
   <FormischForm
     :of="form"
-    class="space-y-4 rounded-md border p-4"
+    class="border-default space-y-4 rounded-md border p-4"
     @submit="
       emit('apply', $event);
       emit('dirty', false);
@@ -69,22 +69,29 @@
       :path="['seed']"
     >
       <div class="space-y-2">
-        <Label :for="`${formId}-seed`">Selection seed</Label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="`${formId}-seed`"
+            class="text-sm font-medium"
+          >
+            Selection seed
+          </label>
 
-        <Input
-          v-model="field.input"
-          v-bind="field.props"
-          :id="`${formId}-seed`"
-          :disabled="disabled"
-          type="number"
-          min="0"
-          max="4294967295"
-          step="1"
-        />
+          <UInput
+            v-model="field.input"
+            v-bind="field.props"
+            :id="`${formId}-seed`"
+            :disabled="disabled"
+            type="number"
+            min="0"
+            max="4294967295"
+            step="1"
+          />
+        </div>
 
         <p
           v-if="field.errors"
-          class="text-destructive text-xs"
+          class="text-error text-xs"
           role="alert"
         >
           {{ field.errors.join(' ') }}
@@ -99,19 +106,26 @@
         :path="['id']"
       >
         <div class="space-y-2">
-          <Label :for="`${formId}-id`">Scenario name / stable ID</Label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${formId}-id`"
+              class="text-sm font-medium"
+            >
+              Scenario name / stable ID
+            </label>
 
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${formId}-id`"
-            :disabled="disabled"
-            autocomplete="off"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${formId}-id`"
+              :disabled="disabled"
+              autocomplete="off"
+            />
+          </div>
 
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -125,22 +139,29 @@
         :path="['weight']"
       >
         <div class="space-y-2">
-          <Label :for="`${formId}-weight`">Relative selection weight</Label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${formId}-weight`"
+              class="text-sm font-medium"
+            >
+              Relative selection weight
+            </label>
 
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${formId}-weight`"
-            :disabled="disabled"
-            type="number"
-            min="1"
-            max="10000"
-            step="1"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${formId}-weight`"
+              :disabled="disabled"
+              type="number"
+              min="1"
+              max="10000"
+              step="1"
+            />
+          </div>
 
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -149,12 +170,12 @@
       </FormischField>
     </template>
 
-    <Button
+    <UButton
       :disabled="disabled"
       type="submit"
       variant="outline"
-    >
-      Apply scenario settings
-    </Button>
+      color="neutral"
+      label="Apply scenario settings"
+    />
   </FormischForm>
 </template>

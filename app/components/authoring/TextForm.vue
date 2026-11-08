@@ -40,21 +40,28 @@
       :path="['text']"
     >
       <div class="space-y-2">
-        <Label :for="inputId">{{ label }}</Label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="inputId"
+            class="text-sm font-medium"
+          >
+            {{ label }}
+          </label>
 
-        <Textarea
-          v-model="field.input"
-          v-bind="field.props"
-          :id="inputId"
-          :disabled="disabled"
-          class="min-h-64 font-mono text-xs"
-          spellcheck="false"
-          autocomplete="off"
-        />
+          <UTextarea
+            v-model="field.input"
+            v-bind="field.props"
+            :id="inputId"
+            :disabled="disabled"
+            :ui="{ base: 'font-mono' }"
+            spellcheck="false"
+            autocomplete="off"
+          />
+        </div>
 
         <p
           v-if="field.errors"
-          class="text-destructive text-sm"
+          class="text-error text-sm"
           role="alert"
         >
           {{ field.errors.join(' ') }}
@@ -62,11 +69,10 @@
       </div>
     </FormischField>
 
-    <Button
+    <UButton
       :disabled="disabled"
+      :label="action"
       type="submit"
-    >
-      {{ action }}
-    </Button>
+    />
   </FormischForm>
 </template>

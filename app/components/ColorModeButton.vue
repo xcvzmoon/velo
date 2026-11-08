@@ -1,18 +1,15 @@
 <script setup lang="ts">
   const colorMode = useColorMode();
-
-  const isDark = computed({
-    get: () => colorMode.value === 'dark',
-    set: (_isDark) => (colorMode.preference = _isDark ? 'dark' : 'light'),
-  });
+  const isDark = computed<boolean>(() => colorMode.value === 'dark');
 </script>
 
 <template>
-  <Button
+  <UButton
     :aria-label="`Switch to ${isDark ? 'light' : 'dark'} mode`"
-    size="icon"
-    @click="isDark = !isDark"
-  >
-    <Icon :name="isDark ? 'i-hugeicons-moon-02' : 'i-hugeicons-sun-03'" />
-  </Button>
+    :icon="isDark ? 'i-hugeicons-moon-02' : 'i-hugeicons-sun-03'"
+    color="neutral"
+    variant="ghost"
+    class="p-1.5"
+    @click="colorMode.preference = isDark ? 'light' : 'dark'"
+  />
 </template>

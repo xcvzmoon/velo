@@ -1,5 +1,7 @@
 # API workspace
 
+Choose a collection in **API workspace**, then use **Requests** to edit it, **Run collection** to authorize execution and inspect responses, **History** for stored functional evidence, and **Secrets** for OS-store references. Collection controls sit beside request editing at wide desktop sizes and above it in smaller windows.
+
 Use **API workspace** for individual HTTP requests and ordered functional checks. Use **Tests** for load generation. API sends and collection runs never start load, and their evidence does not become a performance baseline.
 
 ## Organize requests

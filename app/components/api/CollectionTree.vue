@@ -31,81 +31,77 @@
     <li
       v-for="entry in visible"
       :key="entry.id"
-      class="space-y-2 border-l pl-3"
+      class="border-default space-y-2 border-l pl-3"
     >
       <div class="flex flex-wrap items-center gap-1">
-        <Button
-          :variant="active === entry.id ? 'secondary' : 'ghost'"
+        <UButton
+          :variant="active === entry.id ? 'soft' : 'ghost'"
           :disabled="disabled"
+          :label="`${entry.kind === 'folder' ? 'Folder' : 'Request'} · ${entry.name}`"
           class="h-auto max-w-full justify-start break-all whitespace-normal"
           @click="entry.kind === 'request' ? emit('open', entry.id) : emit('run', entry.id)"
-        >
-          {{ entry.kind === 'folder' ? 'Folder' : 'Request' }} · {{ entry.name }}
-        </Button>
+        />
 
-        <Button
+        <UButton
           :disabled="disabled"
           :aria-label="`Move ${entry.name} up`"
-          size="sm"
           variant="ghost"
+          color="neutral"
+          label="↑"
           @click="emit('change', entry.id, 'up')"
-        >
-          ↑
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled"
           :aria-label="`Move ${entry.name} down`"
-          size="sm"
           variant="ghost"
+          color="neutral"
+          label="↓"
           @click="emit('change', entry.id, 'down')"
-        >
-          ↓
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled"
-          size="sm"
           variant="ghost"
+          color="neutral"
+          label="Duplicate"
           @click="emit('change', entry.id, 'duplicate')"
-        >
-          Duplicate
-        </Button>
-        <Button
+        />
+
+        <ShellConfirmAction
           :disabled="disabled"
-          size="sm"
-          variant="ghost"
-          @click="emit('change', entry.id, 'delete')"
-        >
-          Delete
-        </Button>
-        <Button
+          label="Delete"
+          title="Delete collection entry?"
+          description="This removes the selected entry and any requests inside it."
+          @confirm="emit('change', entry.id, 'delete')"
+        />
+
+        <UButton
           :disabled="disabled"
           :aria-pressed="selectedIds.includes(entry.id)"
-          :variant="selectedIds.includes(entry.id) ? 'secondary' : 'outline'"
-          size="sm"
+          :variant="selectedIds.includes(entry.id) ? 'soft' : 'outline'"
+          :label="selectedIds.includes(entry.id) ? 'Selected for run' : 'Select for run'"
           @click="emit('run', entry.id)"
-        >
-          {{ selectedIds.includes(entry.id) ? 'Selected for run' : 'Select for run' }}
-        </Button>
+        />
       </div>
 
       <template v-if="entry.kind === 'folder'">
         <div class="flex gap-2">
-          <Button
+          <UButton
             :disabled="disabled"
-            size="sm"
             variant="outline"
+            color="neutral"
+            label="Add request"
             @click="emit('add', entry.id, 'request')"
-          >
-            Add request
-          </Button>
-          <Button
+          />
+
+          <UButton
             :disabled="disabled"
-            size="sm"
             variant="outline"
+            color="neutral"
+            label="Add folder"
             @click="emit('add', entry.id, 'folder')"
-          >
-            Add folder
-          </Button>
+          />
         </div>
 
         <ApiCollectionTree

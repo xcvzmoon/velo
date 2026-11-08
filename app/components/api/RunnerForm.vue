@@ -74,11 +74,12 @@
 <template>
   <Form
     :of="form"
-    class="space-y-4 rounded-lg border p-5"
+    class="border-default bg-default space-y-4 rounded-xl border p-5 shadow-sm"
     @submit="submit"
   >
-    <h2 class="font-medium">Send or run ordered functional checks</h2>
-    <p class="text-muted-foreground text-sm">
+    <h2 class="text-highlighted font-semibold">Send or run ordered functional checks</h2>
+
+    <p class="text-muted text-sm">
       Run scope: {{ selection }}. Requests execute sequentially, with no automatic retries. Sending
       uses the current collection/environment session. Collection runs start with a fresh session.
     </p>
@@ -90,51 +91,60 @@
         :path="['environment']"
       >
         <div class="space-y-2">
-          <Label for="api-environment">Environment</Label>
-          <Select
-            v-model="field.input"
-            :disabled="disabled"
-            @update:model-value="
-              emit('environment', String($event) === '__shared__' ? null : String($event))
-            "
-          >
-            <SelectTrigger id="api-environment"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__shared__">Shared variables</SelectItem>
-              <SelectItem
-                v-for="name in environments"
-                :key="name"
-                :value="name"
-              >
-                {{ name }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="api-environment"
+            >
+              Environment
+            </label>
+
+            <USelect
+              v-model="field.input"
+              :disabled="disabled"
+              :items="[
+                { label: 'Shared variables', value: '__shared__' },
+                ...environments.map((name) => ({ label: name, value: name })),
+              ]"
+              id="api-environment"
+              class="w-full"
+              @update:model-value="
+                emit('environment', String($event) === '__shared__' ? null : String($event))
+              "
+            />
+          </div>
         </div>
       </Field>
 
       <Field
         v-for="name in ['iterations', 'delayMs'] as const"
-        :key="name"
         v-slot="field"
+        :key="name"
         :of="form"
         :path="[name]"
       >
         <div class="space-y-2">
-          <Label :for="`api-${name}`">
-            {{ name === 'iterations' ? 'Iterations' : 'Delay between requests (ms)' }}
-          </Label>
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`api-${name}`"
-            :disabled="disabled"
-            type="number"
-            min="0"
-          />
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`api-${name}`"
+              class="text-sm font-medium"
+            >
+              {{ name === 'iterations' ? 'Iterations' : 'Delay between requests (ms)' }}
+            </label>
+
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`api-${name}`"
+              :disabled="disabled"
+              type="number"
+              min="0"
+            />
+          </div>
+
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -149,45 +159,64 @@
       :path="['stopOnFailure']"
     >
       <div class="flex items-center gap-2">
-        <Checkbox
+        <UCheckbox
           :model-value="field.input"
           :disabled="disabled"
           id="api-stop-failure"
           @update:model-value="field.input = $event === true"
         />
-        <Label for="api-stop-failure">Stop on first failure</Label>
+
+        <label
+          class="text-sm font-medium"
+          for="api-stop-failure"
+        >
+          Stop on first failure
+        </label>
       </div>
     </Field>
 
-    <details>
+    <details class="border-default border-t pt-4">
       <summary class="cursor-pointer text-sm">Prepared dataset rows</summary>
-      <p class="text-muted-foreground my-2 text-xs">
-        Optional JSON array of prepared scalar string records. Configure the shared dataset recipe
-        in the request definition. CSV/JSON and Faker preparation uses the same recipe as Tests.
-      </p>
-      <Field
-        v-slot="field"
-        :of="form"
-        :path="['rows']"
-      >
-        <div class="space-y-2">
-          <Label for="api-prepared-rows">Prepared rows (JSON)</Label>
-          <Textarea
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled"
-            id="api-prepared-rows"
-            class="font-mono text-xs"
-          />
-          <p
-            v-if="field.errors"
-            class="text-destructive text-xs"
-            role="alert"
-          >
-            {{ field.errors.join(' ') }}
-          </p>
-        </div>
-      </Field>
+
+      <div class="min-w-0 space-y-4 pt-4">
+        <p class="text-muted text-xs">
+          Optional JSON array of prepared scalar string records. Configure the shared dataset recipe
+          in the request definition. CSV/JSON and Faker preparation uses the same recipe as Tests.
+        </p>
+
+        <Field
+          v-slot="field"
+          :of="form"
+          :path="['rows']"
+        >
+          <div class="space-y-2">
+            <div class="grid min-w-0 gap-2">
+              <label
+                class="text-sm font-medium"
+                for="api-prepared-rows"
+              >
+                Prepared rows (JSON)
+              </label>
+
+              <UTextarea
+                v-model="field.input"
+                v-bind="field.props"
+                :disabled="disabled"
+                :ui="{ base: 'font-mono' }"
+                id="api-prepared-rows"
+              />
+            </div>
+
+            <p
+              v-if="field.errors"
+              class="text-error text-xs"
+              role="alert"
+            >
+              {{ field.errors.join(' ') }}
+            </p>
+          </div>
+        </Field>
+      </div>
     </details>
 
     <Field
@@ -197,19 +226,24 @@
     >
       <div class="space-y-2">
         <div class="flex items-center gap-2">
-          <Checkbox
+          <UCheckbox
             :model-value="field.input"
             :disabled="disabled"
             id="api-authorized"
             @update:model-value="field.input = $event === true"
           />
-          <Label for="api-authorized">
+
+          <label
+            class="text-sm font-medium"
+            for="api-authorized"
+          >
             I am authorized to send these requests to the selected targets.
-          </Label>
+          </label>
         </div>
+
         <p
           v-if="field.errors"
-          class="text-destructive text-xs"
+          class="text-error text-xs"
           role="alert"
         >
           {{ field.errors.join(' ') }}
@@ -218,21 +252,21 @@
     </Field>
 
     <div class="flex flex-wrap gap-3">
-      <Button
+      <UButton
         :disabled="disabled || !hasRequest"
         type="submit"
+        label="Send active request"
         @click="interactive = true"
-      >
-        Send active request
-      </Button>
-      <Button
+      />
+
+      <UButton
         :disabled="disabled"
         type="submit"
         variant="outline"
+        color="neutral"
+        label="Run selected scope"
         @click="interactive = false"
-      >
-        Run selected scope
-      </Button>
+      />
     </div>
   </Form>
 </template>

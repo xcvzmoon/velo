@@ -1,4 +1,3 @@
-import tailwindcss from '@tailwindcss/vite';
 import * as v from 'valibot';
 
 const DEFAULT_HOST = '0.0.0.0';
@@ -34,15 +33,18 @@ export default defineNuxtConfig({
     },
     optimizeDeps: {
       include: [
+        '@faker-js/faker',
+        '@faker-js/faker/locale/de',
+        '@faker-js/faker/locale/en',
+        '@faker-js/faker/locale/fr',
         '@formisch/vue',
         '@tauri-apps/api/core',
-        'class-variance-authority',
-        'cn',
-        'reka-ui',
+        '@tauri-apps/api/event',
+        'papaparse',
+        'uplot',
         'valibot',
       ],
     },
-    plugins: [tailwindcss()],
   },
   app: {
     pageTransition: {
@@ -65,19 +67,30 @@ export default defineNuxtConfig({
   hooks: {
     'prepare:types'({ nodeTsConfig }) {
       nodeTsConfig.include ??= [];
-      nodeTsConfig.include.push('../scripts/**/*.ts', '../tests/**/*.ts');
+      nodeTsConfig.include.push(
+        '../scripts/**/*.ts',
+        '../tests/**/*.ts',
+        '../playwright.config.ts',
+      );
     },
   },
   ssr: false,
   ignore: ['**/src-tauri/**'],
   css: ['uplot/dist/uPlot.min.css', '~/assets/css/tailwind.css'],
-  modules: ['@nuxtjs/color-mode', '@vueuse/nuxt/module', 'shadcn-nuxt', '@nuxt/icon'],
+  modules: ['@vueuse/nuxt/module', '@nuxt/ui'],
+  ui: { fonts: false },
+  icon: {
+    provider: 'none',
+    serverBundle: false,
+    fallbackToApi: false,
+    clientBundle: {
+      scan: {
+        globInclude: ['app/**/*.{vue,ts}'],
+      },
+    },
+  },
   colorMode: {
     classSuffix: '',
     preference: 'dark',
-  },
-  shadcn: {
-    prefix: '',
-    componentDir: '~/components/ui',
   },
 });

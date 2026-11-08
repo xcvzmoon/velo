@@ -55,11 +55,6 @@
     }
   }
   async function remove(id: string | null): Promise<void> {
-    if (
-      !window.confirm(id ? 'Delete this functional run?' : 'Delete all functional API history?')
-    ) {
-      return;
-    }
     try {
       await invoke('delete_api_history', { id });
       await refresh();
@@ -79,124 +74,142 @@
 </script>
 
 <template>
-  <details class="space-y-4 rounded-lg border p-5">
+  <details class="border-default border-y py-4">
     <summary class="cursor-pointer font-medium">Functional API history</summary>
-    <p class="text-muted-foreground text-xs">
-      History is separate from load-test results. Response content is excluded by default. Enabling
-      content persistence stores only the bounded, redacted response.
-    </p>
 
-    <Form
-      :of="form"
-      class="flex flex-wrap items-end gap-4"
-      @submit="save"
-    >
-      <Field
-        v-slot="field"
+    <div class="min-w-0 space-y-4 pt-4">
+      <p class="text-muted text-xs">
+        History is separate from load-test results. Response content is excluded by default.
+        Enabling content persistence stores only the bounded, redacted response.
+      </p>
+
+      <Form
         :of="form"
-        :path="['limit']"
+        class="flex flex-wrap items-end gap-4"
+        @submit="save"
       >
-        <div class="space-y-2">
-          <Label for="api-history-limit">Maximum retained runs (0 to 100)</Label>
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled"
-            id="api-history-limit"
-            type="number"
-            min="0"
-            max="100"
-          />
-          <p
-            v-if="field.errors"
-            class="text-destructive text-xs"
-            role="alert"
-          >
-            {{ field.errors.join(' ') }}
+        <Field
+          v-slot="field"
+          :of="form"
+          :path="['limit']"
+        >
+          <div class="space-y-2">
+            <div class="grid min-w-0 gap-2">
+              <label
+                class="text-sm font-medium"
+                for="api-history-limit"
+              >
+                Maximum retained runs (0 to 100)
+              </label>
+
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :disabled="disabled"
+                id="api-history-limit"
+                type="number"
+                min="0"
+                max="100"
+              />
+            </div>
+
+            <p
+              v-if="field.errors"
+              class="text-error text-xs"
+              role="alert"
+            >
+              {{ field.errors.join(' ') }}
+            </p>
+          </div>
+        </Field>
+
+        <Field
+          v-slot="field"
+          :of="form"
+          :path="['persist_content']"
+        >
+          <div class="flex items-center gap-2">
+            <UCheckbox
+              :model-value="field.input"
+              :disabled="disabled"
+              id="api-history-content"
+              @update:model-value="field.input = $event === true"
+            />
+
+            <label
+              class="text-sm font-medium"
+              for="api-history-content"
+            >
+              Persist redacted response content
+            </label>
+          </div>
+        </Field>
+
+        <UButton
+          :disabled="disabled"
+          type="submit"
+          variant="outline"
+          color="neutral"
+          label="Save retention"
+        />
+
+        <ShellConfirmAction
+          :disabled="disabled"
+          label="Delete all history"
+          title="Delete all API history?"
+          description="Stored functional evidence will be permanently removed."
+          @confirm="remove(null)"
+        />
+      </Form>
+
+      <p
+        v-if="error"
+        class="text-error text-sm"
+        role="alert"
+      >
+        {{ error }}
+      </p>
+
+      <ol class="space-y-3">
+        <li
+          v-for="run in history"
+          :key="run.id"
+          class="border-default space-y-2 border-t pt-3"
+        >
+          <p class="text-sm">
+            {{ run.state }} · {{ run.results.length }} recorded outcomes ·
+            {{ run.environment ?? 'shared variables' }}
           </p>
-        </div>
-      </Field>
 
-      <Field
-        v-slot="field"
-        :of="form"
-        :path="['persist_content']"
-      >
-        <div class="flex items-center gap-2">
-          <Checkbox
-            :model-value="field.input"
-            :disabled="disabled"
-            id="api-history-content"
-            @update:model-value="field.input = $event === true"
-          />
-          <Label for="api-history-content">Persist redacted response content</Label>
-        </div>
-      </Field>
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              :disabled="disabled"
+              variant="outline"
+              color="neutral"
+              label="Inspect evidence"
+              @click="emit('inspect', run)"
+            />
 
-      <Button
-        :disabled="disabled"
-        type="submit"
-        variant="outline"
-      >
-        Save retention
-      </Button>
-      <Button
-        :disabled="disabled"
-        type="button"
-        variant="outline"
-        @click="remove(null)"
-      >
-        Delete all history
-      </Button>
-    </Form>
+            <UButton
+              v-for="result in run.results"
+              :key="`${result.iteration}-${result.request_id}`"
+              :disabled="disabled"
+              :label="`Restore ${result.name}`"
+              variant="ghost"
+              color="neutral"
+              @click="restore(run, result.request_id)"
+            />
 
-    <p
-      v-if="error"
-      class="text-destructive text-sm"
-      role="alert"
-    >
-      {{ error }}
-    </p>
-
-    <ol class="space-y-3">
-      <li
-        v-for="run in history"
-        :key="run.id"
-        class="space-y-2 border-t pt-3"
-      >
-        <p class="text-sm">
-          {{ run.state }} · {{ run.results.length }} recorded outcomes ·
-          {{ run.environment ?? 'shared variables' }}
-        </p>
-        <div class="flex flex-wrap gap-2">
-          <Button
-            :disabled="disabled"
-            size="sm"
-            variant="outline"
-            @click="emit('inspect', run)"
-          >
-            Inspect evidence
-          </Button>
-          <Button
-            v-for="result in run.results"
-            :key="`${result.iteration}-${result.request_id}`"
-            :disabled="disabled"
-            size="sm"
-            variant="ghost"
-            @click="restore(run, result.request_id)"
-          >
-            Restore {{ result.name }}
-          </Button>
-          <Button
-            :disabled="disabled"
-            size="sm"
-            variant="ghost"
-            @click="remove(run.id)"
-          >
-            Delete run
-          </Button>
-        </div>
-      </li>
-    </ol>
+            <ShellConfirmAction
+              :disabled="disabled"
+              label="Delete run"
+              title="Delete API run?"
+              description="Stored functional evidence will be permanently removed."
+              @confirm="remove(run.id)"
+            />
+          </div>
+        </li>
+      </ol>
+    </div>
   </details>
 </template>

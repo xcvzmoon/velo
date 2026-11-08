@@ -57,26 +57,31 @@
       :path="['multipartParts', index, 'path']"
     >
       <div class="space-y-2">
-        <Label :for="`multipart-${item}-path`">Local file</Label>
+        <label
+          :for="`multipart-${item}-path`"
+          class="text-sm font-medium"
+        >
+          Local file
+        </label>
 
         <div class="flex gap-2">
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`multipart-${item}-path`"
             :aria-describedby="`multipart-${item}-file-error`"
-            readonly
             placeholder="Choose a file"
+            readonly
           />
 
-          <Button
+          <UButton
             :disabled="disabled || selecting"
+            :label="selecting ? 'Selecting…' : 'Choose file'"
             type="button"
             variant="outline"
+            color="neutral"
             @click="selectFile"
-          >
-            {{ selecting ? 'Selecting…' : 'Choose file' }}
-          </Button>
+          />
         </div>
       </div>
     </FormischField>
@@ -84,7 +89,7 @@
     <p
       v-if="error"
       :id="`multipart-${item}-file-error`"
-      class="text-destructive text-xs"
+      class="text-error text-xs"
       role="alert"
     >
       {{ error }}
@@ -93,23 +98,28 @@
     <div class="grid gap-3 sm:grid-cols-2">
       <FormischField
         v-for="property in ['filename', 'content_type'] as const"
-        :key="property"
         v-slot="field"
+        :key="property"
         :of="form"
         :path="['multipartParts', index, property]"
       >
         <div class="space-y-2">
-          <Label :for="`multipart-${item}-${property}`">
-            {{ property === 'filename' ? 'Upload filename' : 'MIME type' }}
-          </Label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`multipart-${item}-${property}`"
+              class="text-sm font-medium"
+            >
+              {{ property === 'filename' ? 'Upload filename' : 'MIME type' }}
+            </label>
 
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`multipart-${item}-${property}`"
-            autocomplete="off"
-            spellcheck="false"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`multipart-${item}-${property}`"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
         </div>
       </FormischField>
     </div>

@@ -61,3 +61,28 @@ jobs:
             target/release/bundle/**/*.exe
           if-no-files-found: error
           retention-days: 7
+
+  ui:
+    name: UI workflows and accessibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Setup project
+        uses: ./.github/actions/setup-project
+
+      - name: Install browser engines
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Test UI
+        run: pnpm test:ui --workers=2
+
+      - name: Retain UI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: velo-ui-${{ github.sha }}
+          path: test-results/
+          retention-days: 7

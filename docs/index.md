@@ -4,6 +4,7 @@ These guides describe the current implementation. Delivery history and dated mea
 
 | Guide                                                                | Contents                                                                                         |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [Workspace interface](ui.md)                                         | Navigation, screen inventory, themes, component ownership, and UI acceptance                     |
 | [API workspace](api-workspace.md)                                    | Collections, functional runs, OAuth, sessions, response inspection, history, and load-test reuse |
 | [Authentication security audit](authentication-security-audit.md)    | OAuth and HTTP authentication findings, fixes, regression evidence, and verification limits      |
 | [API workspace Rust audit](api-rust-audit.md)                        | Microsoft Rust guideline findings, fixes, verification, and external integration limits          |

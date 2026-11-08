@@ -81,110 +81,126 @@
 </script>
 
 <template>
-  <section
-    class="space-y-5 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="AI provider settings"
   >
-    <h2 class="font-medium">Native AI assistance</h2>
+    <template #header>
+      <h2 class="text-highlighted font-semibold">Native AI assistance</h2>
+    </template>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Choose OpenAI, Anthropic, Gemini, Ollama, or an OpenAI-compatible service. Manual authoring
       and execution remain available without an AI provider. Review the destination and selected
       content before every submission. Selecting a configuration or storing a key sends no test
       data.
     </p>
 
-    <AiProviderConfiguration
-      :disabled="busy"
-      @dirty="configDirty = $event"
-    />
+    <div class="grid min-w-0 items-start gap-6 xl:grid-cols-2">
+      <div class="min-w-0">
+        <AiProviderConfiguration
+          :disabled="busy"
+          @dirty="configDirty = $event"
+        />
+      </div>
 
-    <div class="space-y-2">
-      <h3 class="text-sm font-medium">Key for {{ aiProviderLabels[selected.provider] }}</h3>
-
-      <p class="text-muted-foreground text-sm break-all">{{ selected.endpoint }}</p>
-
-      <p
-        v-if="!selected.use_key"
-        class="text-muted-foreground text-sm"
+      <div
+        class="border-default min-w-0 space-y-4 border-t pt-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6"
       >
-        This configuration sends requests without a key and does not access the credential store.
-        Enable stored-key authentication above if your endpoint requires it.
-      </p>
-    </div>
+        <div class="space-y-2">
+          <h3 class="text-sm font-medium">Key for {{ aiProviderLabels[selected.provider] }}</h3>
 
-    <FormischForm
-      :of="form"
-      class="space-y-4"
-      @submit="save"
-    >
-      <FormischField
-        v-slot="field"
-        :of="form"
-        :path="['value']"
-      >
-        <div class="max-w-lg space-y-2">
-          <Label :for="inputId">Provider API key</Label>
-
-          <Input
-            v-model="field.input"
-            v-bind="field.props"
-            :id="inputId"
-            :disabled="busy || configDirty || !selected.use_key"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-          />
+          <p class="text-muted text-sm break-all">{{ selected.endpoint }}</p>
 
           <p
-            v-if="field.errors"
-            class="text-destructive text-sm"
-            role="alert"
+            v-if="!selected.use_key"
+            class="text-muted text-sm"
           >
-            {{ field.errors.join(' ') }}
+            This configuration sends requests without a key and does not access the credential
+            store. Enable stored-key authentication above if your endpoint requires it.
           </p>
         </div>
-      </FormischField>
 
-      <div class="flex flex-wrap gap-3">
-        <Button
-          :disabled="busy || configDirty || !selected.use_key"
-          type="submit"
+        <FormischForm
+          :of="form"
+          class="space-y-4"
+          @submit="save"
         >
-          Store key securely
-        </Button>
+          <FormischField
+            v-slot="field"
+            :of="form"
+            :path="['value']"
+          >
+            <div class="max-w-lg space-y-2">
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="inputId"
+                  class="text-sm font-medium"
+                >
+                  Provider API key
+                </label>
 
-        <Button
-          :disabled="busy || configDirty"
-          type="button"
-          variant="outline"
-          @click="remove"
+                <UInput
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="inputId"
+                  :disabled="busy || configDirty || !selected.use_key"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
+
+              <p
+                v-if="field.errors"
+                class="text-error text-sm"
+                role="alert"
+              >
+                {{ field.errors.join(' ') }}
+              </p>
+            </div>
+          </FormischField>
+
+          <div class="flex flex-wrap gap-3">
+            <UButton
+              :disabled="busy || configDirty || !selected.use_key"
+              type="submit"
+              label="Store key securely"
+            />
+
+            <UButton
+              :disabled="busy || configDirty"
+              type="button"
+              variant="outline"
+              color="neutral"
+              label="Remove endpoint key"
+              @click="remove"
+            />
+          </div>
+        </FormischForm>
+
+        <p class="text-muted text-xs">
+          Keys stay in the OS credential store and are scoped to the selected provider and
+          normalized endpoint. Changing an endpoint never reuses another endpoint's key. Keys are
+          not read back into this form, model context, test definitions, or reports.
+        </p>
+
+        <p
+          v-if="error"
+          class="text-error text-sm"
+          role="alert"
         >
-          Remove endpoint key
-        </Button>
+          {{ error }}
+        </p>
+
+        <p
+          v-if="message"
+          class="text-sm"
+          role="status"
+        >
+          {{ message }}
+        </p>
       </div>
-    </FormischForm>
-
-    <p class="text-muted-foreground text-xs">
-      Keys stay in the OS credential store and are scoped to the selected provider and normalized
-      endpoint. Changing an endpoint never reuses another endpoint's key. Keys are not read back
-      into this form, model context, test definitions, or reports.
-    </p>
-
-    <p
-      v-if="error"
-      class="text-destructive text-sm"
-      role="alert"
-    >
-      {{ error }}
-    </p>
-
-    <p
-      v-if="message"
-      class="text-sm"
-      role="status"
-    >
-      {{ message }}
-    </p>
-  </section>
+    </div>
+  </ShellPanel>
 </template>
