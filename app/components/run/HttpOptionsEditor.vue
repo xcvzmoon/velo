@@ -21,7 +21,11 @@
     },
   ] as const;
 
-  defineProps<{ form: FormStore<typeof requestEditorSchema>; disabled: boolean }>();
+  defineProps<{
+    form: FormStore<typeof requestEditorSchema>;
+    disabled: boolean;
+    hideTransport?: boolean;
+  }>();
 </script>
 
 <template>
@@ -107,7 +111,10 @@
       </div>
     </FormischField>
 
-    <div class="grid gap-4 sm:grid-cols-2">
+    <div
+      v-if="!hideTransport"
+      class="grid gap-4 sm:grid-cols-2"
+    >
       <FormischField
         v-slot="field"
         :of="form"
