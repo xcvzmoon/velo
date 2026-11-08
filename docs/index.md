@@ -9,6 +9,7 @@ These guides describe the current implementation. Delivery history and dated mea
 | [Architecture](architecture.md)                                      | Crate boundaries, frontend, and native communication                                       |
 | [Execution and measurements](execution.md)                           | HTTP options, scheduling, cancellation, metrics, and thresholds                            |
 | [Generator health](generator-health.md)                              | Native CPU/RAM, admission pressure, rate windows, retained timelines, and platform support |
+| [Baseline comparisons and reports](reports.md)                       | Pinned references, release metadata, regression budgets, and HTML/JSON/JUnit exports       |
 | [Persistence and credentials](persistence.md)                        | SQLite ownership, history retention, OS credentials, and recovery                          |
 | [Development](development.md)                                        | Setup, checks, native failure policy, builds, and CI                                       |
 | [Release readiness](release-readiness.md)                            | Remaining acceptance gates and benchmark reproduction                                      |
