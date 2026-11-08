@@ -12,10 +12,6 @@
   const assertionFailures = computed<(number | null)[]>(() =>
     points.value.map((point) => point.assertionFailures),
   );
-  const vus = computed<(number | null)[]>(() => points.value.map((point) => point.vus));
-  const desiredVus = computed<(number | null)[]>(() =>
-    points.value.map((point) => point.desiredVus),
-  );
   const progress = computed<number>(() =>
     snapshot.value
       ? Math.min(
@@ -114,7 +110,10 @@
 
     <RunMeasurement :snapshot="snapshot" />
 
-    <RunArrivalMetrics :snapshot="snapshot" />
+    <RunGeneratorHealth
+      :snapshot="snapshot"
+      :points="points"
+    />
 
     <p
       v-if="error"
@@ -210,18 +209,6 @@
         title="Cumulative assertion failure rate"
         unit="%"
         percentage
-      />
-
-      <RunChart
-        :warmup-seconds="snapshot.measurement.warmup_ms / 1000"
-        :automatic-stop-seconds="
-          snapshot.automatic_stop ? Number(snapshot.automatic_stop.at_us) / 1e6 : undefined
-        "
-        :seconds="seconds"
-        :values="vus"
-        :comparison-values="desiredVus"
-        title="Desired and actual virtual users"
-        unit="VUs"
       />
     </div>
 

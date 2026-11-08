@@ -1,6 +1,4 @@
 <script setup lang="ts">
-  import type { HistoryEntry } from '~/types/contracts';
-
   const props = defineProps<{ entry: HistoryEntry }>();
 
   const measuredPoints = computed<HistoryEntry['points']>(() => {
@@ -15,6 +13,9 @@
     }
     return result;
   });
+  const generatorPoints = computed<GeneratorPoint[]>(() =>
+    storedGeneratorPoints(props.entry.points),
+  );
   const iterations = computed<(number | null)[]>(() =>
     measuredPoints.value.map(({ snapshot }) =>
       snapshot.metrics.counter_overflow ? null : snapshot.metrics.iteration_rate,
@@ -59,6 +60,13 @@
     </p>
 
     <RunSummary :stored-snapshot="entry.snapshot" />
+
+    <RunGeneratorHealth
+      :snapshot="entry.snapshot"
+      :points="generatorPoints"
+      :incomplete="entry.incomplete"
+      :stride="entry.stride"
+    />
 
     <p
       v-if="entry.incomplete"

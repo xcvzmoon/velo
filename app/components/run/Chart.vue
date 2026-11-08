@@ -5,6 +5,7 @@
     title: string;
     unit: string;
     percentage?: boolean;
+    binary?: boolean;
     values: (number | null)[];
     seconds: number[];
     warmupSeconds?: number;
@@ -89,13 +90,18 @@
           x: { time: false },
           y: {
             range: (_chart, min, max) =>
-              props.percentage ? [0, 100] : [Math.min(0, min), Math.max(1, max * 1.1)],
+              props.binary
+                ? [0, 1.1]
+                : props.percentage
+                  ? [0, 100]
+                  : [Math.min(0, min), Math.max(1, max * 1.1)],
           },
         },
         series: [
           { label: 'Elapsed (s)' },
           {
             label: props.comparisonValues ? 'Actual VUs' : props.unit,
+            paths: props.binary ? uPlot.paths.stepped?.({ align: 1 }) : undefined,
             stroke: '#38bdf8',
             width: 1.5,
             spanGaps: false,
@@ -137,6 +143,7 @@
             ticks: { stroke: '#64748b30' },
             font: '11px monospace',
             size: 54,
+            splits: props.binary ? () => [0, 1] : undefined,
           },
         ],
         legend: { show: Boolean(props.comparisonValues) },

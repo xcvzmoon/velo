@@ -6,6 +6,11 @@ import type {
 } from '../../../app/types/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computed, shallowRef } from 'vue';
+import {
+  generatorArrivalRates,
+  generatorRequestRates,
+  storedGeneratorPoints,
+} from '../../../app/utils/generator-health';
 import { createRunMonitor } from '../../../app/utils/run-monitor';
 
 beforeEach(() => {
@@ -469,4 +474,79 @@ it('treats automatic stop as terminal while retaining evidence and partial resul
   await monitor.recover();
   expect(monitor.active.value).toBe(false);
   expect(monitor.snapshot.value?.automatic_stop).toEqual(stopped.automatic_stop);
+});
+
+describe('generator rate populations and history', () => {
+  it('uses scheduling-only windows for offered and admitted arrival iterations', () => {
+    const value = snapshot('1', 4);
+    value.confirmation.workload = {
+      kind: 'arrival',
+      rate: 100,
+      capacity: 8,
+      duration_ms: 2000,
+    };
+    value.scheduling_us = '2000000';
+    value.drain_us = '2000000';
+    value.arrival = {
+      offered: '200',
+      capacity_drops: '10',
+      missed_deadlines: '5',
+      dataset_drops: '5',
+      max_lateness_us: '50',
+    };
+    value.metrics.counters.started = '360';
+    value.metrics.request_rate = 80;
+    expect(generatorArrivalRates(value)).toEqual({
+      offered: 100,
+      started: 90,
+    });
+    expect(generatorRequestRates(value)).toEqual({
+      started: 90,
+      completed: 80,
+    });
+    value.metrics.counter_overflow = true;
+    expect(generatorArrivalRates(value)).toEqual({
+      offered: null,
+      started: null,
+    });
+    expect(generatorRequestRates(value)).toEqual({
+      started: null,
+      completed: null,
+    });
+    value.metrics.counter_overflow = false;
+    value.scheduling_us = '0';
+    value.actual_us = '0';
+    expect(generatorArrivalRates(value)).toEqual({
+      offered: null,
+      started: null,
+    });
+    expect(generatorRequestRates(value)).toEqual({
+      started: null,
+      completed: null,
+    });
+  });
+
+  it('preserves telemetry and VU counts while exposing downsampled history gaps', () => {
+    const value = snapshot();
+    const first: RunUpdate = {
+      sequence: '2',
+      snapshot: value,
+      interval_us: '1000000',
+      interval_requests: '10',
+      interval_failures: '1',
+      response_latency: population,
+    };
+    const second: RunUpdate = {
+      ...first,
+      sequence: '4',
+      snapshot: snapshot('1', 3),
+    };
+    const points = storedGeneratorPoints([first, second]);
+    expect(points).toHaveLength(3);
+    expect(points[0]?.telemetry).toEqual(value.telemetry);
+    expect(points[0]?.retiringVus).toBe(0);
+    expect(points[1]?.telemetry).toBeNull();
+    expect(points[1]?.capacityDrops).toBeNull();
+    expect(points[2]?.seconds).toBe(3);
+  });
 });

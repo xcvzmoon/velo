@@ -1,8 +1,9 @@
 import type { ComputedRef, ShallowRef } from 'vue';
 import type { RunConfig, RunConfirmation, RunSnapshot, RunUpdate } from '../types/contracts';
+import type { GeneratorPoint } from './generator-health';
 import * as v from 'valibot';
 
-type ChartPoint = {
+type ChartPoint = GeneratorPoint & {
   seconds: number;
   requests: number | null;
   iterations: number | null;
@@ -156,6 +157,10 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
         assertionFailures: null,
         vus: null,
         desiredVus: null,
+        retiringVus: null,
+        telemetry: null,
+        capacityDrops: null,
+        missedDeadlines: null,
       });
     }
 
@@ -180,6 +185,10 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
           : update.snapshot.metrics.assertion_failure_rate * 100,
       vus: update.snapshot.active_vus,
       desiredVus: update.snapshot.desired_vus,
+      retiringVus: update.snapshot.retiring_vus,
+      telemetry: update.snapshot.telemetry,
+      capacityDrops: update.snapshot.arrival.capacity_drops,
+      missedDeadlines: update.snapshot.arrival.missed_deadlines,
     });
     points.value = nextPoints.slice(-pointLimit);
     sequence = nextSequence;
