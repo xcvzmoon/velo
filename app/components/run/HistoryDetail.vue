@@ -3,18 +3,35 @@
 
   const props = defineProps<{ entry: HistoryEntry }>();
 
+  const measuredPoints = computed<HistoryEntry['points']>(() => {
+    const result: HistoryEntry['points'] = [];
+    let previous = -1n;
+    for (const point of props.entry.points) {
+      const elapsed = BigInt(point.snapshot.actual_us);
+      if (elapsed > previous && BigInt(point.interval_us) > 0n) {
+        result.push(point);
+        previous = elapsed;
+      }
+    }
+    return result;
+  });
+  const iterations = computed<(number | null)[]>(() =>
+    measuredPoints.value.map(({ snapshot }) =>
+      snapshot.metrics.counter_overflow ? null : snapshot.metrics.iteration_rate,
+    ),
+  );
   const seconds = computed<number[]>(() =>
-    props.entry.points.map(({ snapshot }) => Number(snapshot.actual_us) / 1_000_000),
+    measuredPoints.value.map(({ snapshot }) => Number(snapshot.actual_us) / 1_000_000),
   );
   const rates = computed<(number | null)[]>(() =>
-    props.entry.points.map(({ interval_us, interval_requests }) =>
+    measuredPoints.value.map(({ interval_us, interval_requests }) =>
       Number(interval_us) > 0
         ? (Number(interval_requests) * 1_000_000) / Number(interval_us)
         : null,
     ),
   );
   const assertionFailures = computed<(number | null)[]>(() =>
-    props.entry.points.map(({ snapshot }) =>
+    measuredPoints.value.map(({ snapshot }) =>
       snapshot.metrics.counter_overflow || snapshot.metrics.assertion_failure_rate === null
         ? null
         : snapshot.metrics.assertion_failure_rate * 100,
@@ -63,7 +80,15 @@
       />
 
       <RunChart
-        v-if="entry.snapshot.metrics.diagnostics.assertions.length"
+        v-if="entry.snapshot.scenarios"
+        :seconds="seconds"
+        :values="iterations"
+        title="Stored cumulative scenario iteration rate"
+        unit="iterations/s"
+      />
+
+      <RunChart
+        v-if="entry.snapshot.scenarios || entry.snapshot.metrics.diagnostics.assertions.length"
         :seconds="seconds"
         :values="assertionFailures"
         title="Stored cumulative assertion failure rate"

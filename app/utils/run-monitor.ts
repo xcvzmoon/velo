@@ -5,6 +5,7 @@ import * as v from 'valibot';
 type ChartPoint = {
   seconds: number;
   requests: number | null;
+  iterations: number | null;
   latency: number | null;
   failures: number | null;
   assertionFailures: number | null;
@@ -148,6 +149,7 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
       nextPoints.push({
         seconds: previousPoint ? (previousPoint.seconds + seconds / 1e6) / 2 : 0,
         requests: null,
+        iterations: null,
         latency: null,
         failures: null,
         assertionFailures: null,
@@ -161,6 +163,9 @@ export function createRunMonitor(transport: RunTransport): RunMonitor {
     nextPoints.push({
       seconds: seconds / 1e6,
       requests: requests === null ? null : requests / (interval / 1e6),
+      iterations: update.snapshot.metrics.counter_overflow
+        ? null
+        : update.snapshot.metrics.iteration_rate,
       latency:
         update.response_latency.p95_us === null ? null : update.response_latency.p95_us / 1000,
       failures:
