@@ -364,6 +364,13 @@
       </p>
     </section>
 
+    <AiAssistant
+      task="draft"
+      :definition="definition"
+      :disabled="disabled || busy"
+      @apply="applyDefinition"
+    />
+
     <RunRequestEditor
       v-if="mode === 'visual'"
       :loaded="visual"

@@ -190,6 +190,12 @@
     <template v-if="report && settings">
       <RunComparisonEvidence :report="report" />
 
+      <AiAssistant
+        task="explain"
+        :evidence="selectAiEvidence(candidate, report)"
+        :disabled="busy || metadataDirty || budgetsDirty"
+      />
+
       <RunRegressionSettingsForm
         :key="`${candidate.id}-${settings.baseline_id}`"
         :settings="settings"

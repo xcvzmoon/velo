@@ -1,3 +1,4 @@
+mod ai;
 mod authoring;
 mod credentials;
 mod diagnostic;
@@ -42,7 +43,12 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(execution::DesktopRuns::default()))
+        .manage(ai::AiState::default())
         .invoke_handler(tauri::generate_handler![
+            ai::prepare_ai_context,
+            ai::generate_ai,
+            ai::cancel_ai,
+            ai::set_ai_key,
             authoring::import_definition_file,
             authoring::export_definition_file,
             authoring::load_configuration_definition,
