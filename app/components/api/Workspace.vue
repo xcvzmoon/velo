@@ -30,6 +30,7 @@
   ];
 
   const workspace = useApiWorkspace();
+  const confirm = useConfirmation();
   const { state, collection, request, dirty } = workspace;
   const searchForm = useForm({
     schema: v.object({ search: v.string() }),
@@ -137,7 +138,7 @@
     }
     return count;
   });
-  function closeTab(id: string): void {
+  async function closeTab(id: string): Promise<void> {
     const tab = state.value.tabs.find(
       (entry) => entry.collection_id === collection.value?.id && entry.request_id === id,
     );
@@ -149,9 +150,10 @@
         rawDirty.value[tab.instance_id] ||
         invalid.value[tab.instance_id] ||
         invalid.value[`${tab.instance_id}:data`]) &&
-      !window.confirm(
-        'Close this tab? Valid changes remain in the collection draft; unapplied form edits will be discarded.',
-      )
+      !(await confirm(
+        'Close request tab?',
+        'Valid changes remain in the collection draft; unapplied form edits will be discarded.',
+      ))
     ) {
       return;
     }
@@ -160,8 +162,14 @@
     rawDirty.value[tab.instance_id] = false;
     workspace.close(id);
   }
-  function create(name: string): void {
-    if (documentDirty.value && !window.confirm('Discard unapplied collection JSON edits?')) {
+  async function create(name: string): Promise<void> {
+    if (
+      documentDirty.value &&
+      !(await confirm(
+        'Discard collection edits?',
+        'Unapplied collection JSON edits will be discarded.',
+      ))
+    ) {
       return;
     }
     documentDirty.value = false;
@@ -181,8 +189,14 @@
       ? selection.value.filter((item) => item !== id)
       : [...selection.value, id];
   }
-  function switchCollection(id: string): void {
-    if (documentDirty.value && !window.confirm('Discard unapplied collection JSON edits?')) {
+  async function switchCollection(id: string): Promise<void> {
+    if (
+      documentDirty.value &&
+      !(await confirm(
+        'Discard collection edits?',
+        'Unapplied collection JSON edits will be discarded.',
+      ))
+    ) {
       return;
     }
     state.value.selected = id;
@@ -225,8 +239,14 @@
     documentSource.value = JSON.stringify(collection.value, null, 2);
     documentMode.value = true;
   }
-  function closeDocument(): void {
-    if (documentDirty.value && !window.confirm('Discard unapplied collection JSON edits?')) {
+  async function closeDocument(): Promise<void> {
+    if (
+      documentDirty.value &&
+      !(await confirm(
+        'Discard collection edits?',
+        'Unapplied collection JSON edits will be discarded.',
+      ))
+    ) {
       return;
     }
     documentDirty.value = false;

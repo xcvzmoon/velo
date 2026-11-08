@@ -1,4 +1,3 @@
-import type { ComputedRef, Ref } from 'vue';
 import type {
   ApiCollection,
   CollectionEntry,
@@ -73,6 +72,7 @@ type ApiWorkspace = {
  * ```
  */
 export function useApiWorkspace(): ApiWorkspace {
+  const confirm = useConfirmation();
   const state = useState<ApiWorkspaceState>('api-workspace', () => ({
     collections: [],
     snapshots: [],
@@ -324,9 +324,10 @@ export function useApiWorkspace(): ApiWorkspace {
           ).definition;
       if (
         scenario &&
-        !window.confirm(
-          'Review this ordered flow as a load scenario? You must review workload, transport, extraction, and failure settings before starting load.',
-        )
+        !(await confirm(
+          'Review as a load scenario?',
+          'Review workload, transport, extraction, and failure settings in Test studio before starting load.',
+        ))
       ) {
         return;
       }
