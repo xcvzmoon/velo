@@ -1,5 +1,6 @@
 //! Desktop command contracts shared by Tauri and the TypeScript exporter.
 
+pub mod analysis;
 pub mod reports;
 
 use serde::{Deserialize, Serialize};

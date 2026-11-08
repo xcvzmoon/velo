@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/velo-engine", "crates/velo-contracts", "crates/velo-cli", "src-tauri"]
+members = [
+  "crates/velo-engine",
+  "crates/velo-contracts",
+  "crates/velo-cli",
+  "crates/velo-mcp",
+  "src-tauri",
+]
 resolver = "3"
 
 [workspace.package]
@@ -11,6 +17,9 @@ authors = ["Mon Albert Gamil <mrgamilmonalbert@gmail.com>"]
 repository = "https://github.com/xcvzmoon/velo"
 
 [workspace.dependencies]
+rmcp = { version = "3.9.0", default-features = false }
+libc = "0.2"
+url = "2"
 clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"
 sysinfo = { version = "0.37.2", default-features = false, features = ["system"] }

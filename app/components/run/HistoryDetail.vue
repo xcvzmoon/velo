@@ -30,6 +30,12 @@
 
     <RunSummary :stored-snapshot="entry.snapshot" />
 
+    <AiAssistant
+      task="explain"
+      :evidence="selectAiEvidence(entry, null)"
+      :disabled="false"
+    />
+
     <RunGeneratorHealth
       :snapshot="entry.snapshot"
       :points="generatorPoints"
