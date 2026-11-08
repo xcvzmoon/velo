@@ -360,6 +360,13 @@ pub(crate) async fn preview_request(
     authorized: bool,
     rows: Option<Vec<std::collections::BTreeMap<String, String>>>,
 ) -> Result<PreviewResponse, RunError> {
+    if definition.config.scenarios.is_some() {
+        return Err(failure(
+            "PREVIEW_SCENARIO_UNSUPPORTED",
+            "Use a short authorized run to inspect a scenario. Single-request preview does not execute setup or cleanup.",
+            Some("config.scenarios"),
+        ));
+    }
     let _admission = state.admission.try_lock().map_err(|_| {
         failure(
             "REQUEST_BUSY",
