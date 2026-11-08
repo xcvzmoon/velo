@@ -172,7 +172,10 @@
       Older runs
     </Button>
 
-    <div class="grid gap-6 lg:grid-cols-2">
+    <div
+      :class="selected.length > 1 ? 'lg:grid-cols-2' : ''"
+      class="grid gap-6"
+    >
       <RunHistoryDetail
         v-for="entry in selected"
         :key="entry.id"
