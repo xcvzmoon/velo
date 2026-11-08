@@ -653,6 +653,57 @@ mod tests {
     }
 
     #[test]
+    fn telemetry_availability_and_native_windows_survive_history_compaction() {
+        let mut store = Store::initialize(Connection::open_in_memory().unwrap()).unwrap();
+        let mut update = sample();
+        update.snapshot.telemetry = velo_engine::HostTelemetry {
+            status: velo_engine::TelemetryStatus::Available,
+            sampled_at_us: Some(1_000_000),
+            interval_us: Some(1_000_000),
+            logical_cpus: Some(8),
+            process_cpu_percent: Some(25.0),
+            process_memory_bytes: Some(104_857_600),
+            system_cpu_percent: None,
+            system_available_memory_bytes: None,
+            system_total_memory_bytes: None,
+        };
+        store.begin("telemetry", "GET", &update.snapshot).unwrap();
+        for sequence in 1..=601 {
+            update.sequence = sequence.to_string();
+            store.record("telemetry", &update, false).unwrap();
+        }
+        let entry = store.detail("telemetry").unwrap();
+        assert!(entry.points.len() <= 600);
+        assert_eq!(entry.stride, 2);
+        assert_eq!(
+            entry.snapshot["telemetry"]["process_memory_bytes"],
+            "104857600"
+        );
+        assert_eq!(
+            entry.points[0]["snapshot"]["telemetry"]["sampled_at_us"],
+            "1000000"
+        );
+        assert_eq!(
+            entry.points[0]["snapshot"]["telemetry"]["interval_us"],
+            "1000000"
+        );
+        assert!(entry.points[0]["snapshot"]["telemetry"]["system_cpu_percent"].is_null());
+        update.sequence = "602".into();
+        update.snapshot.telemetry = velo_engine::HostTelemetry {
+            status: velo_engine::TelemetryStatus::Unavailable,
+            ..Default::default()
+        };
+        store.record("telemetry", &update, false).unwrap();
+        let entry = store.detail("telemetry").unwrap();
+        assert_eq!(entry.snapshot["telemetry"]["status"], "unavailable");
+        assert!(entry.snapshot["telemetry"]["process_cpu_percent"].is_null());
+        assert_eq!(
+            entry.points.last().unwrap()["snapshot"]["telemetry"]["status"],
+            "unavailable"
+        );
+    }
+
+    #[test]
     fn bounded_series_transaction_rollback_and_cascade_deletion() {
         let mut store = Store::initialize(Connection::open_in_memory().unwrap()).unwrap();
         let mut update = sample();

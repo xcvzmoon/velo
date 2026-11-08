@@ -1876,3 +1876,54 @@ async fn invalid_assertions_and_run_wide_capture_budgets_are_rejected_before_tra
     assert_eq!(target.requests.load(Ordering::SeqCst), 0);
     server.close().await;
 }
+
+#[tokio::test]
+async fn native_telemetry_survives_http_execution_and_freezes_after_stop() {
+    let (server, target) = Server::start().await;
+    let manager = RunManager::default();
+    let mut request = config(server.url.clone());
+    request.workload = Workload::Constant {
+        vus: 1,
+        duration_ms: 30_000,
+    };
+    let accepted = manager.start(request, true).await.unwrap();
+    assert!(accepted.telemetry.process_cpu_percent.is_none());
+    let observed = timeout(Duration::from_secs(5), async {
+        loop {
+            let snapshot = manager.current().await.unwrap();
+            if snapshot.telemetry.sampled_at_us.is_some()
+                || matches!(
+                    snapshot.telemetry.status,
+                    velo_engine::TelemetryStatus::Unsupported
+                )
+            {
+                break snapshot;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(target.requests.load(Ordering::Relaxed) > 0);
+    assert!(observed.metrics.counters.responses > 0);
+    if sysinfo::IS_SUPPORTED_SYSTEM {
+        assert!(observed.telemetry.process_memory_bytes.is_some());
+        assert!(observed.telemetry.sampled_at_us.unwrap() <= observed.actual_us);
+        assert!(observed.telemetry.interval_us.unwrap() >= 1_000_000);
+    }
+    manager.stop(&accepted.run_id).await.unwrap();
+    let final_snapshot = terminal(&manager).await;
+    assert_eq!(final_snapshot.state, RunState::Cancelled);
+    let retained = serde_json::to_value(&final_snapshot.telemetry).unwrap();
+    manager.shutdown().await;
+    assert_eq!(
+        serde_json::to_value(manager.current().await.unwrap().telemetry).unwrap(),
+        retained
+    );
+    let update = manager.sample(&accepted.run_id).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(update.snapshot.telemetry).unwrap(),
+        retained
+    );
+    server.close().await;
+}

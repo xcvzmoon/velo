@@ -13,6 +13,7 @@ mod runner;
 mod scenario;
 mod scenario_metrics;
 mod scenario_runtime;
+mod telemetry;
 mod threshold;
 mod transport;
 mod workload;
@@ -50,6 +51,8 @@ pub use scenario::{
 pub use scenario_metrics::{
     PhaseOutcome, ScenarioPhase, ScenarioReport, ScenarioTotals, StepTotals,
 };
+#[doc(inline)]
+pub use telemetry::{HostTelemetry, TelemetryStatus};
 pub use threshold::{
     Threshold, ThresholdMetric, ThresholdOperator, ThresholdResult, ThresholdStatus,
 };
