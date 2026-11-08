@@ -569,3 +569,84 @@ pub fn compare(
         verdict,
     }
 }
+
+/// Combines native outcomes without recalculating thresholds or assertion rules.
+///
+/// # Arguments
+/// * `entry` - Content-free evidence from a terminal run.
+/// # Returns
+/// Fail for a breached rule, aborted admission, or failed scenario step. Incomplete,
+/// corrupt, or empty measurements and unavailable checks are unevaluable. Otherwise pass.
+/// Regression budgets remain separate and use [`compare`].
+/// # Examples
+/// ```
+/// # fn example(entry: &velo_contracts::HistoryEntry) {
+/// let release_allowed = velo_contracts::reports::run_verdict(entry)
+///     == velo_contracts::reports::RegressionVerdict::Pass;
+/// # let _ = release_allowed;
+/// # }
+/// ```
+pub fn run_verdict(entry: &HistoryEntry) -> RegressionVerdict {
+    let snapshot = &entry.snapshot;
+    let mut insufficient = Vec::new();
+    limitations(entry, "Run", &mut insufficient);
+    let mut unavailable = !insufficient.is_empty();
+    if snapshot["state"] == "aborted" {
+        return RegressionVerdict::Fail;
+    }
+    let Some(thresholds) = snapshot["thresholds"].as_array() else {
+        return RegressionVerdict::Unevaluable;
+    };
+    for threshold in thresholds {
+        match threshold["status"].as_str() {
+            Some("failed") => return RegressionVerdict::Fail,
+            Some("passed") => {}
+            _ => unavailable = true,
+        }
+    }
+    let Some(assertions) = snapshot
+        .pointer("/evaluated/diagnostics/assertions")
+        .and_then(Value::as_array)
+    else {
+        return RegressionVerdict::Unevaluable;
+    };
+    for assertion in assertions {
+        let counts = ["passed", "failed", "unavailable"].map(|key| {
+            assertion[key]
+                .as_str()
+                .and_then(|value| value.parse::<u64>().ok())
+        });
+        match counts {
+            [Some(_), Some(failed), Some(_)] if failed > 0 => return RegressionVerdict::Fail,
+            [Some(passed), Some(0), Some(0)] if passed > 0 => {}
+            _ => unavailable = true,
+        }
+    }
+    if let Some(steps) = snapshot
+        .pointer("/scenarios/steps")
+        .and_then(Value::as_array)
+    {
+        for step in steps {
+            if step["failed"]
+                .as_str()
+                .and_then(|value| value.parse::<u64>().ok())
+                .is_some_and(|count| count > 0)
+            {
+                return RegressionVerdict::Fail;
+            }
+        }
+    }
+    if snapshot
+        .pointer("/evaluated/counters/responses")
+        .and_then(Value::as_str)
+        .and_then(|value| value.parse::<u64>().ok())
+        .is_none_or(|count| count == 0)
+    {
+        unavailable = true;
+    }
+    if unavailable {
+        RegressionVerdict::Unevaluable
+    } else {
+        RegressionVerdict::Pass
+    }
+}
