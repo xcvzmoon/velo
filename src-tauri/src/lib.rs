@@ -6,6 +6,7 @@ mod execution;
 mod history;
 #[cfg(target_os = "macos")]
 mod macos_exit;
+mod oauth;
 mod panic_policy;
 mod reports;
 mod saved_requests;
@@ -44,7 +45,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(execution::DesktopRuns::default()))
         .manage(ai::AiState::default())
+        .manage(oauth::OAuthState::default())
         .invoke_handler(tauri::generate_handler![
+            oauth::oauth_begin,
+            oauth::oauth_complete,
+            oauth::oauth_cancel,
+            oauth::oauth_forget,
             ai::prepare_ai_context,
             ai::generate_ai,
             ai::cancel_ai,

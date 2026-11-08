@@ -79,8 +79,9 @@ pub(crate) fn cancel_data_preparation(
     Ok(())
 }
 
-fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
+pub(crate) fn validate_secret_name(name: &str) -> Result<(), RunError> {
     if name.starts_with("saved.")
+        || name.starts_with("oauth.")
         || name.is_empty()
         || name.len() > 80
         || !name
@@ -89,10 +90,15 @@ fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
     {
         return Err(failure(
             "INVALID_SECRET_NAME",
-            "Use 1 to 80 letters, digits, dots, underscores or hyphens.",
+            "Use 1 to 80 letters, digits, dots, underscores or hyphens. The saved. and oauth. prefixes are reserved.",
             Some("secret"),
         ));
     }
+    Ok(())
+}
+
+fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
+    validate_secret_name(name)?;
     keyring::Entry::new("app.velo.authoring", name).map_err(|_| {
         failure(
             "SECRET_UNAVAILABLE",
@@ -102,11 +108,24 @@ fn secret_entry(name: &str) -> Result<keyring::Entry, RunError> {
     })
 }
 
-fn read_secret(
+pub(crate) fn read_named_secret(name: &str) -> Result<String, RunError> {
+    secret_entry(name)?.get_password().map_err(|_| {
+        failure(
+            "SECRET_UNAVAILABLE",
+            "Set the referenced secret in the OS credential store.",
+            Some("secret"),
+        )
+    })
+}
+
+pub(crate) fn read_secret(
     name: &str,
     saved: &mut std::collections::BTreeMap<String, serde_json::Value>,
 ) -> Result<String, RunError> {
     use crate::credentials::Credentials;
+    if name.starts_with("oauth.") {
+        return crate::oauth::read_access(name);
+    }
     if let Some(reference) = name.strip_prefix("saved.") {
         let (id, pointer) = reference.split_once('.').ok_or_else(|| {
             failure(
