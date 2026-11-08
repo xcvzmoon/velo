@@ -1,13 +1,16 @@
 <script setup lang="ts">
-  import type { HistoryEntry } from '~/types/contracts';
   import { invoke } from '@tauri-apps/api/core';
 
+  const revision = shallowRef<number>(0);
+  const baseline = shallowRef<string | null>(null);
   const entries = shallowRef<HistoryEntry[]>([]);
   const selected = shallowRef<HistoryEntry[]>([]);
   const error = shallowRef<string | null>(null);
   const status = shallowRef<string | null>(null);
   const busy = shallowRef<boolean>(false);
   const cursor = shallowRef<string | null>(null);
+
+  const candidate = computed<HistoryEntry | null>(() => selected.value.at(-1) ?? null);
 
   async function refreshStatus(): Promise<void> {
     try {
@@ -25,7 +28,12 @@
         before: next ? cursor.value : null,
       });
       entries.value = page;
+      baseline.value = await invoke<string | null>('pinned_baseline');
+      selected.value = await Promise.all(
+        selected.value.map(({ id }) => invoke<HistoryEntry>('load_history', { id })),
+      );
       cursor.value = page.at(-1)?.id ?? null;
+      revision.value++;
       await refreshStatus();
     } catch {
       error.value = 'HISTORY_UNAVAILABLE: Local history could not be loaded.';
@@ -65,6 +73,24 @@
     } finally {
       busy.value = false;
     }
+  }
+
+  async function pin(id: string | null): Promise<void> {
+    busy.value = true;
+    error.value = null;
+    try {
+      await invoke('pin_baseline', { id });
+      baseline.value = id;
+    } catch {
+      error.value = 'BASELINE_SAVE_FAILED: The baseline could not be changed.';
+    } finally {
+      busy.value = false;
+    }
+  }
+
+  function updated(entry: HistoryEntry): void {
+    selected.value = selected.value.map((item) => (item.id === entry.id ? entry : item));
+    entries.value = entries.value.map((item) => (item.id === entry.id ? entry : item));
   }
 
   async function remove(id: string): Promise<void> {
@@ -128,6 +154,25 @@
       No stored runs on this page.
     </p>
 
+    <div class="flex flex-wrap items-center gap-3 text-sm">
+      <p>
+        {{
+          baseline
+            ? `Pinned baseline: ${baseline}. If deleted, dependent comparisons remain unavailable.`
+            : 'No pinned baseline.'
+        }}
+      </p>
+
+      <Button
+        v-if="baseline"
+        :disabled="busy"
+        variant="outline"
+        @click="pin(null)"
+      >
+        Remove baseline
+      </Button>
+    </div>
+
     <ul class="space-y-3">
       <li
         v-for="entry in entries"
@@ -139,7 +184,23 @@
           {{ entry.snapshot.confirmation.origin }} ·
           {{ entry.interrupted ? 'interrupted' : entry.snapshot.state }}
           {{ entry.incomplete ? ' · incomplete history' : '' }}
+          {{ entry.metadata.release ? ` · ${entry.metadata.release}` : '' }}
+          {{ entry.metadata.git_sha ? ` · ${entry.metadata.git_sha}` : '' }}
+          {{ entry.metadata.tags.length ? ` · ${entry.metadata.tags.join(', ')}` : '' }}
         </span>
+
+        <Button
+          :disabled="
+            busy ||
+            baseline === entry.id ||
+            (['starting', 'running', 'stopping'].includes(entry.snapshot.state) &&
+              !entry.interrupted)
+          "
+          variant="outline"
+          @click="pin(entry.id)"
+        >
+          {{ baseline === entry.id ? 'Baseline' : 'Pin baseline' }}
+        </Button>
 
         <Button
           :disabled="busy"
@@ -171,6 +232,15 @@
     >
       Older runs
     </Button>
+
+    <RunComparison
+      v-if="candidate"
+      :key="candidate.id"
+      :candidate="candidate"
+      :pinned-baseline="baseline"
+      :revision="revision"
+      @updated="updated"
+    />
 
     <div
       :class="selected.length > 1 ? 'lg:grid-cols-2' : ''"

@@ -9,6 +9,46 @@ fn main() {
         CommandError::decl(&ts_rs::Config::default())
     );
     let config = ts_rs::Config::default();
+    println!(
+        "export type JsonValue = string | number | boolean | null | {{ [key: string]: JsonValue }} | JsonValue[];"
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::RunMetadata::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::RegressionMetric::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::RegressionBudget::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::ComparisonSettings::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::ConfigurationDifference::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::MetricDelta::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::RegressionResult::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::RegressionVerdict::decl(&config)
+    );
+    println!(
+        "export {};",
+        velo_contracts::reports::ComparisonReport::decl(&config)
+    );
+
     println!("export {};", velo_engine::ScenarioPlan::decl(&config));
     println!("export {};", velo_engine::Scenario::decl(&config));
     println!("export {};", velo_engine::ScenarioStep::decl(&config));

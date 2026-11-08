@@ -82,6 +82,13 @@ impl Store {
                snapshot TEXT NOT NULL, terminal INTEGER NOT NULL DEFAULT 0,
                interrupted INTEGER NOT NULL DEFAULT 0, incomplete INTEGER NOT NULL DEFAULT 0,
                stride INTEGER NOT NULL DEFAULT 1);
+             CREATE TABLE IF NOT EXISTS run_context (
+               run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+               metadata TEXT NOT NULL, identity TEXT, configuration TEXT NOT NULL DEFAULT 'null');
+             CREATE TABLE IF NOT EXISTS baseline (slot INTEGER PRIMARY KEY CHECK(slot=1), run_id TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS comparisons (
+               candidate_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE, settings TEXT NOT NULL,
+               verdict TEXT NOT NULL, regressions TEXT NOT NULL);
              CREATE TABLE IF NOT EXISTS points (
                run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
                sequence INTEGER NOT NULL, payload TEXT NOT NULL,
@@ -243,7 +250,11 @@ impl Store {
         for row in rows {
             let (id, created_at, interrupted, incomplete, stride, snapshot, method) =
                 row.map_err(failure_from)?;
+            let (definition_identity, configuration) = self.run_context(&id)?;
             entries.push(HistoryEntry {
+                metadata: self.run_metadata(&id)?,
+                definition_identity,
+                configuration,
                 method,
                 id,
                 created_at: created_at.to_string(),
@@ -255,6 +266,148 @@ impl Store {
             });
         }
         Ok(entries)
+    }
+
+    fn run_metadata(&self, id: &str) -> Result<velo_contracts::reports::RunMetadata, RunError> {
+        let source: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT metadata FROM run_context WHERE run_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(failure_from)?;
+        source
+            .map(|source| serde_json::from_str(&source).map_err(failure_from))
+            .unwrap_or_else(|| Ok(Default::default()))
+    }
+
+    fn run_context(&self, id: &str) -> Result<(Option<String>, serde_json::Value), RunError> {
+        let source: Option<(Option<String>, String)> = self
+            .connection
+            .query_row(
+                "SELECT identity,configuration FROM run_context WHERE run_id=?1",
+                [id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(failure_from)?;
+        match source {
+            Some((identity, configuration)) => Ok((
+                identity,
+                serde_json::from_str(&configuration).map_err(failure_from)?,
+            )),
+            None => Ok((None, serde_json::Value::Null)),
+        }
+    }
+
+    pub(crate) fn save_context(
+        &self,
+        id: &str,
+        configuration: &serde_json::Value,
+    ) -> Result<(), RunError> {
+        use sha2::{Digest, Sha256};
+        let source = serde_json::to_string(configuration).map_err(failure_from)?;
+        let identity = format!("safe-v1:{:x}", Sha256::digest(source.as_bytes()));
+        self.connection.execute("INSERT INTO run_context(run_id,metadata,identity,configuration) VALUES (?1,?2,?3,?4) ON CONFLICT(run_id) DO UPDATE SET identity=excluded.identity,configuration=excluded.configuration", params![id, serde_json::to_string(&velo_contracts::reports::RunMetadata::default()).map_err(failure_from)?, identity, source]).map_err(failure_from)?;
+        Ok(())
+    }
+
+    pub(crate) fn update_metadata(
+        &self,
+        id: &str,
+        metadata: &velo_contracts::reports::RunMetadata,
+    ) -> Result<(), RunError> {
+        self.cursor(id)?;
+        self.connection.execute("INSERT INTO run_context(run_id,metadata) VALUES (?1,?2) ON CONFLICT(run_id) DO UPDATE SET metadata=excluded.metadata", params![id, serde_json::to_string(metadata).map_err(failure_from)?]).map_err(failure_from)?;
+        Ok(())
+    }
+
+    pub(crate) fn baseline(&self) -> Result<Option<String>, RunError> {
+        self.connection
+            .query_row("SELECT run_id FROM baseline WHERE slot=1", [], |row| {
+                row.get(0)
+            })
+            .optional()
+            .map_err(failure_from)
+    }
+
+    pub(crate) fn pin_baseline(&self, id: Option<&str>) -> Result<(), RunError> {
+        if let Some(id) = id {
+            let entry = self.detail(id)?;
+            if !entry.interrupted
+                && !matches!(
+                    entry.snapshot["state"].as_str(),
+                    Some("completed" | "cancelled" | "failed" | "aborted")
+                )
+            {
+                return Err(RunError {
+                    code: "BASELINE_ACTIVE".into(),
+                    message: "Wait for the run to finish before pinning it.".into(),
+                    field: None,
+                });
+            }
+            self.connection.execute("INSERT INTO baseline VALUES (1,?1) ON CONFLICT(slot) DO UPDATE SET run_id=excluded.run_id", [id]).map_err(failure_from)?;
+        } else {
+            self.connection
+                .execute("DELETE FROM baseline", [])
+                .map_err(failure_from)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn comparison_settings(
+        &self,
+        id: &str,
+    ) -> Result<Option<velo_contracts::reports::ComparisonSettings>, RunError> {
+        let source: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT settings FROM comparisons WHERE candidate_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(failure_from)?;
+        source
+            .map(|source| serde_json::from_str(&source).map_err(failure_from))
+            .transpose()
+    }
+
+    pub(crate) fn save_comparison(
+        &self,
+        id: &str,
+        settings: &velo_contracts::reports::ComparisonSettings,
+        report: &velo_contracts::reports::ComparisonReport,
+    ) -> Result<(), RunError> {
+        self.cursor(id)?;
+        self.connection.execute("INSERT INTO comparisons VALUES (?1,?2,?3,?4) ON CONFLICT(candidate_id) DO UPDATE SET settings=excluded.settings,verdict=excluded.verdict,regressions=excluded.regressions", params![id, serde_json::to_string(settings).map_err(failure_from)?, serde_json::to_string(&report.verdict).map_err(failure_from)?, serde_json::to_string(&report.regressions).map_err(failure_from)?]).map_err(failure_from)?;
+        Ok(())
+    }
+
+    pub(crate) fn comparison_report(
+        &self,
+        id: &str,
+        settings: &velo_contracts::reports::ComparisonSettings,
+    ) -> Result<velo_contracts::reports::ComparisonReport, RunError> {
+        let candidate = self.detail(id)?;
+        let baseline_exists = self
+            .connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM runs WHERE id=?1)",
+                [&settings.baseline_id],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(failure_from)?;
+        let baseline = if baseline_exists {
+            Some(self.detail(&settings.baseline_id)?)
+        } else {
+            None
+        };
+        Ok(velo_contracts::reports::compare(
+            baseline, candidate, settings,
+        ))
     }
 
     pub(crate) fn cursor(&self, id: &str) -> Result<i64, RunError> {
@@ -286,13 +439,20 @@ impl Store {
     }
 
     pub(crate) fn delete_run(&self, id: &str) -> Result<(), RunError> {
-        self.connection
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(failure_from)?;
+        let deleted = transaction
             .execute(
                 "DELETE FROM runs WHERE id=?1 AND (terminal=1 OR interrupted=1)",
                 [id],
             )
             .map_err(failure_from)?;
-        Ok(())
+        if deleted > 0 {
+            transaction.execute("UPDATE comparisons SET verdict='\"unevaluable\"',regressions='[]' WHERE json_extract(settings,'$.baseline_id')=?1", [id]).map_err(failure_from)?;
+        }
+        transaction.commit().map_err(failure_from)
     }
 
     #[cfg(test)]
@@ -812,5 +972,140 @@ mod tests {
         let reopened = Store::open(&path).unwrap();
         drop(duplicate);
         drop(reopened);
+    }
+    #[test]
+    fn baseline_metadata_and_budgets_survive_restart_without_mutating_measurements() {
+        use velo_contracts::reports::{
+            ComparisonSettings, RegressionBudget, RegressionMetric, RegressionVerdict, RunMetadata,
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("reports.sqlite3");
+        let rules = ComparisonSettings {
+            baseline_id: "baseline".into(),
+            configuration_reviewed: true,
+            budgets: vec![RegressionBudget {
+                metric: RegressionMetric::RequestRate,
+                limit: 0.0,
+                percentage: false,
+            }],
+        };
+        let measured;
+        {
+            let mut store = Store::open(&path).unwrap();
+            let mut update = sample();
+            update.snapshot.state = velo_engine::RunState::Completed;
+            update.snapshot.measurement.complete = true;
+            update.snapshot.measurement.evaluated_us = 1000;
+            update.snapshot.evaluated.counter_overflow = false;
+            update.snapshot.evaluated.aggregation_interference = false;
+            update.snapshot.metrics.aggregation_interference = false;
+            update.snapshot.evaluated.http_failure_rate = Some(0.0);
+            update.snapshot.evaluated.request_rate = 100.0;
+            for id in ["baseline", "candidate"] {
+                store.begin(id, "GET", &update.snapshot).unwrap();
+                store.record(id, &update, false).unwrap();
+                store
+                    .save_context(id, &serde_json::json!({"timeout_ms":30000}))
+                    .unwrap();
+            }
+            store.pin_baseline(Some("baseline")).unwrap();
+            measured = store.detail("candidate").unwrap().snapshot;
+            let metadata = RunMetadata {
+                git_sha: "abc1234".into(),
+                release: "v1.2".into(),
+                tags: vec!["release".into()],
+                notes: "First release".into(),
+            };
+            store.update_metadata("candidate", &metadata).unwrap();
+            assert_eq!(store.detail("candidate").unwrap().snapshot, measured);
+            let report = store.comparison_report("candidate", &rules).unwrap();
+            assert_eq!(report.verdict, RegressionVerdict::Pass);
+            store.save_comparison("candidate", &rules, &report).unwrap();
+            let verdict: String = store
+                .connection
+                .query_row(
+                    "SELECT verdict FROM comparisons WHERE candidate_id='candidate'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(verdict, "\"pass\"");
+            store.pin_baseline(Some("candidate")).unwrap();
+            assert_eq!(store.baseline().unwrap().as_deref(), Some("candidate"));
+            store.pin_baseline(None).unwrap();
+            assert!(store.baseline().unwrap().is_none());
+            assert!(store.detail("baseline").is_ok());
+            store.pin_baseline(Some("baseline")).unwrap();
+        }
+        let store = Store::open(&path).unwrap();
+        assert_eq!(store.baseline().unwrap().as_deref(), Some("baseline"));
+        let entry = store.detail("candidate").unwrap();
+        assert_eq!(entry.metadata.release, "v1.2");
+        assert_eq!(entry.metadata.notes, "First release");
+        assert_eq!(entry.snapshot, measured);
+        assert!(entry.definition_identity.unwrap().starts_with("safe-v1:"));
+        let restored = store.comparison_settings("candidate").unwrap().unwrap();
+        assert_eq!(restored.baseline_id, "baseline");
+        assert_eq!(restored.budgets[0].limit, 0.0);
+        assert_eq!(
+            store
+                .comparison_report("candidate", &restored)
+                .unwrap()
+                .verdict,
+            RegressionVerdict::Pass
+        );
+        store.delete_run("baseline").unwrap();
+        assert_eq!(store.baseline().unwrap().as_deref(), Some("baseline"));
+        let report = store.comparison_report("candidate", &restored).unwrap();
+        assert!(report.baseline.is_none());
+        assert_eq!(report.verdict, RegressionVerdict::Unevaluable);
+        let verdict: String = store
+            .connection
+            .query_row(
+                "SELECT verdict FROM comparisons WHERE candidate_id='candidate'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(verdict, "\"unevaluable\"");
+        store.delete_run("candidate").unwrap();
+        assert!(store.comparison_settings("candidate").unwrap().is_none());
+    }
+
+    #[test]
+    fn missing_or_active_baseline_and_legacy_identity_are_explicit() {
+        let mut store = Store::initialize(Connection::open_in_memory().unwrap()).unwrap();
+        assert!(store.pin_baseline(Some("missing")).is_err());
+        let mut update = sample();
+        update.snapshot.state = velo_engine::RunState::Running;
+        store.begin("active", "GET", &update.snapshot).unwrap();
+        assert_eq!(
+            store.pin_baseline(Some("active")).unwrap_err().code,
+            "BASELINE_ACTIVE"
+        );
+        store.delete_run("active").unwrap();
+        assert!(store.detail("active").is_ok());
+        update.snapshot.state = velo_engine::RunState::Cancelled;
+        store.record("active", &update, false).unwrap();
+        store.pin_baseline(Some("active")).unwrap();
+        let entry = store.detail("active").unwrap();
+        assert!(entry.definition_identity.is_none());
+        assert!(entry.metadata.notes.is_empty());
+        assert!(entry.configuration.is_null());
+        store
+            .update_metadata("active", &Default::default())
+            .unwrap();
+        assert!(
+            store
+                .detail("active")
+                .unwrap()
+                .definition_identity
+                .is_none()
+        );
+        assert!(
+            store
+                .update_metadata("missing", &Default::default())
+                .is_err()
+        );
     }
 }
