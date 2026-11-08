@@ -26,6 +26,8 @@
   function drawBoundaries(plot: uPlot): void {
     const context = plot.ctx;
     context.save();
+    context.textAlign = 'left';
+    context.textBaseline = 'alphabetic';
     for (const boundary of [
       {
         seconds: props.warmupSeconds,
