@@ -19,6 +19,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { workspace = true, features = [] }
 
 [dependencies]
+sha2.workspace = true
 tempfile.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
 keyring = { workspace = true, features = [

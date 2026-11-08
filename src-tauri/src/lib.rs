@@ -6,6 +6,7 @@ mod history;
 #[cfg(target_os = "macos")]
 mod macos_exit;
 mod panic_policy;
+mod reports;
 mod saved_requests;
 mod storage;
 mod uploads;
@@ -55,6 +56,11 @@ pub fn run() {
             authoring::list_definitions,
             authoring::load_definition,
             authoring::delete_definition,
+            reports::pinned_baseline,
+            reports::pin_baseline,
+            reports::update_run_metadata,
+            reports::load_comparison_settings,
+            reports::save_comparison,
             history::history_status,
             history::list_history,
             history::load_history,

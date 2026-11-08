@@ -32,6 +32,10 @@ pub(crate) async fn prepare_run(config: RunConfig) -> Result<RunConfirmation, Ru
         })?
 }
 
+fn step_identity(step: &velo_engine::ScenarioStep) -> serde_json::Value {
+    serde_json::json!({ "id": step.id, "method": step.request.method, "think_ms": step.think_ms, "on_failure": step.on_failure })
+}
+
 #[tauri::command]
 pub(crate) async fn start_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -67,11 +71,30 @@ pub(crate) async fn start_run<R: tauri::Runtime>(
         let _ = previous.await;
     }
     let method = format!("{:?}", config.method);
+    let scenario_identity = config.scenarios.as_ref().map(|plan| {
+        serde_json::json!({
+            "seed": plan.seed,
+            "setup": plan.setup.iter().map(step_identity).collect::<Vec<_>>(),
+            "cleanup": plan.cleanup.iter().map(step_identity).collect::<Vec<_>>(),
+            "scenarios": plan.scenarios.iter().map(|scenario| serde_json::json!({
+                "id": scenario.id, "weight": scenario.weight,
+                "steps": scenario.steps.iter().map(step_identity).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+        })
+    });
+    let configuration = serde_json::json!({
+        "scenarios": scenario_identity,
+        "method": config.method, "protocol": config.protocol, "max_redirects": config.max_redirects,
+        "timeout_ms": config.timeout_ms, "pacing_ms": config.pacing_ms, "grace_ms": config.grace_ms,
+        "workload": config.workload, "warmup_ms": config.warmup_ms, "thresholds": config.thresholds,
+        "abort_policies": config.abort_policies, "inspection": config.inspection,
+        "assertion_ids": config.assertions.iter().map(|assertion| &assertion.id).collect::<Vec<_>>(),
+    });
     let snapshot = state.manager.start(config, authorized).await?;
     let history_id = uuid::Uuid::new_v4().to_string();
     let mut incomplete = if let Some(history) = app.try_state::<crate::history::History>() {
         !history
-            .begin(history_id.clone(), method, snapshot.clone())
+            .begin_with_context(history_id.clone(), method, snapshot.clone(), configuration)
             .await
     } else {
         true
@@ -171,6 +194,11 @@ mod tests {
             )))
             .manage(state.clone())
             .invoke_handler(tauri::generate_handler![
+                crate::reports::pinned_baseline,
+                crate::reports::pin_baseline,
+                crate::reports::update_run_metadata,
+                crate::reports::load_comparison_settings,
+                crate::reports::save_comparison,
                 crate::history::list_history,
                 crate::history::load_history,
                 crate::history::save_configuration,
@@ -330,6 +358,73 @@ mod tests {
         let stored = invoke(&window, "load_history", json!({ "id": history[0]["id"] })).unwrap();
         assert!(!stored["points"].as_array().unwrap().is_empty());
         assert!(!stored.to_string().contains("secret"));
+        assert!(!stored.to_string().contains("private"));
+        assert!(
+            stored["definition_identity"]
+                .as_str()
+                .unwrap()
+                .starts_with("safe-v1:")
+        );
+        assert_eq!(stored["configuration"]["timeout_ms"], 30000);
+        assert!(
+            invoke(&window, "pinned_baseline", json!({}))
+                .unwrap()
+                .is_null()
+        );
+        invoke(&window, "pin_baseline", json!({"id": history[0]["id"]})).unwrap();
+        assert_eq!(
+            invoke(&window, "pinned_baseline", json!({})).unwrap(),
+            history[0]["id"]
+        );
+        let measured = stored["snapshot"].clone();
+        let metadata =
+            json!({"git_sha":"abc1234", "release":"v1.0", "tags":["release"], "notes":"reviewed"});
+        invoke(
+            &window,
+            "update_run_metadata",
+            json!({"id":history[0]["id"], "metadata":metadata}),
+        )
+        .unwrap();
+        let updated = invoke(&window, "load_history", json!({"id":history[0]["id"]})).unwrap();
+        assert_eq!(updated["metadata"], metadata);
+        assert_eq!(updated["snapshot"], measured);
+        let mut invalid_metadata = metadata;
+        invalid_metadata["git_sha"] = json!("invalid");
+        assert_eq!(
+            invoke(
+                &window,
+                "update_run_metadata",
+                json!({"id":history[0]["id"], "metadata":invalid_metadata})
+            )
+            .unwrap_err()["code"],
+            "INVALID_REPORT_SETTINGS"
+        );
+        let settings = json!({"baseline_id":history[0]["id"], "configuration_reviewed":true, "budgets":[{"metric":"response_p95_ms", "limit":10.0, "percentage":true}]});
+        let report = invoke(
+            &window,
+            "save_comparison",
+            json!({"id":history[0]["id"], "settings":settings}),
+        )
+        .unwrap();
+        assert_eq!(report["format_version"], 1);
+        assert_eq!(report["verdict"], "unevaluable");
+        assert_eq!(report["regressions"][0]["verdict"], "unevaluable");
+        assert_eq!(
+            invoke(
+                &window,
+                "load_comparison_settings",
+                json!({"id":history[0]["id"]})
+            )
+            .unwrap(),
+            settings
+        );
+        invoke(&window, "pin_baseline", json!({"id":null})).unwrap();
+        assert!(
+            invoke(&window, "pinned_baseline", json!({}))
+                .unwrap()
+                .is_null()
+        );
+
         invoke(
             &window,
             "save_configuration",

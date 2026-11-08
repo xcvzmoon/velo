@@ -1,5 +1,7 @@
 //! Desktop command contracts shared by Tauri and the TypeScript exporter.
 
+pub mod reports;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -73,7 +75,7 @@ pub struct CommandError {
 /// assert!(entry.stride >= 1);
 /// # }
 /// ```
-#[derive(Debug, Serialize, TS)]
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct HistoryEntry {
     /// HTTP method used for comparison eligibility.
     pub method: String,
@@ -87,6 +89,13 @@ pub struct HistoryEntry {
     pub incomplete: bool,
     /// Sampling stride; one retains every interval, two every other interval.
     pub stride: u32,
+    /// Editable release context, separate from measurements.
+    pub metadata: reports::RunMetadata,
+    /// Safe definition identity, absent in older history.
+    pub definition_identity: Option<String>,
+    /// Allowlisted execution settings, with request content omitted.
+    #[ts(type = "JsonValue")]
+    pub configuration: serde_json::Value,
     /// Latest safe engine summary.
     #[ts(type = "RunSnapshot")]
     pub snapshot: serde_json::Value,

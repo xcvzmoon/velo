@@ -28,6 +28,159 @@ export type CommandError = {
    */
   field: string | null;
 };
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: JsonValue }
+  | JsonValue[];
+export type RunMetadata = {
+  /**
+   * Optional Git SHA, empty when unset.
+   */
+  git_sha: string;
+  /**
+   * Release label, empty when unset.
+   */
+  release: string;
+  /**
+   * At most 20 user labels.
+   */
+  tags: string[];
+  /**
+   * User notes; include only information safe to share.
+   */
+  notes: string;
+};
+export type RegressionMetric =
+  | 'response_p50_ms'
+  | 'response_p95_ms'
+  | 'response_p99_ms'
+  | 'request_rate'
+  | 'http_failure_percent'
+  | 'assertion_failure_percent';
+export type RegressionBudget = {
+  /**
+   * Metric population and unit.
+   */
+  metric: RegressionMetric;
+  /**
+   * Finite nonnegative limit; equality passes.
+   */
+  limit: number;
+  /**
+   * Whether the limit uses relative percent instead of absolute units.
+   */
+  percentage: boolean;
+};
+export type ComparisonSettings = {
+  /**
+   * Durable reference; deletion does not select a replacement.
+   */
+  baseline_id: string;
+  /**
+   * At most 32 regression limits, independent of absolute thresholds.
+   */
+  budgets: RegressionBudget[];
+  /**
+   * Explicit acknowledgement of the displayed configuration differences.
+   */
+  configuration_reviewed: boolean;
+};
+export type ConfigurationDifference = {
+  /**
+   * Name of the changed configuration field.
+   */
+  field: string;
+  /**
+   * Original safe value.
+   */
+  baseline: JsonValue;
+  /**
+   * Candidate safe value.
+   */
+  candidate: JsonValue;
+};
+export type MetricDelta = {
+  /**
+   * Metric population and unit.
+   */
+  metric: RegressionMetric;
+  /**
+   * Baseline measurement, absent when unavailable.
+   */
+  baseline: number | null;
+  /**
+   * Candidate measurement, absent when unavailable.
+   */
+  candidate: number | null;
+  /**
+   * Candidate minus baseline in metric units.
+   */
+  absolute: number | null;
+  /**
+   * 100 times delta divided by baseline; absent for zero or missing baseline.
+   */
+  percentage: number | null;
+};
+export type RegressionResult = {
+  /**
+   * Configured limit.
+   */
+  budget: RegressionBudget;
+  /**
+   * Direction-adjusted change in the budget unit.
+   */
+  worsening: number | null;
+  /**
+   * Pass, fail, or unevaluable; never an absolute threshold verdict.
+   */
+  verdict: RegressionVerdict;
+};
+export type RegressionVerdict = 'pass' | 'fail' | 'unevaluable';
+export type ComparisonReport = {
+  /**
+   * Report schema version, currently 1.
+   */
+  format_version: number;
+  /**
+   * Requested baseline identifier even after deletion.
+   */
+  baseline_id: string;
+  /**
+   * Baseline evidence, absent after deletion.
+   */
+  baseline: HistoryEntry | null;
+  /**
+   * Candidate measurements and release context.
+   */
+  candidate: HistoryEntry;
+  /**
+   * Whether the user explicitly reviewed retained and redacted configuration context.
+   */
+  configuration_reviewed: boolean;
+  /**
+   * Safe configuration differences requiring review.
+   */
+  differences: ConfigurationDifference[];
+  /**
+   * Compatibility, completeness, and integrity limitations.
+   */
+  limitations: string[];
+  /**
+   * Unrounded metric changes, independent of budgets.
+   */
+  deltas: MetricDelta[];
+  /**
+   * Budget verdicts, separate from thresholds.
+   */
+  regressions: RegressionResult[];
+  /**
+   * Combined regression outcome; no configured budgets is unevaluable.
+   */
+  verdict: RegressionVerdict;
+};
 export type ScenarioPlan = {
   /**
    * Seed for deterministic selection in global admission order; default zero.
@@ -581,6 +734,18 @@ export type HistoryEntry = {
    * Sampling stride; one retains every interval, two every other interval.
    */
   stride: number;
+  /**
+   * Editable release context, separate from measurements.
+   */
+  metadata: RunMetadata;
+  /**
+   * Safe definition identity, absent in older history.
+   */
+  definition_identity: string | null;
+  /**
+   * Allowlisted execution settings, with request content omitted.
+   */
+  configuration: JsonValue;
   /**
    * Latest safe engine summary.
    */

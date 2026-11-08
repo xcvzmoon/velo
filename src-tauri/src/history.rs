@@ -108,6 +108,27 @@ impl History {
         }
     }
 
+    pub(crate) async fn begin_with_context(
+        &self,
+        id: String,
+        method: String,
+        snapshot: RunSnapshot,
+        configuration: serde_json::Value,
+    ) -> bool {
+        let success = self
+            .call(move |store| {
+                store.begin(&id, &method, &snapshot)?;
+                store.save_context(&id, &configuration)
+            })
+            .await
+            .is_ok();
+        if !success && let Ok(mut status) = self.status.lock() {
+            *status = Some("HISTORY_WRITE_FAILED".into());
+        }
+        success
+    }
+
+    #[cfg(test)]
     pub(crate) async fn begin(&self, id: String, method: String, snapshot: RunSnapshot) -> bool {
         let success = self
             .call(move |store| store.begin(&id, &method, &snapshot))
