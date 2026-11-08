@@ -9,6 +9,7 @@ Velo is a local desktop studio for testing HTTP APIs under load. Configure a req
 - Set final thresholds for response p95, HTTP failure percentage, and request throughput.
 - Stop a run with graceful drain, navigate without interrupting it, and retain partial results.
 - Edit and share versioned JSON test definitions, select environments, import API requests, and preview one request.
+- Organize requests in [API collections](docs/api-workspace.md), send individual requests, and run ordered functional checks with isolated sessions.
 - Save tests with OS secret references and compare compatible historical runs.
 - Run exported definitions headlessly in CI with explicit target authorization and JSON, JUnit, or HTML reports.
 
@@ -50,7 +51,7 @@ The application uses Tauri 2 with a client-rendered Nuxt 4/Vue 3 frontend. Rust 
 | `app/types/contracts.ts` | Generated Rust-owned TypeScript contracts                                      |
 | `docs/`                  | Implementation guides, development instructions, and dated evidence            |
 
-Load-run responses are streamed and discarded. Explicit single-request previews retain bounded response content temporarily. Live charts and stored time series are bounded; individual requests are not persisted. Retained run summaries grow disk usage until deleted. See [execution and measurements](docs/execution.md) for outcome definitions and workload semantics.
+Load-run responses are streamed and discarded. Explicit single-request previews retain bounded response content temporarily. Live charts and stored time series are bounded. The API workspace keeps separate bounded functional history; response-content persistence is opt-in. Retained run summaries grow disk usage until deleted. See [execution and measurements](docs/execution.md) for outcome definitions and workload semantics.
 
 ## Build and verify
 
