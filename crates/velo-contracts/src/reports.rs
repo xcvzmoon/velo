@@ -152,7 +152,8 @@ pub struct RegressionResult {
 ///     !report.configuration_reviewed || !report.limitations.is_empty()
 /// }
 /// ```
-#[derive(Clone, Debug, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct ComparisonReport {
     /// Report schema version, currently 1.
     pub format_version: u32,
