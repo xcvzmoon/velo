@@ -1,0 +1,33 @@
+name: Headless CLI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Select pinned Rust toolchain
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2.9.2
+        with:
+          shared-key: headless
+      - name: Test standalone adapter and shared reports
+        run: cargo test --locked -p velo-cli -p velo-contracts
+      - name: Build without desktop system dependencies
+        run: cargo build --locked --release -p velo-cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: velo-cli-linux-${{ github.sha }}
+          path: target/release/velo-cli
+          if-no-files-found: error
+          retention-days: 7
