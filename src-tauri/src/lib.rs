@@ -1,5 +1,8 @@
 mod ai;
+mod api;
+mod api_storage;
 mod authoring;
+mod collections;
 mod credentials;
 mod diagnostic;
 mod execution;
@@ -45,8 +48,28 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(execution::DesktopRuns::default()))
         .manage(ai::AiState::default())
+        .manage(api::ApiState::default())
         .manage(oauth::OAuthState::default())
         .invoke_handler(tauri::generate_handler![
+            api::run_api_collection,
+            api::cancel_api_run,
+            api::api_session,
+            api::clear_api_session,
+            api::preview_api_request,
+            api::api_draft_state,
+            api_storage::api_history,
+            api_storage::delete_api_history,
+            api_storage::api_history_settings,
+            api_storage::set_api_history_settings,
+            collections::save_api_collection,
+            collections::reorder_api_collections,
+            collections::list_api_collections,
+            collections::delete_api_collection,
+            collections::collection_request,
+            collections::collection_scenario,
+            collections::parse_api_collection,
+            collections::import_api_collection_file,
+            collections::export_api_collection_file,
             oauth::oauth_begin,
             oauth::oauth_complete,
             oauth::oauth_cancel,
@@ -116,6 +139,7 @@ pub fn run() {
                 if !state.closing.swap(true, Ordering::AcqRel) {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
+                        app.state::<api::ApiState>().cancel();
                         state.preview_exit.notify_waiters();
                         if let Ok(current) = state.preparation.lock()
                             && let Some(cancelled) = current.as_ref()
@@ -127,7 +151,8 @@ pub fn run() {
                             matches!(snapshot.state, RunState::Starting | RunState::Running | RunState::Stopping)
                         });
                         tracing::info!(active_run = active, "Exit requested");
-                        if active {
+                        let dirty = app.state::<api::ApiState>().dirty();
+                        if active || dirty {
                             let dialog_app = app.clone();
                             let confirmed = tauri::async_runtime::spawn_blocking(move || {
                                 let Some(window) = dialog_app.get_webview_window("main") else {
@@ -135,11 +160,11 @@ pub fn run() {
                                     return false;
                                 };
                                 dialog_app.dialog()
-                                    .message("A load test is active. Stop the run and quit? Partial results will be retained when local storage is available.")
+                                    .message(if dirty { "The API workspace has unsaved edits. Quit and discard those edits? Any active load test will stop and retain partial results when local storage is available." } else { "A load test is active. Stop the run and quit? Partial results will be retained when local storage is available." })
                                     .title("Quit Velo?")
                                     .parent(&window)
                                     .kind(MessageDialogKind::Warning)
-                                    .buttons(MessageDialogButtons::OkCancelCustom("Stop and quit".into(), "Keep running".into()))
+                                    .buttons(MessageDialogButtons::OkCancelCustom("Quit Velo".into(), "Keep working".into()))
                                     .blocking_show()
                             }).await.unwrap_or(false);
                             if !confirmed {
