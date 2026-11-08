@@ -6,19 +6,24 @@
       number: '01',
     },
     {
+      label: 'API workspace',
+      to: '/api',
+      number: '02',
+    },
+    {
       label: 'Tests',
       to: '/tests',
-      number: '02',
+      number: '03',
     },
     {
       label: 'Results',
       to: '/results',
-      number: '03',
+      number: '04',
     },
     {
       label: 'Settings',
       to: '/settings',
-      number: '04',
+      number: '05',
     },
   ];
 </script>

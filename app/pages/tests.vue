@@ -12,7 +12,9 @@
     initialInput: { updateIntervalMs: '1000' },
   });
 
-  const loaded = shallowRef<TestDefinition | null>(null);
+  const apiDefinition = useState<TestDefinition | null>('api-load-definition', () => null);
+  const loaded = shallowRef<TestDefinition | null>(apiDefinition.value);
+  apiDefinition.value = null;
 
   const confirmation = shallowRef<RunConfirmation | null>(null);
   const prepared = shallowRef<RunConfig | null>(null);
