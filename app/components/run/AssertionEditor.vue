@@ -75,7 +75,11 @@
       max: 32_768,
     },
   ] as const;
-  defineProps<{ form: FormStore<typeof requestEditorSchema>; disabled: boolean }>();
+  defineProps<{
+    form: FormStore<typeof requestEditorSchema>;
+    disabled: boolean;
+    hideLimits?: boolean;
+  }>();
   const editorId = useId();
 </script>
 
@@ -204,7 +208,10 @@
       </div>
     </FormischFieldArray>
 
-    <div class="grid gap-3 sm:grid-cols-3">
+    <div
+      v-if="!hideLimits"
+      class="grid gap-3 sm:grid-cols-3"
+    >
       <FormischField
         v-for="limit in limits"
         :key="limit.name"

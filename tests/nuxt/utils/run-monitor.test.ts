@@ -32,6 +32,7 @@ const population: LatencySnapshot = {
 
 function snapshot(runId = '1', seconds = 1): RunSnapshot {
   return {
+    scenarios: null,
     dataset: null,
     thresholds: [],
     run_id: runId,
@@ -132,7 +133,12 @@ function harness() {
     },
   });
 
-  function emit(sequence: number, runId = '1', assertionFailureRate: number | null = null): void {
+  function emit(
+    sequence: number,
+    runId = '1',
+    assertionFailureRate: number | null = null,
+    iterationRate = 10,
+  ): void {
     receive?.({
       sequence: String(sequence),
       snapshot: {
@@ -140,6 +146,7 @@ function harness() {
         metrics: {
           ...snapshot(runId, sequence).metrics,
           assertion_failure_rate: assertionFailureRate,
+          iteration_rate: iterationRate,
         },
       },
       interval_us: '1000000',
@@ -257,6 +264,7 @@ describe('run monitor', () => {
     expect(monitor.points.value).toHaveLength(1);
     expect(monitor.points.value[0]).toMatchObject({
       requests: 10,
+      iterations: 10,
       failures: 10,
       latency: 1,
     });
@@ -265,6 +273,20 @@ describe('run monitor', () => {
     emit(99, '1');
     expect(monitor.snapshot.value?.run_id).toBe('2');
     expect(monitor.points.value).toHaveLength(1);
+    monitor.dispose();
+  });
+
+  it('keeps scenario iteration throughput distinct from HTTP throughput', async () => {
+    const { monitor, emit } = harness();
+    await monitor.connect();
+    emit(1, '1', null, 2);
+    expect(monitor.points.value[0]).toMatchObject({
+      requests: 10,
+      iterations: 2,
+    });
+    emit(3, '1', null, 3);
+    expect(monitor.points.value[1]?.iterations).toBeNull();
+    expect(monitor.points.value[2]?.iterations).toBe(3);
     monitor.dispose();
   });
 
@@ -291,6 +313,7 @@ describe('run monitor', () => {
     emit(3);
     expect(monitor.gaps.value).toBe(true);
     expect(monitor.points.value[1]?.requests).toBeNull();
+    expect(monitor.points.value[1]?.iterations).toBeNull();
     for (let sequence = 4; sequence < 100_000; sequence += 1) {
       emit(sequence);
     }

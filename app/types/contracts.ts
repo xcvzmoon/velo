@@ -28,6 +28,218 @@ export type CommandError = {
    */
   field: string | null;
 };
+export type ScenarioPlan = {
+  /**
+   * Seed for deterministic selection in global admission order; default zero.
+   */
+  seed: number;
+  /**
+   * Setup runs once before scheduling, with a 30-second total deadline.
+   * Its extracted values and cookies seed each isolated session. With datasets,
+   * lifecycle actions use the first prepared record.
+   */
+  setup: ScenarioStep[];
+  /**
+   * Cleanup runs once after workers drain, using setup state only.
+   * Normal stop does not cancel cleanup; a separate 30-second total deadline applies.
+   */
+  cleanup: ScenarioStep[];
+  /**
+   * One to 16 weighted journeys. Weights are relative probabilities, not quotas.
+   */
+  scenarios: Scenario[];
+};
+export type Scenario = {
+  /**
+   * Stable identifier, unique in the plan; 1 to 64 ASCII letters, digits, underscores or hyphens.
+   */
+  id: string;
+  /**
+   * Relative selection weight, 1 to 10,000.
+   */
+  weight: number;
+  /**
+   * One to 32 steps executed sequentially.
+   */
+  steps: ScenarioStep[];
+};
+export type ScenarioStep = {
+  /**
+   * Stable identity unique within this phase or scenario.
+   */
+  id: string;
+  /**
+   * HTTP content. Transport, workload, timeout and inspection limits come from the run.
+   */
+  request: ScenarioRequest;
+  /**
+   * Extraction is atomic; failed or missing optional values remove stale state.
+   */
+  extractions: Extraction[];
+  /**
+   * Cancellable delay after this step, excluded from HTTP latency; default zero.
+   */
+  think_ms: number;
+  /**
+   * Stop the iteration or continue independent steps; no implicit retries.
+   */
+  on_failure: StepFailure;
+};
+export type ScenarioRequest = {
+  /**
+   * Absolute URL. Session placeholders are allowed only in the path or query.
+   */
+  url: string;
+  /**
+   * Logical HTTP method.
+   */
+  method: RequestMethod;
+  /**
+   * Ordered HTTP headers.
+   */
+  headers: NameValue[];
+  /**
+   * Ordered query parameters.
+   */
+  query: NameValue[];
+  /**
+   * Optional payload; JSON placeholders must be inside strings.
+   */
+  body: RequestBody;
+  /**
+   * Authentication resolved separately for each user.
+   */
+  auth: RequestAuth;
+  /**
+   * Ordered bounded response checks for this step.
+   */
+  assertions: Assertion[];
+};
+export type StepFailure = 'stop' | 'continue';
+export type Extraction = {
+  /**
+   * Session variable name, 1 to 64 ASCII letters, digits, underscores or hyphens.
+   */
+  name: string;
+  /**
+   * Source in the final response.
+   */
+  source: ExtractionSource;
+  /**
+   * Missing or invalid values fail the step when true.
+   */
+  required: boolean;
+  /**
+   * Allow replacing an existing session value; otherwise collision fails the step.
+   */
+  overwrite: boolean;
+};
+export type ExtractionSource =
+  | {
+      kind: 'json';
+      /**
+       * Empty selects the root; otherwise begins with `/`.
+       */
+      pointer: string;
+    }
+  | {
+      kind: 'header';
+      /**
+       * Case-insensitive HTTP header name.
+       */
+      name: string;
+    }
+  | {
+      kind: 'cookie';
+      /**
+       * Case-sensitive cookie name.
+       */
+      name: string;
+    };
+export type ScenarioReport = {
+  /**
+   * Bounded configured iteration populations.
+   */
+  iterations: ScenarioTotals[];
+  /**
+   * At most 64 fixed step populations; dynamic URLs never create identities.
+   */
+  steps: StepTotals[];
+  /**
+   * Setup outcome; failures prevent load.
+   */
+  setup: PhaseOutcome;
+  /**
+   * Cleanup outcome; failure never implies successful removal.
+   */
+  cleanup: PhaseOutcome;
+};
+export type ScenarioTotals = {
+  /**
+   * Stable configured scenario identity.
+   */
+  id: string;
+  /**
+   * Admitted iterations.
+   */
+  started: string;
+  /**
+   * Non-cancelled iterations, including failures.
+   */
+  completed: string;
+  /**
+   * Completed iterations with any step failure.
+   */
+  failed: string;
+  /**
+   * Iterations interrupted before completion.
+   */
+  cancelled: string;
+};
+export type StepTotals = {
+  /**
+   * Configured scenario identity; empty for setup and cleanup.
+   */
+  scenario_id: string;
+  /**
+   * Configured step identity.
+   */
+  step_id: string;
+  /**
+   * Measurement population.
+   */
+  phase: ScenarioPhase;
+  /**
+   * HTTP attempts started; excludes local binding failures.
+   */
+  requests: string;
+  /**
+   * Step failures, including binding and extraction failures.
+   */
+  failed: string;
+  /**
+   * HTTP attempts interrupted during drain.
+   */
+  cancelled: string;
+  /**
+   * Requests rejected locally before sending.
+   */
+  binding_failures: string;
+  /**
+   * Responses with failed required extraction or state limits.
+   */
+  extraction_failures: string;
+  /**
+   * Latest stable failure code; never response content.
+   */
+  last_error: string | null;
+  /**
+   * Complete HTTP response latency, excluding think time.
+   */
+  response_latency: LatencySnapshot;
+};
+export type PhaseOutcome = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'skipped';
+export type ScenarioPhase = 'setup' | 'load' | 'cleanup';
 export type Assertion = {
   /**
    * Unique ASCII identifier, 1–64 letters, digits, underscores or hyphens.
@@ -263,6 +475,10 @@ export type DataGenerator =
       field: string;
     };
 export type DataRequest = {
+  /**
+   * Dataset-resolved journeys, retaining runtime session placeholders.
+   */
+  scenarios?: ScenarioPlan;
   /**
    * Resolved HTTP URL.
    */
@@ -625,6 +841,10 @@ export type ThresholdResult = {
 };
 export type RunConfig = {
   /**
+   * Optional multi-step journeys; absent runs the standalone request.
+   */
+  scenarios?: ScenarioPlan;
+  /**
    * Absolute HTTP(S) URL without embedded credentials or a fragment.
    */
   url: string;
@@ -777,11 +997,11 @@ export type Counters = {
    */
   response_body_bytes: string;
   /**
-   * Completed non-cancelled iterations; one request per iteration.
+   * Completed non-cancelled iterations; scenarios may contain several requests.
    */
   completed_iterations: string;
   /**
-   * Iterations with status, transport, or timeout failures.
+   * Iterations with HTTP failures; scenarios also include assertion, binding and extraction failures.
    */
   failed_iterations: string;
 };
@@ -869,7 +1089,7 @@ export type MetricsSnapshot = {
    */
   request_rate: number;
   /**
-   * Completed non-cancelled iterations per actual second; currently one request per iteration.
+   * Completed non-cancelled iterations per actual second; independent of requests per iteration.
    */
   iteration_rate: number;
   /**
@@ -916,6 +1136,10 @@ export type ArrivalSnapshot = {
   max_lateness_us: string;
 };
 export type RunSnapshot = {
+  /**
+   * Separate scenario iterations, fixed step populations and lifecycle outcomes.
+   */
+  scenarios: ScenarioReport | null;
   /**
    * Monotonically increasing application-instance identifier, encoded as decimal.
    */

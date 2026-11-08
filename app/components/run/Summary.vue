@@ -175,6 +175,11 @@
       </table>
     </div>
 
+    <RunScenarioResults
+      v-if="snapshot.scenarios"
+      :report="snapshot.scenarios"
+    />
+
     <RunResponseDiagnostics :diagnostics="snapshot.metrics.diagnostics" />
 
     <RunArrivalMetrics :snapshot="snapshot" />

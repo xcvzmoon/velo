@@ -3,6 +3,7 @@
     DataDefinition,
     PreviewResponse,
     RunConfig,
+    ScenarioPlan,
     TestDefinition,
   } from '~/types/contracts';
   import { invoke } from '@tauri-apps/api/core';
@@ -24,6 +25,7 @@
   const busy = shallowRef<boolean>(false);
   const visualValid = shallowRef<boolean>(true);
   const jsonDirty = shallowRef<boolean>(false);
+  const scenarioDirty = shallowRef<boolean>(false);
   const importedData = shallowRef<string>('');
   const dataPreview = shallowRef<Record<string, string>[]>([]);
   const preparedCount = shallowRef<number>(0);
@@ -34,15 +36,43 @@
   );
   const environments = computed<string[]>(() => Object.keys(definition.value?.environments ?? {}));
   const draftInvalid = computed<boolean>(
-    () => dataDirty.value || (mode.value === 'visual' ? !visualValid.value : jsonDirty.value),
+    () =>
+      dataDirty.value ||
+      scenarioDirty.value ||
+      (mode.value === 'json' ? jsonDirty.value : !visualValid.value),
   );
   function update(config: RunConfig): void {
     definition.value = {
       version: 1,
+
       variables: {},
+
       environments: {},
+
       ...definition.value,
-      config,
+
+      config: {
+        ...config,
+        scenarios: definition.value?.config.scenarios,
+      },
+    };
+    preview.value = null;
+    emitInvalidation();
+  }
+  function applyScenarios(scenarios: ScenarioPlan | null): void {
+    if (!definition.value) {
+      return;
+    }
+    const { scenarios: _previous, ...config } = definition.value.config;
+    definition.value = {
+      ...definition.value,
+
+      config: scenarios
+        ? {
+            ...config,
+            scenarios,
+          }
+        : config,
     };
     preview.value = null;
     emitInvalidation();
@@ -60,6 +90,7 @@
       environment.value = '__shared__';
     }
     jsonDirty.value = false;
+    scenarioDirty.value = false;
     importedData.value = '';
     dataPreview.value = [];
     preparedCount.value = 0;
@@ -106,6 +137,7 @@
     definition.value = dataset
       ? {
           ...current,
+
           dataset,
         }
       : current;
@@ -181,7 +213,9 @@
     await perform(async () => {
       const config = await invoke<RunConfig>('resolve_definition', {
         rows: await prepareRows(),
+
         definition: definition.value,
+
         environment: environment.value.startsWith('env:') ? environment.value.slice(4) : null,
       });
       if (preparation?.signal.aborted) {
@@ -195,8 +229,11 @@
     await perform(async () => {
       preview.value = await invoke<PreviewResponse>('preview_request', {
         rows: await prepareRows(),
+
         definition: definition.value,
+
         environment: environment.value.startsWith('env:') ? environment.value.slice(4) : null,
+
         authorized: true,
       });
     });
@@ -251,18 +288,28 @@
 
       <div class="flex flex-wrap gap-3">
         <Button
-          :disabled="disabled || busy"
+          :disabled="disabled || busy || scenarioDirty"
           variant="outline"
-          @click="mode = 'visual'"
+          @click="
+            visual = definition?.config ?? null;
+            mode = 'visual';
+          "
         >
           Visual editor
         </Button>
         <Button
-          :disabled="disabled || busy || !definition"
+          :disabled="disabled || busy || !definition || scenarioDirty"
           variant="outline"
           @click="mode = 'json'"
         >
           JSON and environments
+        </Button>
+        <Button
+          :disabled="disabled || busy || !definition || draftInvalid"
+          variant="outline"
+          @click="mode = 'scenarios'"
+        >
+          Scenarios
         </Button>
         <Button
           :disabled="disabled || busy"
@@ -318,8 +365,9 @@
     </section>
 
     <RunRequestEditor
-      v-show="mode === 'visual'"
+      v-if="mode === 'visual'"
       :loaded="visual"
+      :scenario-mode="Boolean(definition?.config.scenarios)"
       :disabled="disabled || busy"
       @change="update"
       @valid="
@@ -329,6 +377,18 @@
       @prepare="
         update($event);
         review();
+      "
+    />
+
+    <AuthoringScenarios
+      v-if="mode === 'scenarios' && definition"
+      :plan="definition.config.scenarios ?? null"
+      :base="definition.config"
+      :disabled="disabled || busy"
+      @change="applyScenarios"
+      @dirty="
+        scenarioDirty = $event;
+        emitInvalidation();
       "
     />
 
@@ -446,7 +506,9 @@
 
       <div class="flex flex-wrap gap-3">
         <Button
-          :disabled="disabled || busy || !definition || draftInvalid"
+          :disabled="
+            disabled || busy || !definition || draftInvalid || Boolean(definition.config.scenarios)
+          "
           variant="outline"
           @click="inspect"
         >
@@ -459,6 +521,14 @@
           Review load
         </Button>
       </div>
+
+      <p
+        v-if="definition?.config.scenarios"
+        class="text-muted-foreground text-sm"
+      >
+        Single-request preview is unavailable for scenarios. Review load to validate every
+        configured step before authorization.
+      </p>
 
       <template v-if="preview">
         <ul

@@ -213,6 +213,10 @@ impl std::fmt::Debug for DataGenerator {
 #[derive(Clone, Deserialize, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct DataRequest {
+    /// Dataset-resolved journeys, retaining runtime session placeholders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub scenarios: Option<crate::ScenarioPlan>,
     /// Resolved HTTP URL.
     pub url: String,
     /// Resolved ordered headers.

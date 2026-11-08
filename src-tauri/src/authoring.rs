@@ -360,6 +360,13 @@ pub(crate) async fn preview_request(
     authorized: bool,
     rows: Option<Vec<std::collections::BTreeMap<String, String>>>,
 ) -> Result<PreviewResponse, RunError> {
+    if definition.config.scenarios.is_some() {
+        return Err(failure(
+            "PREVIEW_SCENARIO_UNSUPPORTED",
+            "Use a short authorized run to inspect a scenario. Single-request preview does not execute setup or cleanup.",
+            Some("config.scenarios"),
+        ));
+    }
     let _admission = state.admission.try_lock().map_err(|_| {
         failure(
             "REQUEST_BUSY",
@@ -515,7 +522,20 @@ pub(crate) async fn import_definition_file<R: tauri::Runtime>(
 }
 
 fn unbind_uploads(definition: &mut TestDefinition) {
-    if let velo_engine::RequestBody::Multipart(parts) = &mut definition.config.body {
+    unbind_body(&mut definition.config.body);
+    if let Some(plan) = &mut definition.config.scenarios {
+        for step in plan.setup.iter_mut().chain(&mut plan.cleanup).chain(
+            plan.scenarios
+                .iter_mut()
+                .flat_map(|scenario| &mut scenario.steps),
+        ) {
+            unbind_body(&mut step.request.body);
+        }
+    }
+}
+
+fn unbind_body(body: &mut velo_engine::RequestBody) {
+    if let velo_engine::RequestBody::Multipart(parts) = body {
         for part in parts {
             if let velo_engine::MultipartPart::File { path, .. } = part {
                 path.clear();
@@ -621,6 +641,29 @@ mod tests {
         unbind_uploads(&mut definition);
         let error = definition.resolve(None, |_| unreachable!()).unwrap_err();
         assert_eq!(error.code, "UPLOAD_REBIND_REQUIRED");
+    }
+
+    #[test]
+    fn scenario_uploads_are_unbound_in_every_phase() {
+        let step = json!({
+            "id": "upload", "on_failure": "stop", "request": {
+                "url": "https://example.com/upload", "method": "POST", "headers": [], "query": [],
+                "auth": {"kind": "none"},
+                "body": {"kind": "multipart", "value": [{"kind": "file", "name": "upload", "path": "/PRIVATE_PATH", "filename": "upload.bin", "content_type": "application/octet-stream"}]}
+            }
+        });
+        let mut definition = TestDefinition::default();
+        definition.config.scenarios = Some(
+            serde_json::from_value(json!({
+                "setup": [step.clone()], "cleanup": [step.clone()],
+                "scenarios": [{"id": "journey", "weight": 1, "steps": [step]}]
+            }))
+            .unwrap(),
+        );
+        unbind_uploads(&mut definition);
+        let encoded = serde_json::to_string(&definition).unwrap();
+        assert!(!encoded.contains("PRIVATE_PATH"));
+        assert!(encoded.contains("upload.bin"));
     }
 
     #[test]

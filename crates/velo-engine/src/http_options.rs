@@ -106,6 +106,7 @@ impl std::fmt::Debug for MultipartPart {
     }
 }
 
+#[derive(Clone)]
 pub(crate) enum PreparedPart {
     Text(NameValue),
     File {
@@ -194,7 +195,10 @@ pub(crate) fn authenticate(
     }
 }
 
-pub(crate) fn prepare_parts(parts: Vec<MultipartPart>) -> Result<Vec<PreparedPart>, RunError> {
+pub(crate) fn prepare_parts_cached(
+    parts: Vec<MultipartPart>,
+    cached: Option<&[PreparedPart]>,
+) -> Result<Vec<PreparedPart>, RunError> {
     let invalid = || {
         RunError::new(
             "INVALID_RUN_CONFIG",
@@ -210,7 +214,7 @@ pub(crate) fn prepare_parts(parts: Vec<MultipartPart>) -> Result<Vec<PreparedPar
         )
     };
     let mut prepared = Vec::with_capacity(parts.len());
-    for part in parts {
+    for (index, part) in parts.into_iter().enumerate() {
         let name = match &part {
             MultipartPart::Text { name, .. } | MultipartPart::File { name, .. } => name,
         };
@@ -233,6 +237,29 @@ pub(crate) fn prepare_parts(parts: Vec<MultipartPart>) -> Result<Vec<PreparedPar
                         .is_err()
                 {
                     return Err(invalid());
+                }
+                if let Some(cached) = cached {
+                    let Some(PreparedPart::File {
+                        path: original,
+                        length,
+                        modified,
+                        ..
+                    }) = cached.get(index)
+                    else {
+                        return Err(file_error());
+                    };
+                    if original != &path {
+                        return Err(file_error());
+                    }
+                    prepared.push(PreparedPart::File {
+                        name,
+                        path,
+                        filename,
+                        content_type,
+                        length: *length,
+                        modified: *modified,
+                    });
+                    continue;
                 }
                 if !Path::new(&path).is_absolute()
                     || !std::fs::metadata(&path)

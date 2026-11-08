@@ -60,7 +60,8 @@ impl std::fmt::Debug for PreviewResponse {
 ///
 /// # Errors
 /// Returns engine validation errors before network access, `RUN_PREPARATION_FAILED`, `PREVIEW_TIMEOUT`, or
-/// `PREVIEW_TRANSPORT_FAILED`. Infrastructure error messages and request data are omitted.
+/// `PREVIEW_TRANSPORT_FAILED`, or `PREVIEW_SCENARIO_UNSUPPORTED` for a scenario plan.
+/// Infrastructure error messages and request data are omitted.
 ///
 /// # Examples
 /// ```no_run
@@ -79,6 +80,13 @@ pub async fn preview_request(
     let request = serde_json::to_value(&config)
         .map_err(|_| RunError::new("INVALID_RUN_CONFIG", "Request could not be prepared.", None))?;
     config.data = data;
+    if config.scenarios.is_some() {
+        return Err(crate::RunError::new(
+            "PREVIEW_SCENARIO_UNSUPPORTED",
+            "Review and run the scenario to execute its ordered steps.",
+            Some("scenarios"),
+        ));
+    }
     let validated = tokio::task::spawn_blocking(move || crate::config::validate(config))
         .await
         .map_err(|error| {

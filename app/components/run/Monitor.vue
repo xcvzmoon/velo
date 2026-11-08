@@ -4,6 +4,9 @@
 
   const seconds = computed<number[]>(() => points.value.map((point) => point.seconds));
   const requests = computed<(number | null)[]>(() => points.value.map((point) => point.requests));
+  const iterations = computed<(number | null)[]>(() =>
+    points.value.map((point) => point.iterations),
+  );
   const latency = computed<(number | null)[]>(() => points.value.map((point) => point.latency));
   const failures = computed<(number | null)[]>(() => points.value.map((point) => point.failures));
   const assertionFailures = computed<(number | null)[]>(() =>
@@ -142,12 +145,25 @@
       {{ snapshot.metrics.response_latency.out_of_range }}.
     </p>
 
+    <RunScenarioResults
+      v-if="snapshot.scenarios"
+      :report="snapshot.scenarios"
+    />
+
     <div class="grid gap-4 xl:grid-cols-2">
       <RunChart
         :seconds="seconds"
         :values="requests"
         title="Interval request rate"
         unit="req/s"
+      />
+
+      <RunChart
+        v-if="snapshot.scenarios"
+        :seconds="seconds"
+        :values="iterations"
+        title="Cumulative scenario iteration rate"
+        unit="iterations/s"
       />
 
       <RunChart
@@ -162,10 +178,11 @@
         :values="failures"
         title="Interval HTTP failure rate"
         unit="%"
+        percentage
       />
 
       <RunChart
-        v-if="snapshot.metrics.diagnostics.assertions.length"
+        v-if="snapshot.scenarios || snapshot.metrics.diagnostics.assertions.length"
         :seconds="seconds"
         :values="assertionFailures"
         title="Cumulative assertion failure rate"

@@ -55,7 +55,12 @@
     },
   ] as const;
 
-  const props = defineProps<{ disabled: boolean; loaded?: RunConfig | null }>();
+  const props = defineProps<{
+    disabled: boolean;
+    loaded?: RunConfig | null;
+    stepMode?: boolean;
+    scenarioMode?: boolean;
+  }>();
   const emit = defineEmits<{
     prepare: [config: RunConfig];
     change: [config: RunConfig];
@@ -179,13 +184,23 @@
       id="request-editor-heading"
       class="text-base font-medium"
     >
-      Request configuration
+      {{ stepMode ? 'Step request' : 'Request configuration' }}
     </h2>
 
-    <p class="text-muted-foreground mt-2 text-sm leading-relaxed">
-      Repeat one request with constant or ramping virtual users. Each user waits for its response
-      before sending another request. Automatic retries are disabled. Redirects are optional and
-      stay on the target origin.
+    <p
+      v-if="!stepMode"
+      class="text-muted-foreground mt-2 text-sm leading-relaxed"
+    >
+      <template v-if="scenarioMode">
+        Multi-step scenarios are enabled. Workload, transport, timeout, inspection limits and
+        budgets below apply to all steps. Edit each step's HTTP content in Scenarios. The standalone
+        request supplies defaults for new steps.
+      </template>
+      <template v-else>
+        Repeat one request with constant or ramping virtual users. Each user waits for its response
+        before sending another request. Automatic retries are disabled. Redirects are optional and
+        stay on the target origin.
+      </template>
     </p>
 
     <FormischForm
@@ -386,6 +401,7 @@
         <RunHttpOptionsEditor
           :form="form"
           :disabled="disabled"
+          :hide-transport="stepMode"
         />
 
         <RunBodyEditor
@@ -393,7 +409,10 @@
           :disabled="disabled"
         />
 
-        <div class="space-y-4 border-t pt-6">
+        <div
+          v-if="!stepMode"
+          class="space-y-4 border-t pt-6"
+        >
           <h3 class="text-sm font-medium">Workload and local resource budgets</h3>
 
           <RunWorkloadEditor
@@ -443,16 +462,19 @@
         </div>
 
         <RunAssertionEditor
+          :hide-limits="stepMode"
           :form="form"
           :disabled="disabled"
         />
 
         <RunThresholdEditor
+          v-if="!stepMode"
           :form="form"
           :disabled="disabled"
         />
 
         <Button
+          v-if="!stepMode"
           :disabled="disabled || form.isSubmitting"
           type="submit"
         >

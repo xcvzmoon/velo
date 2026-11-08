@@ -61,10 +61,22 @@ struct Variable {
     literal: bool,
 }
 
+#[derive(Clone, Copy)]
+enum BindingPhase {
+    Standalone,
+    Scenario,
+    Session,
+}
+
+struct Bindings {
+    values: BTreeMap<String, Variable>,
+    phase: BindingPhase,
+}
+
 fn substitute(
     value: &str,
     field: &str,
-    variables: &BTreeMap<String, Variable>,
+    variables: &Bindings,
     secrets: &mut impl FnMut(&str) -> Result<String, RunError>,
 ) -> Result<String, RunError> {
     let mut output = String::with_capacity(value.len());
@@ -76,11 +88,25 @@ fn substitute(
             .find("}}")
             .ok_or_else(|| invalid(field, "Close the variable reference with }}."))?;
         let name = &rest[..end];
+        if matches!(variables.phase, BindingPhase::Scenario) && name.starts_with("session:") {
+            output.push_str("{{");
+            output.push_str(name);
+            output.push_str("}}");
+            rest = &rest[end + 2..];
+            continue;
+        }
+        if matches!(variables.phase, BindingPhase::Session) && !name.starts_with("session:") {
+            return Err(RunError::new(
+                "VARIABLE_UNRESOLVED",
+                "Only session references may remain during execution.",
+                Some(field),
+            ));
+        }
         let variable;
         let secret_name = if let Some(secret) = name.strip_prefix("secret:") {
             Some(secret)
         } else {
-            variable = variables.get(name).ok_or_else(|| RunError::new("VARIABLE_UNRESOLVED", "Define the referenced variable in the selected environment or shared variables.", Some(field)))?;
+            variable = variables.values.get(name).ok_or_else(|| RunError::new("VARIABLE_UNRESOLVED", "Define the referenced variable in the selected environment or shared variables.", Some(field)))?;
             if variable.literal {
                 None
             } else {
@@ -100,6 +126,7 @@ fn substitute(
             })?
         } else {
             let value = variables
+                .values
                 .get(name)
                 .ok_or_else(|| invalid(field, "Define the referenced variable."))?;
             if !value.literal && value.text.contains("{{") {
@@ -110,6 +137,12 @@ fn substitute(
             }
             value.text.clone()
         };
+        if matches!(variables.phase, BindingPhase::Scenario) && replacement.contains("{{") {
+            return Err(invalid(
+                field,
+                "Scenario variable values cannot introduce new references.",
+            ));
+        }
         if output.len().saturating_add(replacement.len()) > 8_388_608 {
             return Err(invalid(field, "Resolved field exceeds 8 MiB."));
         }
@@ -125,7 +158,7 @@ fn substitute(
 
 fn substitute_url(
     value: &str,
-    variables: &BTreeMap<String, Variable>,
+    variables: &Bindings,
     secrets: &mut impl FnMut(&str) -> Result<String, RunError>,
 ) -> Result<String, RunError> {
     let mut output = String::with_capacity(value.len());
@@ -141,7 +174,17 @@ fn substitute_url(
         let in_path_or_query = output
             .split_once("://")
             .is_some_and(|(_, authority)| authority.contains('/') || authority.contains('?'));
-        if in_path_or_query {
+        if rest[..end].starts_with("{{session:") && !in_path_or_query {
+            return Err(invalid(
+                "url",
+                "Session references cannot change a target origin.",
+            ));
+        }
+        if matches!(variables.phase, BindingPhase::Scenario)
+            && rest[..end].starts_with("{{session:")
+        {
+            output.push_str(&replacement);
+        } else if in_path_or_query {
             output.push_str(
                 &percent_encoding::utf8_percent_encode(
                     &replacement,
@@ -163,7 +206,7 @@ fn substitute_url(
 
 fn json_strings(
     value: &mut serde_json::Value,
-    variables: &BTreeMap<String, Variable>,
+    variables: &Bindings,
     secrets: &mut impl FnMut(&str) -> Result<String, RunError>,
 ) -> Result<(), RunError> {
     match value {
@@ -256,6 +299,9 @@ impl TestDefinition {
     /// # Returns
     /// A transient run configuration. Dataset values override environment/shared variables.
     /// All records must resolve successfully before the configuration can be executed.
+    /// Scenario requests retain authored `{{session:name}}` references for execution.
+    /// Shared, environment and dataset keys cannot contain colons. Scenario replacement
+    /// values cannot introduce references, preventing later interpolation of data as templates.
     ///
     /// # Errors
     /// Returns `INVALID_DATASET`, `DATASET_BUDGET_EXCEEDED`, `PREPARATION_CANCELLED`, or variable-resolution errors.
@@ -350,6 +396,7 @@ impl TestDefinition {
                 first = Some(config.clone());
             }
             let request = crate::DataRequest {
+                scenarios: config.scenarios,
                 url: config.url,
                 headers: config.headers,
                 query: config.query,
@@ -392,6 +439,8 @@ impl TestDefinition {
     ///
     /// # Returns
     /// A resolved engine configuration. Call engine preparation before authorization.
+    /// Scenario requests retain authored `{{session:name}}` references. Shared/environment
+    /// keys cannot contain colons, and scenario replacement values cannot introduce references.
     ///
     /// # Errors
     /// Returns `UNSUPPORTED_TEST_VERSION`, `VARIABLE_UNRESOLVED`, `SECRET_UNAVAILABLE`,
@@ -430,6 +479,18 @@ impl TestDefinition {
                 Some("version"),
             ));
         }
+        if self
+            .variables
+            .keys()
+            .chain(self.environments.values().flat_map(|values| values.keys()))
+            .chain(row.keys())
+            .any(|name| name.contains(':'))
+        {
+            return Err(invalid(
+                "variables",
+                "Colons are reserved for secret and session namespaces.",
+            ));
+        }
         let mut variables = self.variables.clone();
         if let Some(name) = environment {
             variables.extend(
@@ -460,101 +521,231 @@ impl TestDefinition {
                 },
             )
         }));
+        let bindings = Bindings {
+            values: variables,
+            phase: BindingPhase::Standalone,
+        };
         let mut config = self.config.clone();
-        config.url = substitute_url(&config.url, &variables, &mut secrets)?;
-        for (field, pairs) in [
-            ("headers", &mut config.headers),
-            ("query", &mut config.query),
-        ] {
-            for (index, pair) in pairs.iter_mut().enumerate() {
-                pair.name = substitute(
-                    &pair.name,
-                    &format!("{field}.{index}.name"),
-                    &variables,
-                    &mut secrets,
-                )?;
-                pair.value = substitute(
-                    &pair.value,
-                    &format!("{field}.{index}.value"),
-                    &variables,
-                    &mut secrets,
-                )?;
+        resolve_request_fields(&mut config, &bindings, &mut secrets)?;
+        if let Some(plan) = &mut config.scenarios {
+            let bindings = Bindings {
+                values: bindings.values,
+                phase: BindingPhase::Scenario,
+            };
+            for step in plan.setup.iter_mut().chain(&mut plan.cleanup).chain(
+                plan.scenarios
+                    .iter_mut()
+                    .flat_map(|scenario| &mut scenario.steps),
+            ) {
+                step.request = resolve_scenario_request(&step.request, &bindings, &mut secrets)?;
             }
         }
-        match &mut config.auth {
-            RequestAuth::None => {}
-            RequestAuth::Bearer { token } => {
-                *token = substitute(token, "auth.token", &variables, &mut secrets)?
+        Ok(config)
+    }
+}
+
+fn resolve_request_fields(
+    config: &mut RunConfig,
+    variables: &Bindings,
+    mut secrets: impl FnMut(&str) -> Result<String, RunError>,
+) -> Result<(), RunError> {
+    config.url = substitute_url(&config.url, variables, &mut secrets)?;
+    for (field, pairs) in [
+        ("headers", &mut config.headers),
+        ("query", &mut config.query),
+    ] {
+        for (index, pair) in pairs.iter_mut().enumerate() {
+            pair.name = substitute(
+                &pair.name,
+                &format!("{field}.{index}.name"),
+                variables,
+                &mut secrets,
+            )?;
+            pair.value = substitute(
+                &pair.value,
+                &format!("{field}.{index}.value"),
+                variables,
+                &mut secrets,
+            )?;
+        }
+    }
+    match &mut config.auth {
+        RequestAuth::None => {}
+        RequestAuth::Bearer { token } => {
+            *token = substitute(token, "auth.token", variables, &mut secrets)?
+        }
+        RequestAuth::Basic { username, password } => {
+            *username = substitute(username, "auth.username", variables, &mut secrets)?;
+            *password = substitute(password, "auth.password", variables, &mut secrets)?;
+        }
+    }
+    match &mut config.body {
+        RequestBody::None => {}
+        RequestBody::Text(text) => *text = substitute(text, "body.value", variables, &mut secrets)?,
+        RequestBody::Json(text) => {
+            if text.starts_with("{{") && text.ends_with("}}") && text.matches("{{").count() == 1 {
+                *text = substitute(text, "body.value", variables, &mut secrets)?;
+                serde_json::from_str::<serde_json::Value>(text)
+                    .map_err(|_| invalid("body.value", "The referenced JSON body is invalid."))?;
+                return Ok(());
             }
-            RequestAuth::Basic { username, password } => {
-                *username = substitute(username, "auth.username", &variables, &mut secrets)?;
-                *password = substitute(password, "auth.password", &variables, &mut secrets)?;
+            let mut value = serde_json::from_str(text).map_err(|_| {
+                invalid(
+                    "body.value",
+                    "Enter valid JSON; use placeholders inside JSON strings.",
+                )
+            })?;
+            json_strings(&mut value, variables, &mut secrets)?;
+            *text = serde_json::to_string(&value)
+                .map_err(|_| invalid("body.value", "JSON substitution failed."))?;
+        }
+        RequestBody::Form(pairs) => {
+            for pair in pairs {
+                pair.name = substitute(&pair.name, "body.name", variables, &mut secrets)?;
+                pair.value = substitute(&pair.value, "body.value", variables, &mut secrets)?;
             }
         }
-        match &mut config.body {
-            RequestBody::None => {}
-            RequestBody::Text(text) => {
-                *text = substitute(text, "body.value", &variables, &mut secrets)?
-            }
-            RequestBody::Json(text) => {
-                if text.starts_with("{{") && text.ends_with("}}") && text.matches("{{").count() == 1
-                {
-                    *text = substitute(text, "body.value", &variables, &mut secrets)?;
-                    serde_json::from_str::<serde_json::Value>(text).map_err(|_| {
-                        invalid("body.value", "The referenced JSON body is invalid.")
-                    })?;
-                    return Ok(config);
-                }
-                let mut value = serde_json::from_str(text).map_err(|_| {
-                    invalid(
-                        "body.value",
-                        "Enter valid JSON; use placeholders inside JSON strings.",
-                    )
-                })?;
-                json_strings(&mut value, &variables, &mut secrets)?;
-                *text = serde_json::to_string(&value)
-                    .map_err(|_| invalid("body.value", "JSON substitution failed."))?;
-            }
-            RequestBody::Form(pairs) => {
-                for pair in pairs {
-                    pair.name = substitute(&pair.name, "body.name", &variables, &mut secrets)?;
-                    pair.value = substitute(&pair.value, "body.value", &variables, &mut secrets)?;
-                }
-            }
-            RequestBody::Multipart(parts) => {
-                for part in parts {
-                    match part {
-                        MultipartPart::Text { name, value } => {
-                            *name = substitute(name, "body.name", &variables, &mut secrets)?;
-                            *value = substitute(value, "body.value", &variables, &mut secrets)?;
-                        }
-                        MultipartPart::File {
-                            name,
-                            path,
-                            filename,
-                            content_type,
-                        } => {
-                            *name = substitute(name, "body.name", &variables, &mut secrets)?;
-                            *filename =
-                                substitute(filename, "body.filename", &variables, &mut secrets)?;
-                            *content_type = substitute(
-                                content_type,
-                                "body.content_type",
-                                &variables,
-                                &mut secrets,
-                            )?;
-                            if path.is_empty() || path.contains("{{") {
-                                return Err(RunError::new(
-                                    "UPLOAD_REBIND_REQUIRED",
-                                    "Select the upload file on this machine.",
-                                    Some("body.path"),
-                                ));
-                            }
+        RequestBody::Multipart(parts) => {
+            for part in parts {
+                match part {
+                    MultipartPart::Text { name, value } => {
+                        *name = substitute(name, "body.name", variables, &mut secrets)?;
+                        *value = substitute(value, "body.value", variables, &mut secrets)?;
+                    }
+                    MultipartPart::File {
+                        name,
+                        path,
+                        filename,
+                        content_type,
+                    } => {
+                        *name = substitute(name, "body.name", variables, &mut secrets)?;
+                        *filename = substitute(filename, "body.filename", variables, &mut secrets)?;
+                        *content_type =
+                            substitute(content_type, "body.content_type", variables, &mut secrets)?;
+                        if path.is_empty() || path.contains("{{") {
+                            return Err(RunError::new(
+                                "UPLOAD_REBIND_REQUIRED",
+                                "Select the upload file on this machine.",
+                                Some("body.path"),
+                            ));
                         }
                     }
                 }
             }
         }
-        Ok(config)
+    }
+    Ok(())
+}
+
+fn resolve_scenario_request(
+    request: &crate::ScenarioRequest,
+    variables: &Bindings,
+    secrets: impl FnMut(&str) -> Result<String, RunError>,
+) -> Result<crate::ScenarioRequest, RunError> {
+    let mut config = RunConfig {
+        url: request.url.clone(),
+        method: request.method,
+        headers: request.headers.clone(),
+        query: request.query.clone(),
+        body: request.body.clone(),
+        auth: request.auth.clone(),
+        ..Default::default()
+    };
+    resolve_request_fields(&mut config, variables, secrets)?;
+    Ok(crate::ScenarioRequest {
+        url: config.url,
+        method: config.method,
+        headers: config.headers,
+        query: config.query,
+        body: config.body,
+        auth: config.auth,
+        assertions: request.assertions.clone(),
+    })
+}
+
+/// Resolves only authored session references after static variable preparation.
+/// Session values are literals, never recursively expanded. URL references cannot
+/// change the origin, and JSON string substitution preserves escaping. Missing
+/// values fail locally with `VARIABLE_UNRESOLVED` before transport starts.
+pub(crate) fn bind_scenario_request(
+    request: &crate::ScenarioRequest,
+    session: &BTreeMap<String, String>,
+) -> Result<crate::ScenarioRequest, RunError> {
+    let variables = Bindings {
+        values: session
+            .iter()
+            .map(|(name, text)| {
+                (
+                    format!("session:{name}"),
+                    Variable {
+                        text: text.clone(),
+                        literal: true,
+                    },
+                )
+            })
+            .collect(),
+        phase: BindingPhase::Session,
+    };
+    resolve_scenario_request(request, &variables, |_| {
+        Err(RunError::new(
+            "VARIABLE_UNRESOLVED",
+            "Secret references must resolve before execution.",
+            None,
+        ))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn scenario_request() -> crate::ScenarioRequest {
+        serde_json::from_value(json!({
+            "url": "https://example.com/orders/{{session:id}}",
+            "method": "POST", "headers": [], "query": [],
+            "body": {"kind": "json", "value": "{\"token\":\"{{session:token}}\"}"},
+            "auth": {"kind": "bearer", "token": "{{session:token}}"}
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn runtime_binding_escapes_values_without_interpreting_them_as_templates() {
+        let session = BTreeMap::from([
+            ("id".into(), "a/b?admin=true".into()),
+            ("token".into(), "quoted\"{{session:other}}".into()),
+        ]);
+        let request = bind_scenario_request(&scenario_request(), &session).unwrap();
+        assert_eq!(
+            request.url,
+            "https://example.com/orders/a%2Fb%3Fadmin%3Dtrue"
+        );
+        let RequestBody::Json(body) = request.body else {
+            panic!("expected JSON")
+        };
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["token"], session["token"]);
+        let RequestAuth::Bearer { token } = request.auth else {
+            panic!("expected bearer")
+        };
+        assert_eq!(token, session["token"]);
+    }
+
+    #[test]
+    fn runtime_binding_rejects_missing_values_and_target_substitution() {
+        assert_eq!(
+            bind_scenario_request(&scenario_request(), &BTreeMap::new())
+                .unwrap_err()
+                .code,
+            "VARIABLE_UNRESOLVED"
+        );
+        let mut request = scenario_request();
+        request.url = "https://{{session:host}}/orders".into();
+        let session = BTreeMap::from([("host".into(), "example.com".into())]);
+        assert_eq!(
+            bind_scenario_request(&request, &session).unwrap_err().code,
+            "INVALID_TEST_DEFINITION"
+        );
     }
 }

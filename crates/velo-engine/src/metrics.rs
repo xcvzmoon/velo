@@ -104,11 +104,11 @@ pub struct Counters {
     #[serde(serialize_with = "decimal")]
     #[ts(type = "string")]
     pub response_body_bytes: u64,
-    /// Completed non-cancelled iterations; one request per iteration.
+    /// Completed non-cancelled iterations; scenarios may contain several requests.
     #[serde(serialize_with = "decimal")]
     #[ts(type = "string")]
     pub completed_iterations: u64,
-    /// Iterations with status, transport, or timeout failures.
+    /// Iterations with HTTP failures; scenarios also include assertion, binding and extraction failures.
     #[serde(serialize_with = "decimal")]
     #[ts(type = "string")]
     pub failed_iterations: u64,
@@ -144,7 +144,7 @@ pub struct MetricsSnapshot {
     pub http_failure_rate: Option<f64>,
     /// Non-cancelled terminal requests per actual elapsed second.
     pub request_rate: f64,
-    /// Completed non-cancelled iterations per actual second; currently one request per iteration.
+    /// Completed non-cancelled iterations per actual second; independent of requests per iteration.
     pub iteration_rate: f64,
     /// Successful responses per actual elapsed second.
     pub success_rate: f64,
@@ -170,13 +170,13 @@ pub(crate) enum Outcome {
     Cancelled,
 }
 
-struct Distribution {
+pub(crate) struct Distribution {
     histogram: Histogram<u64>,
     out_of_range: u64,
 }
 
 impl Distribution {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             histogram: Histogram::new_with_bounds(1, MAX_LATENCY_US, 3)
                 .expect("fixed histogram bounds are valid"),
@@ -184,7 +184,7 @@ impl Distribution {
         }
     }
 
-    fn record(&mut self, elapsed: Duration, overflow: &mut bool) {
+    pub(crate) fn record(&mut self, elapsed: Duration, overflow: &mut bool) {
         let micros = elapsed.as_micros();
         if micros == 0
             || micros > MAX_LATENCY_US.into()
@@ -194,7 +194,7 @@ impl Distribution {
         }
     }
 
-    fn snapshot(&self) -> LatencySnapshot {
+    pub(crate) fn snapshot(&self) -> LatencySnapshot {
         let histogram = &self.histogram;
         let populated = !histogram.is_empty();
         let quantile = |value| populated.then(|| histogram.value_at_quantile(value) as u32);
@@ -226,6 +226,10 @@ fn add(counter: &mut u64, amount: u64, overflow: &mut bool) {
 }
 
 pub(crate) struct Metrics {
+    scenario_mode: bool,
+    scenario_checks: u64,
+    scenario_check_failures: u64,
+    scenario_checks_unavailable: bool,
     diagnostics: crate::ResponseDiagnostics,
     counters: Counters,
     response: Distribution,
@@ -243,6 +247,10 @@ pub(crate) struct Metrics {
 impl Metrics {
     pub fn new() -> Self {
         Self {
+            scenario_mode: false,
+            scenario_checks: 0,
+            scenario_check_failures: 0,
+            scenario_checks_unavailable: false,
             diagnostics: crate::ResponseDiagnostics::new(&[], crate::InspectionLimits::default()),
             counters: Counters::default(),
             response: Distribution::new(),
@@ -277,6 +285,46 @@ impl Metrics {
             .observe(observation, matches!(outcome, Outcome::Response(_)));
     }
 
+    pub(crate) fn scenario_checks(
+        &mut self,
+        observation: &crate::assertions::Observation,
+        outcome: Outcome,
+    ) {
+        for check in &observation.checks {
+            add(&mut self.scenario_checks, 1, &mut self.overflow);
+            match check {
+                crate::CheckOutcome::Passed => {}
+                crate::CheckOutcome::StatusMismatch
+                | crate::CheckOutcome::MissingHeader
+                | crate::CheckOutcome::HeaderMismatch
+                | crate::CheckOutcome::MissingField
+                | crate::CheckOutcome::JsonMismatch
+                | crate::CheckOutcome::TextMismatch => {
+                    add(&mut self.scenario_check_failures, 1, &mut self.overflow);
+                }
+                _ => self.scenario_checks_unavailable = true,
+            }
+        }
+        if !matches!(outcome, Outcome::Response(_)) {
+            self.scenario_checks_unavailable = true;
+        }
+    }
+
+    pub(crate) fn scenarios(&mut self) {
+        self.scenario_mode = true;
+    }
+
+    pub(crate) fn iteration(&mut self, failed: bool) {
+        add(
+            &mut self.counters.completed_iterations,
+            1,
+            &mut self.overflow,
+        );
+        if failed {
+            add(&mut self.counters.failed_iterations, 1, &mut self.overflow);
+        }
+    }
+
     pub fn admission(&mut self) {
         add(&mut self.counters.started, 1, &mut self.overflow);
         add(&mut self.counters.in_flight, 1, &mut self.overflow);
@@ -303,25 +351,33 @@ impl Metrics {
                     add(&mut counters.successes, 1, &mut self.overflow);
                 } else {
                     add(&mut counters.status_failures, 1, &mut self.overflow);
-                    add(&mut counters.failed_iterations, 1, &mut self.overflow);
+                    if !self.scenario_mode {
+                        add(&mut counters.failed_iterations, 1, &mut self.overflow);
+                    }
                 }
                 self.response.record(elapsed, &mut self.overflow);
                 self.interval_response.record(elapsed, &mut self.overflow);
             }
             Outcome::Transport => {
                 add(&mut counters.transport_failures, 1, &mut self.overflow);
-                add(&mut counters.failed_iterations, 1, &mut self.overflow);
+                if !self.scenario_mode {
+                    add(&mut counters.failed_iterations, 1, &mut self.overflow);
+                }
                 self.transport.record(elapsed, &mut self.overflow);
             }
             Outcome::Timeout => {
                 add(&mut counters.timeouts, 1, &mut self.overflow);
-                add(&mut counters.failed_iterations, 1, &mut self.overflow);
+                if !self.scenario_mode {
+                    add(&mut counters.failed_iterations, 1, &mut self.overflow);
+                }
                 self.timeout.record(elapsed, &mut self.overflow);
             }
             Outcome::Cancelled => add(&mut counters.cancelled, 1, &mut self.overflow),
         }
         if !matches!(outcome, Outcome::Cancelled) {
-            add(&mut counters.completed_iterations, 1, &mut self.overflow);
+            if !self.scenario_mode {
+                add(&mut counters.completed_iterations, 1, &mut self.overflow);
+            }
             add(&mut self.interval_requests, 1, &mut self.overflow);
             if !matches!(outcome, Outcome::Response(true)) {
                 add(&mut self.interval_failures, 1, &mut self.overflow);
@@ -349,7 +405,12 @@ impl Metrics {
         let seconds = elapsed.as_secs_f64();
         MetricsSnapshot {
             diagnostics: self.diagnostics.clone(),
-            assertion_failure_rate: self.diagnostics.failure_rate(),
+            assertion_failure_rate: if self.scenario_mode {
+                (self.scenario_checks > 0 && !self.scenario_checks_unavailable)
+                    .then_some(self.scenario_check_failures as f64 / self.scenario_checks as f64)
+            } else {
+                self.diagnostics.failure_rate()
+            },
             counters: counters.clone(),
             response_latency: self.response.snapshot(),
             transport_latency: self.transport.snapshot(),
