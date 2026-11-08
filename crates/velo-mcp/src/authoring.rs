@@ -249,6 +249,7 @@ fn literal_credentials(definition: &TestDefinition) -> bool {
         let auth_literal = match request.auth {
             RequestAuth::None => false,
             RequestAuth::Bearer { token } => !secret_reference(token),
+            RequestAuth::ApiKey { value, .. } => !secret_reference(value),
             RequestAuth::Basic { username, password } => {
                 (!username.is_empty() && !secret_reference(username)) || !secret_reference(password)
             }
@@ -401,6 +402,23 @@ mod tests {
 
     fn encoded(definition: &TestDefinition) -> String {
         serde_json::to_string(definition).unwrap()
+    }
+
+    #[test]
+    fn api_key_proposals_require_secret_references() {
+        let mut definition = TestDefinition::default();
+        definition.config.auth = RequestAuth::ApiKey {
+            name: "x-api-key".into(),
+            value: "private-key".into(),
+            placement: velo_engine::ApiKeyPlacement::Header,
+        };
+        assert!(literal_credentials(&definition));
+        definition.config.auth = RequestAuth::ApiKey {
+            name: "x-api-key".into(),
+            value: "{{secret:api-key}}".into(),
+            placement: velo_engine::ApiKeyPlacement::Header,
+        };
+        assert!(!literal_credentials(&definition));
     }
 
     #[test]

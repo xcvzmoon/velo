@@ -19,6 +19,16 @@
       label: 'Password',
       kind: 'basic',
     },
+    {
+      name: 'apiKeyName',
+      label: 'API key name',
+      kind: 'api_key',
+    },
+    {
+      name: 'apiKeyValue',
+      label: 'API key value',
+      kind: 'api_key',
+    },
   ] as const;
 
   defineProps<{
@@ -66,6 +76,7 @@
               <SelectItem value="none">None / custom header</SelectItem>
               <SelectItem value="bearer">Bearer token</SelectItem>
               <SelectItem value="basic">Basic</SelectItem>
+              <SelectItem value="api_key">API key</SelectItem>
             </SelectContent>
           </Select>
 
@@ -78,6 +89,31 @@
             {{ mode.errors[0] }}
           </p>
         </div>
+
+        <FormischField
+          v-if="mode.input === 'api_key'"
+          v-slot="field"
+          :of="form"
+          :path="['apiKeyPlacement']"
+        >
+          <div class="max-w-xs space-y-2">
+            <Label for="api-key-placement">API key placement</Label>
+            <Select
+              v-model="field.input"
+              :disabled="disabled"
+              :name="field.props.name"
+            >
+              <SelectTrigger id="api-key-placement"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="header">Header</SelectItem>
+                <SelectItem value="query">Query parameter</SelectItem>
+              </SelectContent>
+            </Select>
+            <p class="text-muted-foreground text-xs">
+              Query credentials may appear in server access logs.
+            </p>
+          </div>
+        </FormischField>
 
         <div
           v-if="mode.input !== 'none'"
@@ -100,7 +136,11 @@
                   v-model="field.input"
                   v-bind="field.props"
                   :id="`request-${option.name}`"
-                  :type="option.name === 'authUsername' ? 'text' : 'password'"
+                  :type="
+                    option.name === 'authUsername' || option.name === 'apiKeyName'
+                      ? 'text'
+                      : 'password'
+                  "
                   autocomplete="off"
                   spellcheck="false"
                 />

@@ -861,6 +861,22 @@ export type RequestAuth =
       token: string;
     }
   | {
+      kind: 'api_key';
+      /**
+       * Header or query parameter name; must not conflict with an explicit request field.
+       * Header placement excludes framing, Authorization, Proxy-Authorization, and Cookie headers.
+       */
+      name: string;
+      /**
+       * Secret value, omitted from reports and Debug output.
+       */
+      value: string;
+      /**
+       * Explicit placement; query values can appear in server access logs.
+       */
+      placement: ApiKeyPlacement;
+    }
+  | {
       kind: 'basic';
       /**
        * User identifier; may be empty.
@@ -871,6 +887,7 @@ export type RequestAuth =
        */
       password: string;
     };
+export type ApiKeyPlacement = 'header' | 'query';
 export type HttpProtocol = 'auto' | 'http1' | 'http2';
 export type MultipartPart =
   | {

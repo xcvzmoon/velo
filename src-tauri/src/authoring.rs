@@ -225,7 +225,7 @@ fn reference_values(value: &mut serde_json::Value, id: &str, pointer: &str) {
             for (key, value) in items {
                 if key == "path" {
                     *value = serde_json::Value::String(String::new());
-                } else if key != "kind" {
+                } else if key != "kind" && key != "placement" {
                     reference_values(value, id, &format!("{pointer}-{key}"));
                 }
             }

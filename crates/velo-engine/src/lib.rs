@@ -36,7 +36,8 @@ pub use dataset::{
     DataAllocation, DataDefinition, DataExhaustion, DataField, DataGenerator, DataLifetime,
     DataRequest, DataSource, DataSummary, PreparedData,
 };
-pub use http_options::{HttpProtocol, MultipartPart, RequestAuth};
+#[doc(inline)]
+pub use http_options::{ApiKeyPlacement, HttpProtocol, MultipartPart, RequestAuth};
 #[doc(inline)]
 pub use imports::{ImportFormat, ImportedRequest, import_requests};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};

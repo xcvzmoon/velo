@@ -757,3 +757,40 @@ describe('measurement and automatic stop settings', () => {
     ).toBe(false);
   });
 });
+
+describe('API-key request authentication', () => {
+  it('preserves explicit key placement and a secret reference', () => {
+    const config = v.parse(requestEditorSchema, {
+      ...input,
+      authKind: 'api_key',
+      apiKeyName: 'x-api-key',
+      apiKeyValue: '{{secret:development-key}}',
+      apiKeyPlacement: 'header',
+    });
+    expect(config.auth).toEqual({
+      kind: 'api_key',
+      name: 'x-api-key',
+      value: '{{secret:development-key}}',
+      placement: 'header',
+    });
+    expect(config).not.toHaveProperty('apiKeyValue');
+  });
+
+  it('rejects duplicate credential placement and empty values', () => {
+    const request = {
+      ...input,
+      authKind: 'api_key',
+      apiKeyName: 'tag',
+      apiKeyValue: '{{secret:development-key}}',
+      apiKeyPlacement: 'query',
+    };
+    expect(v.safeParse(requestEditorSchema, request).success).toBe(false);
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...request,
+        query: [],
+        apiKeyValue: '',
+      }).success,
+    ).toBe(false);
+  });
+});

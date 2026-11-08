@@ -571,6 +571,10 @@ fn resolve_request_fields(
     }
     match &mut config.auth {
         RequestAuth::None => {}
+        RequestAuth::ApiKey { name, value, .. } => {
+            *name = substitute(name, "auth.name", variables, &mut secrets)?;
+            *value = substitute(value, "auth.value", variables, &mut secrets)?;
+        }
         RequestAuth::Bearer { token } => {
             *token = substitute(token, "auth.token", variables, &mut secrets)?
         }
