@@ -101,6 +101,13 @@
         </div>
       </dl>
 
+      <p class="text-muted-foreground text-sm">
+        Warm-up {{ confirmation.warmup_ms / 1000 }} s within the schedule; evaluated admission
+        window {{ (confirmation.duration_ms - confirmation.warmup_ms) / 1000 }} s.
+        {{ confirmation.abort_policies.length }} automatic stop policies configured. In-flight
+        evaluated requests remain included during drain.
+      </p>
+
       <p
         v-if="confirmation.dataset"
         class="text-muted-foreground text-sm"

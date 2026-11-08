@@ -60,7 +60,7 @@ pub(crate) async fn start_run<R: tauri::Runtime>(
     if state.manager.current().await.is_none_or(|snapshot| {
         matches!(
             snapshot.state,
-            RunState::Completed | RunState::Cancelled | RunState::Failed
+            RunState::Completed | RunState::Cancelled | RunState::Failed | RunState::Aborted
         )
     }) && let Some(previous) = monitor.take()
     {
@@ -88,7 +88,7 @@ pub(crate) async fn start_run<R: tauri::Runtime>(
             };
             let terminal = matches!(
                 update.snapshot.state,
-                RunState::Completed | RunState::Cancelled | RunState::Failed
+                RunState::Completed | RunState::Cancelled | RunState::Failed | RunState::Aborted
             );
             if let Some(history) = app.try_state::<crate::history::History>() {
                 if terminal {

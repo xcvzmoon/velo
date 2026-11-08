@@ -839,6 +839,60 @@ export type ThresholdResult = {
    */
   status: ThresholdStatus;
 };
+export type AbortPolicy = {
+  /**
+   * Acceptable strict comparison; failure can close admission after sustained evidence.
+   */
+  rule: Threshold;
+  /**
+   * Complete trailing window, 100–60,000 ms in multiples of 100 ms.
+   */
+  window_ms: number;
+  /**
+   * Required terminal requests, response latencies, or assertion evaluations.
+   */
+  min_samples: number;
+  /**
+   * Consecutive breached observation duration, 100–60,000 ms in 100 ms steps.
+   */
+  sustained_ms: number;
+};
+export type AbortEvidence = {
+  /**
+   * Policy that closed admission; the first configured simultaneous breach wins.
+   */
+  policy: AbortPolicy;
+  /**
+   * Last unrounded observation in the configured metric's unit.
+   */
+  observed: number | null;
+  /**
+   * Metric-specific population in the triggering complete window.
+   */
+  samples: string;
+  /**
+   * Monotonic time from load start when admission closed, including warm-up.
+   */
+  at_us: string;
+  /**
+   * Continuous observed breach duration, excluding initial window coverage.
+   */
+  breached_us: string;
+};
+export type MeasurementWindow = {
+  /**
+   * Scheduling offset where evaluated admissions begin; zero disables warm-up.
+   */
+  warmup_ms: number;
+  /**
+   * Observed duration after warm-up through drain; zero before the boundary.
+   */
+  evaluated_us: string;
+  /**
+   * True only after all configured scheduling time and load cleanup completed.
+   */
+  complete: boolean;
+};
 export type RunConfig = {
   /**
    * Optional multi-step journeys; absent runs the standalone request.
@@ -894,7 +948,15 @@ export type RunConfig = {
    */
   grace_ms: number;
   /**
-   * Final cumulative metric rules; empty by default.
+   * Warm-up scheduling time excluded from evaluated metrics; zero by default.
+   */
+  warmup_ms: number;
+  /**
+   * Live admission rules; at most eight, inactive during warm-up.
+   */
+  abort_policies: AbortPolicy[];
+  /**
+   * Final evaluated metric rules; empty by default.
    */
   thresholds: Threshold[];
   /**
@@ -942,6 +1004,14 @@ export type RunConfirmation = {
    */
   duration_ms: number;
   /**
+   * Warm-up boundary in scheduling milliseconds.
+   */
+  warmup_ms: number;
+  /**
+   * Reviewed live admission rules.
+   */
+  abort_policies: AbortPolicy[];
+  /**
    * Native-validated schedule shown during authorization review.
    */
   workload: Workload;
@@ -958,7 +1028,14 @@ export type RunConfirmation = {
    */
   dataset: DataSummary | null;
 };
-export type RunState = 'starting' | 'running' | 'stopping' | 'completed' | 'cancelled' | 'failed';
+export type RunState =
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'aborted';
 export type Counters = {
   /**
    * Admitted logical requests.
@@ -1188,6 +1265,18 @@ export type RunSnapshot = {
    * Cumulative counters, rates, and separate duration populations.
    */
   metrics: MetricsSnapshot;
+  /**
+   * Admission-selected evaluated traffic, including its drain and cancellations.
+   */
+  evaluated: MetricsSnapshot;
+  /**
+   * Explicit monotonic warm-up boundary and measurement completeness.
+   */
+  measurement: MeasurementWindow;
+  /**
+   * Sustained live policy trigger, separate from final threshold verdicts.
+   */
+  automatic_stop: AbortEvidence | null;
   /**
    * Final threshold outcomes; empty while active or when no rules are configured.
    */

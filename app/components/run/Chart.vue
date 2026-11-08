@@ -7,6 +7,8 @@
     percentage?: boolean;
     values: (number | null)[];
     seconds: number[];
+    warmupSeconds?: number;
+    automaticStopSeconds?: number;
     comparisonValues?: (number | null)[];
   }>();
 
@@ -21,6 +23,54 @@
       : [props.seconds, props.values];
   }
 
+  function drawBoundaries(plot: uPlot): void {
+    const context = plot.ctx;
+    context.save();
+    for (const boundary of [
+      {
+        seconds: props.warmupSeconds,
+        label: 'Measurement starts',
+        color: '#fbbf24',
+        labelOffset: -17,
+      },
+      {
+        seconds: props.automaticStopSeconds,
+        label: 'Automatic stop',
+        color: '#f87171',
+        labelOffset: -3,
+      },
+    ]) {
+      if (
+        boundary.seconds === undefined ||
+        boundary.seconds <= 0 ||
+        boundary.seconds < (plot.scales.x?.min ?? 0) ||
+        boundary.seconds > (plot.scales.x?.max ?? 0)
+      ) {
+        continue;
+      }
+      const position = plot.valToPos(boundary.seconds, 'x', true);
+      context.strokeStyle = boundary.color;
+      context.fillStyle = boundary.color;
+      context.lineWidth = uPlot.pxRatio;
+      context.setLineDash([4 * uPlot.pxRatio, 3 * uPlot.pxRatio]);
+      context.beginPath();
+      context.moveTo(position, plot.bbox.top);
+      context.lineTo(position, plot.bbox.top + plot.bbox.height);
+      context.stroke();
+      context.font = `${10 * uPlot.pxRatio}px monospace`;
+      const width = context.measureText(boundary.label).width;
+      context.fillText(
+        boundary.label,
+        Math.max(
+          plot.bbox.left,
+          Math.min(position + 4 * uPlot.pxRatio, plot.bbox.left + plot.bbox.width - width),
+        ),
+        plot.bbox.top + boundary.labelOffset * uPlot.pxRatio,
+      );
+    }
+    context.restore();
+  }
+
   onMounted(() => {
     const element = host.value;
     if (!element) {
@@ -29,8 +79,10 @@
 
     chart = new uPlot(
       {
+        hooks: { draw: [drawBoundaries] },
         width: Math.max(element.clientWidth, 100),
         height: 190,
+        padding: [34, null, null, null],
         scales: {
           x: { time: false },
           y: {
@@ -91,7 +143,13 @@
   });
 
   watch(
-    () => [props.seconds, props.values, props.comparisonValues],
+    () => [
+      props.seconds,
+      props.values,
+      props.comparisonValues,
+      props.warmupSeconds,
+      props.automaticStopSeconds,
+    ],
     () => chart?.setData(data()),
   );
 
@@ -108,6 +166,16 @@
       <h3 class="text-sm font-medium">{{ title }}</h3>
       <span class="text-muted-foreground font-mono text-xs">{{ unit }}</span>
     </div>
+
+    <p
+      v-if="warmupSeconds || automaticStopSeconds !== undefined"
+      class="text-muted-foreground mb-3 text-xs"
+    >
+      <span v-if="warmupSeconds">Measurement starts at {{ warmupSeconds }} s.</span>
+      <span v-if="automaticStopSeconds !== undefined">
+        Automatic stop at {{ automaticStopSeconds.toFixed(3) }} s.
+      </span>
+    </p>
 
     <div
       ref="host"

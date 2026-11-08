@@ -4,8 +4,10 @@
   import {
     Field as FormischField,
     FieldArray as FormischFieldArray,
+    getInput,
     insert,
     remove,
+    setInput,
   } from '@formisch/vue';
 
   const constantFields = [
@@ -47,10 +49,71 @@
     },
   ] as const;
 
-  defineProps<{ form: FormStore<typeof requestEditorSchema>; disabled: boolean }>();
+  const props = defineProps<{ form: FormStore<typeof requestEditorSchema>; disabled: boolean }>();
+
+  function applyPreset(preset: Parameters<typeof workloadPreset>[0]): void {
+    const input = getInput(props.form);
+    const budget = Number(input.max_vus);
+    if (!Number.isInteger(budget) || budget < 1 || budget > 4_294_967_295) {
+      return;
+    }
+    const { workload, warmup_ms, pacing_ms } = workloadPreset(preset, budget);
+    setInput(props.form, {
+      path: ['workloadKind'],
+      input: workload.kind,
+    });
+    setInput(props.form, {
+      path: ['vus'],
+      input: workload.kind === 'constant' ? workload.vus : 1,
+    });
+    setInput(props.form, {
+      path: ['duration_ms'],
+      input: workload.kind === 'ramping' ? 10_000 : workload.duration_ms,
+    });
+    setInput(props.form, {
+      path: ['start_vus'],
+      input: workload.kind === 'ramping' ? workload.start_vus : 0,
+    });
+    setInput(props.form, {
+      path: ['stages'],
+      input: workload.kind === 'ramping' ? workload.stages : [],
+    });
+    setInput(props.form, {
+      path: ['warmup_ms'],
+      input: warmup_ms,
+    });
+    setInput(props.form, {
+      path: ['pacing_ms'],
+      input: pacing_ms,
+    });
+  }
 </script>
 
 <template>
+  <div class="space-y-3">
+    <h4 class="text-sm font-medium">Workload presets</h4>
+
+    <div class="flex flex-wrap gap-2">
+      <Button
+        v-for="preset in ['smoke', 'stress', 'spike', 'soak'] as const"
+        :key="preset"
+        :disabled="disabled"
+        type="button"
+        variant="outline"
+        size="sm"
+        @click="applyPreset(preset)"
+      >
+        {{ capitalize(preset) }}
+      </Button>
+    </div>
+
+    <p class="text-muted-foreground text-xs leading-relaxed">
+      Presets replace the schedule, warm-up and pacing with editable values. Peaks are capped at
+      your worker budget. Budgets and stop policies stay unchanged. These names do not measure
+      machine or target capacity.
+    </p>
+  </div>
+
   <FormischField
     v-slot="mode"
     :of="form"

@@ -41,7 +41,7 @@ const nativeErrorSchema = v.object({
   code: v.string(),
   message: v.string(),
 });
-const terminalStates = new Set(['completed', 'cancelled', 'failed']);
+const terminalStates = new Set(['completed', 'cancelled', 'failed', 'aborted']);
 const pointLimit = 600;
 const stateOrder: Record<RunSnapshot['state'], number> = {
   starting: 0,
@@ -50,6 +50,7 @@ const stateOrder: Record<RunSnapshot['state'], number> = {
   completed: 3,
   cancelled: 3,
   failed: 3,
+  aborted: 3,
 };
 
 /**

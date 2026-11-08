@@ -112,6 +112,8 @@
       :diagnostics="snapshot.metrics.diagnostics"
     />
 
+    <RunMeasurement :snapshot="snapshot" />
+
     <RunArrivalMetrics :snapshot="snapshot" />
 
     <p
@@ -152,6 +154,10 @@
 
     <div class="grid gap-4 xl:grid-cols-2">
       <RunChart
+        :warmup-seconds="snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          snapshot.automatic_stop ? Number(snapshot.automatic_stop.at_us) / 1e6 : undefined
+        "
         :seconds="seconds"
         :values="requests"
         title="Interval request rate"
@@ -160,6 +166,10 @@
 
       <RunChart
         v-if="snapshot.scenarios"
+        :warmup-seconds="snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          snapshot.automatic_stop ? Number(snapshot.automatic_stop.at_us) / 1e6 : undefined
+        "
         :seconds="seconds"
         :values="iterations"
         title="Cumulative scenario iteration rate"
@@ -167,6 +177,10 @@
       />
 
       <RunChart
+        :warmup-seconds="snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          snapshot.automatic_stop ? Number(snapshot.automatic_stop.at_us) / 1e6 : undefined
+        "
         :seconds="seconds"
         :values="latency"
         title="Interval response p95"
@@ -174,6 +188,10 @@
       />
 
       <RunChart
+        :warmup-seconds="snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          snapshot.automatic_stop ? Number(snapshot.automatic_stop.at_us) / 1e6 : undefined
+        "
         :seconds="seconds"
         :values="failures"
         title="Interval HTTP failure rate"
@@ -183,6 +201,10 @@
 
       <RunChart
         v-if="snapshot.scenarios || snapshot.metrics.diagnostics.assertions.length"
+        :warmup-seconds="snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          snapshot.automatic_stop ? Number(snapshot.automatic_stop.at_us) / 1e6 : undefined
+        "
         :seconds="seconds"
         :values="assertionFailures"
         title="Cumulative assertion failure rate"
@@ -191,6 +213,10 @@
       />
 
       <RunChart
+        :warmup-seconds="snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          snapshot.automatic_stop ? Number(snapshot.automatic_stop.at_us) / 1e6 : undefined
+        "
         :seconds="seconds"
         :values="vus"
         :comparison-values="desiredVus"
@@ -205,8 +231,9 @@
           ? 'Live aggregate subscription connected.'
           : 'Live events unavailable; recovering native totals.'
       }}
-      Assertion failure rate uses cumulative evaluated checks. Unavailable checks or counter
-      overflow leave a gap; HTTP failures remain separate. Charts retain the latest 600 points.
+      Charts include warm-up traffic. Markers show measurement start and automatic stop. Assertion
+      failure rate uses cumulative full-run checks. Unavailable checks or counter overflow leave a
+      gap; HTTP failures remain separate. Charts retain the latest 600 points.
       {{ gaps ? 'Some intervals were missed; gaps are shown.' : 'No event gaps detected.' }}
       Actual VUs include retiring users; slow retirees may defer a later ramp-up within the worker
       budget. Empty response populations have no percentile. Request rates exclude cancellations.

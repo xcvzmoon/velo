@@ -41,11 +41,16 @@ pub enum RunState {
     Cancelled,
     /// An owned task failed; remaining work was cleaned up.
     Failed,
+    /// A sustained live policy breach closed admission; partial results retained.
+    Aborted,
 }
 
 impl RunState {
     fn is_terminal(self) -> bool {
-        matches!(self, Self::Completed | Self::Cancelled | Self::Failed)
+        matches!(
+            self,
+            Self::Completed | Self::Cancelled | Self::Failed | Self::Aborted
+        )
     }
 }
 
@@ -55,7 +60,7 @@ impl RunState {
 /// A cancelled final summary retains measurements but represents partial work:
 /// ```
 /// fn is_partial(summary: &velo_engine::RunSnapshot) -> bool {
-///     summary.state == velo_engine::RunState::Cancelled
+///     !summary.measurement.complete
 /// }
 /// ```
 #[derive(Clone, Debug, Serialize, TS)]
@@ -92,6 +97,12 @@ pub struct RunSnapshot {
     pub arrival: ArrivalSnapshot,
     /// Cumulative counters, rates, and separate duration populations.
     pub metrics: MetricsSnapshot,
+    /// Admission-selected evaluated traffic, including its drain and cancellations.
+    pub evaluated: MetricsSnapshot,
+    /// Explicit monotonic warm-up boundary and measurement completeness.
+    pub measurement: crate::MeasurementWindow,
+    /// Sustained live policy trigger, separate from final threshold verdicts.
+    pub automatic_stop: Option<crate::AbortEvidence>,
     /// Final threshold outcomes; empty while active or when no rules are configured.
     #[ts(type = "ThresholdResult[]")]
     pub thresholds: Vec<crate::ThresholdResult>,
@@ -174,6 +185,9 @@ struct Progress {
     scenarios: Option<crate::scenario_metrics::ScenarioMetrics>,
     state: RunState,
     metrics: Metrics,
+    evaluated: Metrics,
+    live: crate::admission::LivePolicies,
+    automatic_stop: Option<crate::AbortEvidence>,
     arrival: ArrivalSnapshot,
     sequence: u64,
     sampled_us: u64,
@@ -231,8 +245,11 @@ impl Run {
         let scheduling_us = end.saturating_duration_since(start).as_micros() as u64;
         let actual_us = elapsed.as_micros() as u64;
         let metrics = progress.metrics.snapshot(elapsed);
+        let evaluated_duration =
+            elapsed.saturating_sub(Duration::from_millis(self.confirmation.warmup_ms.into()));
+        let evaluated = progress.evaluated.snapshot(evaluated_duration);
         let thresholds = if progress.state.is_terminal() {
-            crate::threshold::evaluate(&self.thresholds, &metrics)
+            crate::threshold::evaluate(&self.thresholds, &evaluated)
         } else {
             Vec::new()
         };
@@ -242,6 +259,14 @@ impl Run {
                 .as_ref()
                 .map(crate::scenario_metrics::ScenarioMetrics::snapshot),
             thresholds,
+            evaluated,
+            automatic_stop: progress.automatic_stop.clone(),
+            measurement: crate::MeasurementWindow {
+                warmup_ms: self.confirmation.warmup_ms,
+                evaluated_us: evaluated_duration.as_micros() as u64,
+                complete: progress.state == RunState::Completed
+                    && scheduling_us >= u64::from(self.confirmation.duration_ms) * 1000,
+            },
             run_id: self.id.clone(),
             state: progress.state,
             confirmation: self.confirmation.clone(),
@@ -257,6 +282,51 @@ impl Run {
             failure_code: progress.failure_code.clone(),
             dataset: progress.dataset.clone(),
         }
+    }
+
+    fn evaluated(&self, progress: &Progress, now: Instant) -> bool {
+        progress.started.is_some_and(|started| {
+            now >= started + Duration::from_millis(self.confirmation.warmup_ms.into())
+        })
+    }
+
+    fn policy_tick(&self, progress: &mut Progress) {
+        let now = Instant::now();
+        if progress.state != RunState::Running
+            || progress.deadline.is_none_or(|deadline| now >= deadline)
+        {
+            return;
+        }
+        let Some(started) = progress.started else {
+            return;
+        };
+        let boundary = started + Duration::from_millis(self.confirmation.warmup_ms.into());
+        if now < boundary {
+            return;
+        }
+        if let Some(mut evidence) = progress
+            .live
+            .evaluate(now.duration_since(boundary).as_micros() as u64)
+        {
+            evidence.at_us = now.duration_since(started).as_micros() as u64;
+            progress.automatic_stop = Some(evidence);
+            progress.state = RunState::Stopping;
+            progress.desired_vus = 0;
+            progress.scheduling_end.get_or_insert(now);
+            self.stop.cancel();
+        }
+    }
+
+    fn policy_wake(&self, started: Instant, now: Instant) -> Instant {
+        if self.confirmation.abort_policies.is_empty() {
+            return started + Duration::from_millis(self.confirmation.duration_ms.into());
+        }
+        let boundary = started + Duration::from_millis(self.confirmation.warmup_ms.into());
+        if now < boundary {
+            return boundary;
+        }
+        let tick = now.duration_since(boundary).as_millis() / 100 + 1;
+        boundary + Duration::from_millis(tick as u64 * 100)
     }
 
     fn stop(&self) {
@@ -335,6 +405,8 @@ impl RunManager {
     /// Returns [`RunError`] with INVALID_RUN_CONFIG, VU_BUDGET_EXCEEDED,
     /// REQUEST_BUDGET_EXCEEDED, UPLOAD_FILE_UNAVAILABLE, or HTTP_CLIENT_INIT_FAILED
     /// on invalid input, unavailable files, or HTTP initialization failure.
+    /// Measurement validation returns INVALID_MEASUREMENT_WINDOW or INVALID_ABORT_POLICY
+    /// for invalid phase boundaries, policy counts, sample counts, or policy timing.
     /// Dataset preparation also returns INVALID_DATASET or DATASET_BUDGET_EXCEEDED.
     /// Response checks can return INVALID_ASSERTION, INVALID_INSPECTION_LIMITS, or
     /// INSPECTION_BUDGET_EXCEEDED before allocating worker inspection buffers.
@@ -464,6 +536,20 @@ impl RunManager {
                     }
                     metrics
                 },
+                evaluated: {
+                    let mut metrics = Metrics::configured(
+                        &config.assertions.definitions,
+                        config.inspection.clone(),
+                    );
+                    if config.scenarios.is_some() {
+                        metrics.scenarios();
+                    }
+                    metrics
+                },
+                live: crate::admission::LivePolicies::new(
+                    config.confirmation.abort_policies.clone(),
+                ),
+                automatic_stop: None,
                 arrival: ArrivalSnapshot::default(),
                 sequence: 0,
                 sampled_us: 0,
@@ -694,6 +780,7 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
         failed = schedule_arrivals(&run, &config, &mut workers, started, rate).await;
     }
     while arrival_rate.is_none() {
+        run.policy_tick(&mut run.lock());
         let now = Instant::now();
         if run.stop.is_cancelled() || now >= deadline {
             break;
@@ -759,7 +846,7 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
         tokio::select! {
             biased;
             _ = run.stop.cancelled() => break,
-            _ = tokio::time::sleep_until(started + next) => {},
+            _ = tokio::time::sleep_until((started + next).min(run.policy_wake(started, now))) => {},
             result = workers.join_next_with_id(), if !workers.is_empty() => {
                 match result {
                     Some(Ok((id, ()))) => {
@@ -837,6 +924,8 @@ async fn supervise(run: Arc<Run>, config: ValidatedConfig) {
         RunState::Failed
     } else if progress.dataset.as_ref().is_some_and(|data| data.exhausted) {
         RunState::Completed
+    } else if progress.automatic_stop.is_some() {
+        RunState::Aborted
     } else if run.stop.is_cancelled() {
         RunState::Cancelled
     } else {
@@ -869,11 +958,12 @@ async fn schedule_arrivals(
                 return true;
             }
         }
+        run.policy_tick(&mut run.lock());
         let next = started + arrival_offset(processed, rate);
         tokio::select! {
             biased;
             _ = run.stop.cancelled() => break,
-            _ = tokio::time::sleep_until(next.min(deadline)) => {},
+            _ = tokio::time::sleep_until(next.min(deadline).min(run.policy_wake(started, Instant::now()))) => {},
             result = workers.join_next(), if !workers.is_empty() => {
                 if result.is_some_and(task_failed) {
                     return true;
@@ -916,9 +1006,13 @@ async fn schedule_arrivals(
             progress.arrival.dataset_drops += 1;
             break;
         };
+        let evaluated = run.evaluated(&progress, now);
         let scenario = scenarios::admit(&mut progress, config.scenarios.as_ref());
         if scenario.is_none() {
             progress.metrics.admission();
+            if evaluated {
+                progress.evaluated.admission();
+            }
         }
         progress.active_vus += 1;
         progress.max_vus = progress.max_vus.max(progress.active_vus);
@@ -928,7 +1022,13 @@ async fn schedule_arrivals(
             finished: CancellationToken::new(),
         };
         if let Some(scenario) = scenario {
-            workers.spawn(scenarios::arrival(worker, config.clone(), record, scenario));
+            workers.spawn(scenarios::arrival(
+                worker,
+                config.clone(),
+                record,
+                scenario,
+                evaluated,
+            ));
             continue;
         }
         let attempt = Attempt {
@@ -938,6 +1038,7 @@ async fn schedule_arrivals(
             observation: crate::assertions::Observation::default(),
             outcome: Outcome::Cancelled,
             elapsed: None,
+            evaluated,
         };
         workers.spawn(execute_arrival(worker, config.clone(), record, attempt));
     }
@@ -1058,6 +1159,7 @@ struct Attempt {
     observation: crate::assertions::Observation,
     outcome: Outcome,
     elapsed: Option<Duration>,
+    evaluated: bool,
 }
 
 impl Drop for Attempt {
@@ -1070,6 +1172,19 @@ impl Drop for Attempt {
         let mut progress = self.run.measured_lock();
         progress.metrics.inspect(&self.observation, outcome);
         progress.metrics.observe(outcome, elapsed, self.bytes);
+        if self.evaluated {
+            progress.evaluated.inspect(&self.observation, outcome);
+            progress.evaluated.observe(outcome, elapsed, self.bytes);
+            let now = Instant::now();
+            let started = progress.started.expect("admitted request has load start");
+            let boundary = started + Duration::from_millis(self.run.confirmation.warmup_ms.into());
+            progress.live.observe(
+                now.saturating_duration_since(boundary).as_micros() as u64,
+                outcome,
+                elapsed,
+                &self.observation,
+            );
+        }
     }
 }
 
@@ -1081,6 +1196,7 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
     let mut cached = None;
     loop {
         let record;
+        let evaluated;
         {
             let mut progress = worker.run.measured_lock();
             if progress.state != RunState::Running
@@ -1093,7 +1209,11 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
                 break;
             };
             record = index;
+            evaluated = worker.run.evaluated(&progress, Instant::now());
             progress.metrics.admission();
+            if evaluated {
+                progress.evaluated.admission();
+            }
         }
         let mut attempt = Attempt {
             run: worker.run.clone(),
@@ -1102,6 +1222,7 @@ async fn execute_worker(worker: Worker, config: Arc<ValidatedConfig>, deadline: 
             observation: crate::assertions::Observation::default(),
             outcome: Outcome::Cancelled,
             elapsed: None,
+            evaluated,
         };
         let result = crate::transport::execute(
             &config,

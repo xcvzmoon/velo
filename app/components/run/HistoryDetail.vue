@@ -73,6 +73,12 @@
       class="space-y-4"
     >
       <RunChart
+        :warmup-seconds="entry.snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          entry.snapshot.automatic_stop
+            ? Number(entry.snapshot.automatic_stop.at_us) / 1e6
+            : undefined
+        "
         :seconds="seconds"
         :values="rates"
         title="Stored request rate"
@@ -81,6 +87,12 @@
 
       <RunChart
         v-if="entry.snapshot.scenarios"
+        :warmup-seconds="entry.snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          entry.snapshot.automatic_stop
+            ? Number(entry.snapshot.automatic_stop.at_us) / 1e6
+            : undefined
+        "
         :seconds="seconds"
         :values="iterations"
         title="Stored cumulative scenario iteration rate"
@@ -89,6 +101,12 @@
 
       <RunChart
         v-if="entry.snapshot.scenarios || entry.snapshot.metrics.diagnostics.assertions.length"
+        :warmup-seconds="entry.snapshot.measurement.warmup_ms / 1000"
+        :automatic-stop-seconds="
+          entry.snapshot.automatic_stop
+            ? Number(entry.snapshot.automatic_stop.at_us) / 1e6
+            : undefined
+        "
         :seconds="seconds"
         :values="assertionFailures"
         title="Stored cumulative assertion failure rate"

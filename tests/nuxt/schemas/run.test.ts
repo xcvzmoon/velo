@@ -55,6 +55,8 @@ describe('request editor schema', () => {
       protocol: 'auto',
       max_redirects: 0,
       thresholds: [],
+      warmup_ms: 0,
+      abort_policies: [],
       assertions: [],
       inspection: {
         body_bytes: 16_384,
@@ -652,6 +654,105 @@ describe('response assertion configuration', () => {
             limit: 101,
           },
         ],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('measurement and automatic stop settings', () => {
+  const policy = {
+    rule: {
+      metric: 'http_failure_percent',
+      operator: 'less_than',
+      limit: 50,
+    },
+    window_ms: 1000,
+    min_samples: 10,
+    sustained_ms: 2000,
+  };
+
+  it('preserves explicit measurement and policy settings in the native configuration', () => {
+    const output = v.parse(requestEditorSchema, {
+      ...input,
+      warmup_ms: '100',
+      abort_policies: [policy],
+    });
+    expect(output.warmup_ms).toBe(100);
+    expect(output.abort_policies).toEqual([policy]);
+  });
+
+  it.each([1000, 1001, -1])('rejects invalid warm-up %s', (warmup_ms) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        warmup_ms,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('uses the total ramp duration when checking the warm-up boundary', () => {
+    const ramp = {
+      ...input,
+      workloadKind: 'ramping',
+      start_vus: 1,
+      stages: [
+        {
+          duration_ms: 1000,
+          target_vus: 2,
+        },
+        {
+          duration_ms: 1000,
+          target_vus: 1,
+        },
+      ],
+    };
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...ramp,
+        warmup_ms: 1500,
+      }).success,
+    ).toBe(true);
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...ramp,
+        warmup_ms: 2000,
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    { window_ms: 0 },
+    { window_ms: 101 },
+    { window_ms: 60_100 },
+    { sustained_ms: 99 },
+    { sustained_ms: 60_100 },
+    { min_samples: 0 },
+    { min_samples: 1.5 },
+    {
+      rule: {
+        ...policy.rule,
+        limit: 101,
+      },
+    },
+  ])('rejects invalid policy %j', (change) => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        abort_policies: [
+          {
+            ...policy,
+            ...change,
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('bounds the policy count', () => {
+    expect(
+      v.safeParse(requestEditorSchema, {
+        ...input,
+        abort_policies: Array.from({ length: 9 }, () => policy),
       }).success,
     ).toBe(false);
   });

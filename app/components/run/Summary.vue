@@ -25,7 +25,7 @@
 
       <p class="text-muted-foreground mt-2 text-sm">
         {{
-          snapshot.state === 'completed'
+          snapshot.measurement.complete
             ? 'Scheduling completed.'
             : 'Partial run. Measurements cover observed work only.'
         }}
@@ -57,13 +57,18 @@
             : 'Dataset was not exhausted.'
         }}
       </p>
-      <p
-        v-if="snapshot.failure_code"
-        class="text-destructive"
-      >
-        {{ snapshot.failure_code }}
-      </p>
     </div>
+
+    <RunMeasurement :snapshot="snapshot" />
+
+    <p
+      v-if="snapshot.failure_code"
+      class="text-destructive"
+    >
+      {{ snapshot.failure_code }}
+    </p>
+
+    <h3 class="text-sm font-medium">Full-run accounting, including warm-up</h3>
 
     <dl class="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
       <div
@@ -94,27 +99,27 @@
       </div>
 
       <div class="flex justify-between gap-4 border-b pb-2">
-        <dt class="text-muted-foreground">HTTP failure rate</dt>
+        <dt class="text-muted-foreground">Evaluated HTTP failure rate</dt>
 
         <dd class="font-mono">
           {{
-            snapshot.metrics.http_failure_rate === null
+            snapshot.evaluated.http_failure_rate === null
               ? 'No data'
-              : `${(snapshot.metrics.http_failure_rate * 100).toFixed(2)}%`
+              : `${(snapshot.evaluated.http_failure_rate * 100).toFixed(2)}%`
           }}
         </dd>
       </div>
 
       <div
         v-for="(value, name) in {
-          requests: snapshot.metrics.request_rate,
-          successes: snapshot.metrics.success_rate,
-          iterations: snapshot.metrics.iteration_rate,
+          requests: snapshot.evaluated.request_rate,
+          successes: snapshot.evaluated.success_rate,
+          iterations: snapshot.evaluated.iteration_rate,
         }"
         :key="name"
         class="flex justify-between gap-4 border-b pb-2"
       >
-        <dt class="text-muted-foreground capitalize">{{ name }} per second</dt>
+        <dt class="text-muted-foreground capitalize">Evaluated {{ name }} per second</dt>
         <dd class="font-mono">{{ value.toFixed(2) }}</dd>
       </div>
     </dl>
@@ -125,8 +130,9 @@
     >
       <table class="w-full text-left text-xs">
         <caption class="text-muted-foreground mb-3 text-left">
-          Final thresholds for {{ snapshot.state === 'completed' ? 'completed' : 'partial' }} work.
-          Comparisons use unrounded values. Insufficient data cannot pass.
+          Final thresholds excluding warm-up for
+          {{ snapshot.measurement.complete ? 'completed' : 'partial' }} work. Comparisons use
+          unrounded values. Insufficient data cannot pass.
         </caption>
 
         <thead>
@@ -152,7 +158,7 @@
                     ? 'HTTP failure (%) / terminal attempts'
                     : result.rule.metric === 'assertion_failure_percent'
                       ? 'Assertion failure (%) / evaluated checks'
-                      : 'Terminal requests/s / actual duration'
+                      : 'Terminal requests/s / evaluated duration'
               }}
             </th>
 
@@ -175,6 +181,8 @@
       </table>
     </div>
 
+    <h3 class="text-sm font-medium">Full-run diagnostics, including warm-up</h3>
+
     <RunScenarioResults
       v-if="snapshot.scenarios"
       :report="snapshot.scenarios"
@@ -187,9 +195,9 @@
     <div class="overflow-x-auto">
       <table class="w-full text-left text-xs">
         <caption class="text-muted-foreground mb-3 text-left leading-relaxed">
-          Approximate HDR durations in milliseconds, three significant digits, range 1 μs–1 hour.
-          Response latency includes completed HTTP responses of all statuses. Transport and timeout
-          durations are separate populations.
+          Evaluated approximate HDR durations in milliseconds, three significant digits, range 1
+          μs–1 hour. Response latency includes completed HTTP responses of all statuses. Transport
+          and timeout durations are separate populations.
         </caption>
 
         <thead>
@@ -211,9 +219,9 @@
         <tbody>
           <tr
             v-for="(population, name) in {
-              responses: snapshot.metrics.response_latency,
-              transport: snapshot.metrics.transport_latency,
-              timeouts: snapshot.metrics.timeout_latency,
+              responses: snapshot.evaluated.response_latency,
+              transport: snapshot.evaluated.transport_latency,
+              timeouts: snapshot.evaluated.timeout_latency,
             }"
             :key="name"
             class="border-t"
@@ -245,9 +253,9 @@
     <p class="text-muted-foreground text-xs leading-relaxed">
       Body bytes are encoded response payload consumed, including partial failed responses. Headers,
       TLS, and retransmissions are excluded. HTTP failure rate divides status, transport, and
-      timeout failures by non-cancelled terminal attempts. Throughput uses actual duration including
-      drain. Aggregation wait: {{ snapshot.metrics.aggregation_wait_us }} μs; maximum in flight:
-      {{ snapshot.metrics.max_in_flight }}.
+      timeout failures by non-cancelled terminal attempts. Evaluated throughput excludes warm-up
+      time and includes drain. Aggregation wait: {{ snapshot.metrics.aggregation_wait_us }} μs;
+      maximum in flight: {{ snapshot.metrics.max_in_flight }}.
     </p>
   </section>
 </template>

@@ -6,6 +6,24 @@ use crate::{
     scenario_runtime::{Exchange, PreparedPlan, Session},
 };
 
+#[derive(Clone, Copy)]
+enum Population {
+    Setup,
+    Warmup,
+    Evaluated,
+    Cleanup,
+}
+
+impl Population {
+    fn phase(self) -> ScenarioPhase {
+        match self {
+            Self::Setup => ScenarioPhase::Setup,
+            Self::Warmup | Self::Evaluated => ScenarioPhase::Load,
+            Self::Cleanup => ScenarioPhase::Cleanup,
+        }
+    }
+}
+
 const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(super) fn admit(progress: &mut Progress, plan: Option<&PreparedPlan>) -> Option<usize> {
@@ -38,6 +56,7 @@ struct Iteration {
     run: Arc<Run>,
     index: usize,
     result: Option<bool>,
+    evaluated: bool,
 }
 
 impl Drop for Iteration {
@@ -51,6 +70,9 @@ impl Drop for Iteration {
             totals.completed += 1;
             totals.failed += u64::from(failed);
             progress.metrics.iteration(failed);
+            if self.evaluated {
+                progress.evaluated.iteration(failed);
+            }
         } else {
             totals.cancelled += 1;
         }
@@ -62,6 +84,7 @@ pub(super) async fn arrival(
     config: Arc<ValidatedConfig>,
     record: usize,
     scenario: usize,
+    evaluated: bool,
 ) {
     let mut session = new_session(&worker.run);
     iteration(
@@ -70,6 +93,7 @@ pub(super) async fn arrival(
         selected_plan(&config, record),
         &mut session,
         scenario,
+        evaluated,
     )
     .await;
 }
@@ -78,7 +102,7 @@ pub(super) async fn worker(worker: Worker, config: Arc<ValidatedConfig>, deadlin
     let mut session = new_session(&worker.run);
     let mut cached = None;
     loop {
-        let (record, scenario) = {
+        let (record, scenario, evaluated) = {
             let mut progress = worker.run.measured_lock();
             if progress.state != RunState::Running
                 || worker.retire.is_cancelled()
@@ -91,7 +115,11 @@ pub(super) async fn worker(worker: Worker, config: Arc<ValidatedConfig>, deadlin
             };
             let scenario = admit(&mut progress, config.scenarios.as_ref())
                 .expect("scenario worker has metrics");
-            (record, scenario)
+            (
+                record,
+                scenario,
+                worker.run.evaluated(&progress, Instant::now()),
+            )
         };
         iteration(
             &worker.run,
@@ -99,6 +127,7 @@ pub(super) async fn worker(worker: Worker, config: Arc<ValidatedConfig>, deadlin
             selected_plan(&config, record),
             &mut session,
             scenario,
+            evaluated,
         )
         .await;
         if config.pacing.is_zero() {
@@ -121,11 +150,13 @@ async fn iteration(
     plan: &PreparedPlan,
     session: &mut Session,
     index: usize,
+    evaluated: bool,
 ) {
     let mut guard = Iteration {
         run: run.clone(),
         index,
         result: None,
+        evaluated,
     };
     let scenario = &plan.definition.scenarios[index];
     let result = steps(
@@ -134,7 +165,11 @@ async fn iteration(
         plan,
         session,
         &scenario.steps,
-        ScenarioPhase::Load,
+        if evaluated {
+            Population::Evaluated
+        } else {
+            Population::Warmup
+        },
         &scenario.id,
     )
     .await;
@@ -162,7 +197,12 @@ pub(super) async fn phase(
     if definitions.is_empty() {
         return outcome;
     }
-    let execution = steps(run, config, plan, session, definitions, phase, "");
+    let population = if phase == ScenarioPhase::Setup {
+        Population::Setup
+    } else {
+        Population::Cleanup
+    };
+    let execution = steps(run, config, plan, session, definitions, population, "");
     let outcome = match tokio::time::timeout(PHASE_TIMEOUT, execution).await {
         Ok(Some(false)) => PhaseOutcome::Succeeded,
         Ok(Some(true)) | Err(_) => PhaseOutcome::Failed,
@@ -188,9 +228,10 @@ async fn steps(
     plan: &PreparedPlan,
     session: &mut Session,
     definitions: &[ScenarioStep],
-    phase: ScenarioPhase,
+    population: Population,
     scenario_id: &str,
 ) -> Option<bool> {
+    let phase = population.phase();
     let mut failed = false;
     for definition in definitions {
         if phase != ScenarioPhase::Cleanup && run.stop.is_cancelled() {
@@ -213,10 +254,10 @@ async fn steps(
             tokio::select! {
                 biased;
                 _ = run.stop.cancelled() => return None,
-                result = step(run, config, plan, session, definition, phase, index) => result,
+                result = step(run, config, plan, session, definition, population, index) => result,
             }
         } else {
-            step(run, config, plan, session, definition, phase, index).await
+            step(run, config, plan, session, definition, population, index).await
         };
         failed |= !success;
         if !success && definition.on_failure == StepFailure::Stop {
@@ -241,7 +282,7 @@ async fn steps(
 struct StepAttempt {
     run: Arc<Run>,
     index: usize,
-    phase: ScenarioPhase,
+    population: Population,
     started: Instant,
     bytes: u64,
     observation: crate::assertions::Observation,
@@ -270,11 +311,29 @@ impl Drop for StepAttempt {
                 metric.totals.extraction_failures += 1;
             }
         }
-        if self.phase == ScenarioPhase::Load {
+        if self.population.phase() == ScenarioPhase::Load {
             progress
                 .metrics
                 .scenario_checks(&self.observation, self.outcome);
             progress.metrics.observe(self.outcome, elapsed, self.bytes);
+            if matches!(self.population, Population::Evaluated) {
+                progress
+                    .evaluated
+                    .scenario_checks(&self.observation, self.outcome);
+                progress
+                    .evaluated
+                    .observe(self.outcome, elapsed, self.bytes);
+                let now = Instant::now();
+                let started = progress.started.expect("load step has start");
+                let boundary =
+                    started + Duration::from_millis(self.run.confirmation.warmup_ms.into());
+                progress.live.observe(
+                    now.saturating_duration_since(boundary).as_micros() as u64,
+                    self.outcome,
+                    elapsed,
+                    &self.observation,
+                );
+            }
         }
     }
 }
@@ -285,9 +344,10 @@ async fn step(
     plan: &PreparedPlan,
     session: &mut Session,
     definition: &ScenarioStep,
-    phase: ScenarioPhase,
+    population: Population,
     index: usize,
 ) -> bool {
+    let phase = population.phase();
     let allowance =
         plan.base.budget.max_request_bytes as usize / (config.confirmation.vus as usize + 1);
     let prepared = crate::scenario_runtime::check_binding_budget(
@@ -343,12 +403,15 @@ async fn step(
             .requests += 1;
         if phase == ScenarioPhase::Load {
             progress.metrics.admission();
+            if matches!(population, Population::Evaluated) {
+                progress.evaluated.admission();
+            }
         }
     }
     let mut attempt = StepAttempt {
         run: run.clone(),
         index,
-        phase,
+        population,
         started: Instant::now(),
         bytes: 0,
         observation: crate::assertions::Observation::default(),

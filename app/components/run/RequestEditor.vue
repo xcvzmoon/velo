@@ -81,6 +81,8 @@
       formPairs: [],
       multipartParts: [],
       thresholds: [],
+      warmup_ms: 0,
+      abort_policies: [],
       assertions: [],
       inspection: {
         body_bytes: 16_384,
@@ -121,6 +123,8 @@
       setInput(form, {
         input: {
           ...request,
+          warmup_ms: config.warmup_ms,
+          abort_policies: config.abort_policies,
           assertions: config.assertions.map((assertion) => assertionInput(assertion)),
           authKind: auth.kind,
           authToken: auth.kind === 'bearer' ? auth.token : '',
@@ -463,6 +467,12 @@
 
         <RunAssertionEditor
           :hide-limits="stepMode"
+          :form="form"
+          :disabled="disabled"
+        />
+
+        <RunPolicyEditor
+          v-if="!stepMode"
           :form="form"
           :disabled="disabled"
         />

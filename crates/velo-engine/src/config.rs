@@ -172,7 +172,14 @@ pub struct RunConfig {
     pub pacing_ms: u32,
     /// Maximum drain time after stop or duration expiry; zero aborts immediately.
     pub grace_ms: u32,
-    /// Final cumulative metric rules; empty by default.
+    /// Warm-up scheduling time excluded from evaluated metrics; zero by default.
+    #[serde(default)]
+    pub warmup_ms: u32,
+    /// Live admission rules; at most eight, inactive during warm-up.
+    #[serde(default)]
+    #[ts(type = "AbortPolicy[]")]
+    pub abort_policies: Vec<crate::AbortPolicy>,
+    /// Final evaluated metric rules; empty by default.
     #[ts(type = "Threshold[]")]
     pub thresholds: Vec<crate::Threshold>,
     /// Ordered response checks; at most 32, validated before load starts.
@@ -223,6 +230,8 @@ impl Default for RunConfig {
             pacing_ms: 0,
             grace_ms: 5_000,
             thresholds: Vec::new(),
+            warmup_ms: 0,
+            abort_policies: Vec::new(),
             assertions: Vec::new(),
             inspection: crate::InspectionLimits::default(),
             budget: ResourceBudget::default(),
@@ -280,6 +289,11 @@ pub struct RunConfirmation {
     pub vus: u32,
     /// Requested scheduling duration in milliseconds.
     pub duration_ms: u32,
+    /// Warm-up boundary in scheduling milliseconds.
+    pub warmup_ms: u32,
+    /// Reviewed live admission rules.
+    #[ts(type = "AbortPolicy[]")]
+    pub abort_policies: Vec<crate::AbortPolicy>,
     /// Native-validated schedule shown during authorization review.
     pub workload: Workload,
     /// Explicit allocation budgets.
@@ -514,11 +528,22 @@ pub(crate) fn validate_request_parts(
     let threshold_bytes = config
         .thresholds
         .len()
-        .saturating_mul(std::mem::size_of::<crate::Threshold>());
+        .saturating_mul(std::mem::size_of::<crate::Threshold>())
+        .saturating_add(
+            config
+                .abort_policies
+                .len()
+                .saturating_mul(std::mem::size_of::<crate::AbortPolicy>()),
+        );
     let schedule = Schedule::new(
         &config.workload,
         config.budget.max_vus,
         config.budget.max_request_bytes,
+    )?;
+    crate::admission::validate(
+        config.warmup_ms,
+        schedule.duration_ms,
+        &config.abort_policies,
     )?;
     let inspection_bytes = if assertions.needs_body() {
         (config.inspection.body_bytes as usize).saturating_mul(schedule.peak_vus as usize)
@@ -761,6 +786,8 @@ pub(crate) fn validate_request_parts(
             origin,
             vus: schedule.peak_vus,
             duration_ms: schedule.duration_ms,
+            warmup_ms: config.warmup_ms,
+            abort_policies: config.abort_policies.clone(),
             workload: config.workload.clone(),
             budget: config.budget,
             warnings: {
