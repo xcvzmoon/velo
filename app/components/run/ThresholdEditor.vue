@@ -16,12 +16,13 @@
     <h3 class="text-sm font-medium">Final thresholds</h3>
 
     <p class="text-muted-foreground text-xs leading-relaxed">
-      Evaluate cumulative measurements after cleanup. Response p95 covers completed HTTP responses
-      of all statuses. HTTP failure percentage covers status, transport, and timeout failures over
-      non-cancelled terminal attempts. Request rate uses those attempts per actual second, including
-      drain. Assertion failure percentage counts failed checks over evaluated checks; any
-      unavailable checks make that threshold insufficient. Equality fails. Empty or incomplete
-      populations cannot pass. Partial runs use observed work.
+      Evaluate the measurement population after cleanup, excluding requests admitted during warm-up.
+      Response p95 covers completed HTTP responses of all statuses. HTTP failure percentage covers
+      status, transport, and timeout failures over non-cancelled terminal attempts. Request rate
+      uses those attempts per evaluated second, including drain. Assertion failure percentage counts
+      failed checks over evaluated checks; any unavailable checks make that threshold insufficient.
+      Equality fails. Missing or invalid required measurements cannot pass. Partial runs use
+      observed work.
     </p>
 
     <FormischFieldArray
