@@ -79,6 +79,16 @@ export default defineNuxtConfig({
   css: ['uplot/dist/uPlot.min.css', '~/assets/css/tailwind.css'],
   modules: ['@vueuse/nuxt/module', '@nuxt/ui'],
   ui: { fonts: false },
+  icon: {
+    provider: 'none',
+    serverBundle: false,
+    fallbackToApi: false,
+    clientBundle: {
+      scan: {
+        globInclude: ['app/**/*.{vue,ts}'],
+      },
+    },
+  },
   colorMode: {
     classSuffix: '',
     preference: 'dark',
