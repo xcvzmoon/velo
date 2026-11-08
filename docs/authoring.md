@@ -1,5 +1,7 @@
 # Author and share a test
 
+Open **Test studio**. The **Request** section contains visual, JSON/environment, and scenario editors. Use **Data** for recipes and prepared records, **Preview & run** for authorized preview and load review, **Library & secrets** for saved tests and imports, and **AI assistance** for reviewed suggestions. Section and route navigation preserve the current test draft; preview and execution still require explicit authorization.
+
 Open **Tests** in the desktop app. The visual editor and **JSON and environments** edit the same version 1 definition. A valid visual change updates the definition; **Apply JSON** replaces it only when parsing succeeds. Unapplied JSON and invalid visual fields block preview, export, save, and load review. Changing a definition or environment invalidates an earlier authorization review.
 
 ## Save, reopen, and share

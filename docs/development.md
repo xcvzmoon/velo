@@ -33,6 +33,19 @@ cargo test -p velo-engine
 
 Local acceptance evidence currently covers macOS only. Windows and Linux builds, packaging, and interactive checks are not verified yet. Configuring CI is not evidence of passing remote runs.
 
+## UI verification
+
+The UI uses Nuxt UI visual controls with Formisch state and Valibot schemas. See [Workspace interface](ui.md) for navigation, component ownership, and the migration record.
+
+Install the browser engines once, then run the UI checks:
+
+```sh
+pnpm exec playwright install chromium webkit
+pnpm test:ui
+```
+
+Playwright generates the static frontend and serves it locally for the checks. The suite covers form edits, route and section navigation, keyboard use, native-unavailable feedback, and automated accessibility checks in both themes at 640, 800, and 1440 pixels. Browser-only tests cannot certify native IPC, OS credential dialogs, traffic-light behavior, or packaged WebView integration. Run those checks in the desktop build as well. Failure traces and screenshots are saved under `test-results/`.
+
 ## Packaging
 
 ```sh
@@ -45,7 +58,7 @@ On macOS, open `target/release/bundle/macos/Velo.app`. On Windows or Linux, inst
 
 ## Continuous integration
 
-CI is configured for macOS 15, Ubuntu 24.04, and Windows Server 2022. It runs lint, binding drift checks, formatting, typechecking, tests, and installer builds. Artifacts are retained for seven days. Configuration does not establish remote success or interactive platform acceptance. The tag-triggered release workflow remains macOS-only.
+CI is configured for macOS 15, Ubuntu 24.04, and Windows Server 2022. It runs lint, binding drift checks, formatting, typechecking, tests, and installer builds. Artifacts are retained for seven days. Configuration does not establish remote success or interactive platform acceptance. A separate Ubuntu UI job tests the generated frontend in Chromium and WebKit and retains browser evidence for seven days. The tag-triggered release workflow remains macOS-only.
 
 ## Native failure policy
 

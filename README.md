@@ -39,7 +39,7 @@ Save the editable definition under **Saved tests**. Definitions retain literal r
 
 ## Implementation
 
-The application uses Tauri 2 with a client-rendered Nuxt 4/Vue 3 frontend. Rust owns HTTP execution, scheduling, bounded metrics, cancellation, and authoritative validation. The frontend uses TypeScript, Tailwind 4, shadcn-vue/Reka UI, Formisch, Valibot, and uPlot.
+The application uses Tauri 2 with a client-rendered Nuxt 4/Vue 3 frontend. Rust owns HTTP execution, scheduling, bounded metrics, cancellation, and authoritative validation. The frontend uses TypeScript, Tailwind 4, Nuxt UI, Formisch, Valibot, and uPlot.
 
 | Location                 | Responsibility                                                                 |
 | ------------------------ | ------------------------------------------------------------------------------ |
