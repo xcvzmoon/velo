@@ -128,7 +128,6 @@
               : 'Completed and interrupted runs will appear here after they are stored.'
           "
           :ui="{ root: 'py-8', title: 'text-sm', description: 'text-xs' }"
-          variant="naked"
         />
       </template>
     </UTable>

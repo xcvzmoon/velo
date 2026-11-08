@@ -6,7 +6,7 @@
 <template>
   <div
     v-if="snapshot.confirmation.workload.kind === 'arrival'"
-    class="@container space-y-3 rounded-lg border p-4 text-sm"
+    class="border-default @container space-y-3 rounded-lg border p-4 text-sm"
   >
     <p>
       Target {{ snapshot.confirmation.workload.rate }} iterations/s · capacity

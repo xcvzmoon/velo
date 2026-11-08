@@ -17,31 +17,33 @@
     :of="form"
     :path="['bodyKind']"
   >
-    <div class="space-y-4 border-t pt-6">
+    <div class="border-default space-y-4 border-t pt-6">
       <div class="max-w-xs space-y-2">
-        <label
-          class="text-sm font-medium"
-          for="request-body-kind"
-        >
-          Body format
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            class="text-sm font-medium"
+            for="request-body-kind"
+          >
+            Body format
+          </label>
 
-        <USelect
-          v-model="mode.input"
-          :disabled="disabled"
-          :name="mode.props.name"
-          :aria-invalid="Boolean(mode.errors)"
-          :items="[
-            { label: 'No body', value: 'none' },
-            { label: 'Plain text', value: 'text' },
-            { label: 'JSON', value: 'json' },
-            { label: 'URL-encoded form', value: 'form' },
-            { label: 'Multipart / files', value: 'multipart' },
-          ]"
-          id="request-body-kind"
-          aria-describedby="request-body-kind-error"
-          class="w-full"
-        />
+          <USelect
+            v-model="mode.input"
+            :disabled="disabled"
+            :name="mode.props.name"
+            :aria-invalid="Boolean(mode.errors)"
+            :items="[
+              { label: 'No body', value: 'none' },
+              { label: 'Plain text', value: 'text' },
+              { label: 'JSON', value: 'json' },
+              { label: 'URL-encoded form', value: 'form' },
+              { label: 'Multipart / files', value: 'multipart' },
+            ]"
+            id="request-body-kind"
+            aria-describedby="request-body-kind-error"
+            class="w-full"
+          />
+        </div>
 
         <p
           v-if="mode.errors"
@@ -60,23 +62,25 @@
         :path="['bodyValue']"
       >
         <div class="space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="request-body"
-          >
-            Request body
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="request-body"
+            >
+              Request body
+            </label>
 
-          <UTextarea
-            v-model="field.input"
-            v-bind="field.props"
-            :aria-invalid="Boolean(field.errors)"
-            :ui="{ base: 'min-h-28 font-mono text-xs md:text-xs' }"
-            id="request-body"
-            aria-describedby="request-body-error"
-            autocomplete="off"
-            spellcheck="false"
-          />
+            <UTextarea
+              v-model="field.input"
+              v-bind="field.props"
+              :aria-invalid="Boolean(field.errors)"
+              :ui="{ base: 'font-mono' }"
+              id="request-body"
+              aria-describedby="request-body-error"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
 
           <p
             v-if="field.errors"
@@ -99,7 +103,6 @@
           <UButton
             :disabled="disabled"
             type="button"
-            size="sm"
             variant="outline"
             color="neutral"
             label="Add form field"
@@ -119,20 +122,22 @@
               :path="['formPairs', index, property]"
             >
               <div class="space-y-2">
-                <label
-                  :for="`form-${item}-${property}`"
-                  class="text-sm font-medium"
-                >
-                  {{ property === 'name' ? 'Name' : 'Value' }}
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`form-${item}-${property}`"
+                    class="text-sm font-medium"
+                  >
+                    {{ property === 'name' ? 'Name' : 'Value' }}
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`form-${item}-${property}`"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`form-${item}-${property}`"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </div>
               </div>
             </FormischField>
 

@@ -6,7 +6,7 @@
 
 <template>
   <div
-    class="space-y-2 rounded-md border p-4 text-sm"
+    class="border-default space-y-2 rounded-md border p-4 text-sm"
     role="status"
   >
     <p>

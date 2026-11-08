@@ -40,7 +40,7 @@
       <dl
         v-for="difference in report.differences"
         :key="difference.field"
-        class="rounded-md border p-3 text-sm"
+        class="border-default rounded-md border p-3 text-sm"
       >
         <dt class="font-medium">{{ difference.field }}</dt>
 

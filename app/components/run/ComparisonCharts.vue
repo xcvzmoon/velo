@@ -22,7 +22,7 @@
       <figure
         v-for="chart in charts"
         :key="chart.metric"
-        class="min-w-0 space-y-3 rounded-md border p-4"
+        class="border-default min-w-0 space-y-3 rounded-md border p-4"
       >
         <figcaption class="text-sm font-medium">{{ chart.label }}</figcaption>
 

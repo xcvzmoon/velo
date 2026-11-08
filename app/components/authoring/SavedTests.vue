@@ -63,11 +63,11 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Saved test definitions"
   >
-    <h2 class="font-medium">Saved tests</h2>
+    <template #header><h2 class="text-highlighted font-semibold">Saved tests</h2></template>
 
     <p
       v-if="error"
@@ -93,19 +93,21 @@
         :path="['name']"
       >
         <div class="space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="test-name"
-          >
-            Test name
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="test-name"
+            >
+              Test name
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled || busy"
-            id="test-name"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :disabled="disabled || busy"
+              id="test-name"
+            />
+          </div>
 
           <p
             v-if="field.errors"
@@ -124,21 +126,23 @@
     </FormischForm>
 
     <template v-if="names.length">
-      <label
-        class="text-sm font-medium"
-        for="saved-test"
-      >
-        Saved test
-      </label>
+      <div class="grid min-w-0 gap-2">
+        <label
+          class="text-sm font-medium"
+          for="saved-test"
+        >
+          Saved test
+        </label>
 
-      <USelect
-        v-model="chosen"
-        :disabled="disabled || busy"
-        :items="[...names.map((name) => ({ label: name, value: name }))]"
-        id="saved-test"
-        placeholder="Choose a test"
-        class="w-full"
-      />
+        <USelect
+          v-model="chosen"
+          :disabled="disabled || busy"
+          :items="[...names.map((name) => ({ label: name, value: name }))]"
+          id="saved-test"
+          placeholder="Choose a test"
+          class="w-full"
+        />
+      </div>
 
       <div class="flex gap-3">
         <UButton
@@ -158,5 +162,5 @@
         />
       </div>
     </template>
-  </section>
+  </ShellPanel>
 </template>

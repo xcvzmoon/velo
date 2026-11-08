@@ -261,11 +261,13 @@
 </script>
 
 <template>
-  <section
-    class="space-y-5 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Scenario authoring"
   >
-    <h2 class="font-medium">Scenarios and user sessions</h2>
+    <template #header>
+      <h2 class="text-highlighted font-semibold">Scenarios and user sessions</h2>
+    </template>
 
     <p class="text-muted text-sm">
       Each admitted iteration selects one weighted scenario and executes its steps in order. VU
@@ -471,5 +473,5 @@
         No {{ selection.phase }} steps configured.
       </p>
     </template>
-  </section>
+  </ShellPanel>
 </template>

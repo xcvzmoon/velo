@@ -293,22 +293,52 @@
 </script>
 
 <template>
-  <div class="space-y-6">
-    <section
-      class="space-y-4 rounded-lg border p-6"
+  <div class="authoring-workspace space-y-6">
+    <ShellPanel
+      variant="section"
       aria-label="Test definition"
     >
-      <h2 class="font-medium">Test definition</h2>
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-highlighted text-xl font-semibold tracking-tight">Test definition</h2>
+          <p class="text-muted font-mono text-xs">velo.test.json · v1</p>
+        </div>
+      </template>
 
-      <p class="text-muted text-sm">
-        Visual and JSON editors share a version 1 definition. Changes in JSON apply only after
-        parsing succeeds. Use
-        <code v-text="'{{name}}'" />
-        for variables and
-        <code v-text="'{{secret:name}}'" />
-        for OS secrets. JSON body placeholders belong inside strings. Exports clear local upload
-        paths; select files again after importing.
+      <p class="text-default max-w-3xl text-base leading-relaxed">
+        Visual and JSON editors share a
+        <strong class="text-highlighted font-semibold">version 1 definition.</strong>
+        Changes in JSON apply only after parsing succeeds.
       </p>
+
+      <UAlert
+        :ui="{ title: 'text-highlighted', description: 'text-default leading-relaxed opacity-100' }"
+        title="Variables and secret references"
+        icon="i-hugeicons-code"
+        color="info"
+        variant="soft"
+      >
+        <template #description>
+          <div class="mt-2 grid gap-4 sm:grid-cols-2">
+            <p>
+              Use
+              <code v-text="'{{name}}'" />
+              for shared or environment values.
+            </p>
+
+            <p>
+              Use
+              <code v-text="'{{secret:name}}'" />
+              for OS-store references.
+            </p>
+          </div>
+
+          <p class="mt-3 text-sm leading-relaxed">
+            JSON body placeholders belong inside strings. Exports clear local upload paths; select
+            files again after importing.
+          </p>
+        </template>
+      </UAlert>
 
       <div class="flex flex-wrap gap-3">
         <UButton
@@ -329,45 +359,56 @@
       </div>
 
       <template v-if="definition">
-        <label
-          class="text-sm font-medium"
-          for="authoring-environment"
-        >
-          Active environment
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            class="text-sm font-medium"
+            for="authoring-environment"
+          >
+            Active environment
+          </label>
 
-        <USelect
-          v-model="environment"
-          :disabled="disabled || busy"
-          :items="[
-            { label: 'Shared variables only', value: '__shared__' },
-            ...environments.map((name) => ({ label: name, value: `env:${name}` })),
-          ]"
-          id="authoring-environment"
-          class="w-full"
-        />
+          <USelect
+            v-model="environment"
+            :disabled="disabled || busy"
+            :items="[
+              { label: 'Shared variables only', value: '__shared__' },
+              ...environments.map((name) => ({ label: name, value: `env:${name}` })),
+            ]"
+            id="authoring-environment"
+            class="w-full"
+          />
+        </div>
 
-        <p class="text-muted text-xs">
+        <p class="text-muted max-w-3xl text-xs leading-relaxed">
           Manage shared variables and named environments in JSON. Environment entries override
           shared values. Put secret references in request fields and keep secret values in the OS
           store.
         </p>
       </template>
 
-      <p
+      <UAlert
         v-if="error"
-        class="text-error text-sm"
+        :description="error"
+        :ui="{ title: 'text-highlighted', description: 'text-default leading-relaxed opacity-100' }"
+        title="Test definition needs attention"
+        icon="i-hugeicons-alert-circle"
+        color="error"
+        variant="soft"
         role="alert"
-      >
-        {{ error }}
-      </p>
-    </section>
+      />
+    </ShellPanel>
 
     <UTabs
       :items="sections"
       :unmount-on-hide="false"
+      :ui="{
+        list: 'max-w-full overflow-x-auto rounded-xl bg-elevated/60 ring ring-inset ring-default',
+        trigger: 'shrink-0',
+        content: 'min-w-0 space-y-6',
+      }"
       default-value="request"
-      variant="link"
+      variant="pill"
+      color="neutral"
       class="gap-6"
     >
       <template #request>
@@ -432,9 +473,9 @@
           "
         />
 
-        <section
+        <ShellPanel
           v-if="mode === 'json'"
-          class="rounded-lg border p-6"
+          variant="inset"
         >
           <AuthoringTextForm
             :source="source"
@@ -447,7 +488,7 @@
               emitInvalidation();
             "
           />
-        </section>
+        </ShellPanel>
       </template>
 
       <template #data>
@@ -463,41 +504,53 @@
             "
           />
 
-          <section
+          <ShellPanel
             v-if="definition?.dataset"
-            class="space-y-4 rounded-lg border p-6"
+            variant="inset"
             aria-label="Prepared data preview"
           >
-            <h2 class="font-medium">Prepared data preview</h2>
+            <template #header>
+              <h2 class="text-highlighted text-lg font-semibold tracking-tight">
+                Prepared data preview
+              </h2>
+            </template>
 
-            <p class="text-muted text-sm">
-              Preview shows the first five records, including intentional invalid values. Rows stay
-              in memory and are discarded when preparation ends. Imported files must be selected
-              again after loading a saved test.
-            </p>
+            <UAlert
+              :ui="{
+                title: 'text-highlighted',
+                description: 'text-default leading-relaxed opacity-100',
+              }"
+              title="Preview scope"
+              description="Preview shows the first five records, including intentional invalid values. Rows stay in memory and are discarded when preparation ends. Imported files must be selected again after loading a saved test."
+              icon="i-hugeicons-information-circle"
+              color="neutral"
+              variant="soft"
+            />
 
             <template v-if="definition.dataset.source.kind !== 'faker'">
-              <label
-                class="text-sm font-medium"
-                for="dataset-file"
-              >
-                CSV or JSON file (up to 8 MiB)
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  class="text-sm font-medium"
+                  for="dataset-file"
+                >
+                  CSV or JSON file (up to 8 MiB)
+                </label>
 
-              <UFileUpload
-                :disabled="disabled || busy"
-                :accept="
-                  definition.dataset.source.kind === 'csv'
-                    ? '.csv,text/csv'
-                    : '.json,application/json'
-                "
-                :model-value="null"
-                :preview="false"
-                id="dataset-file"
-                label="Choose a CSV or JSON file"
-                reset
-                @update:model-value="readDataFile"
-              />
+                <UFileUpload
+                  :disabled="disabled || busy"
+                  :accept="
+                    definition.dataset.source.kind === 'csv'
+                      ? '.csv,text/csv'
+                      : '.json,application/json'
+                  "
+                  :model-value="null"
+                  :preview="false"
+                  id="dataset-file"
+                  label="Choose a CSV or JSON file"
+                  reset
+                  @update:model-value="readDataFile"
+                />
+              </div>
             </template>
 
             <UButton
@@ -525,9 +578,9 @@
 
             <pre
               v-if="dataPreview.length"
-              class="max-h-80 overflow-auto rounded-md border p-3 text-xs"
+              class="border-default max-h-80 overflow-auto rounded-md border p-3 text-xs"
               >{{ JSON.stringify(dataPreview, null, 2) }}</pre>
-          </section>
+          </ShellPanel>
 
           <ShellEmptyState
             v-if="!definition"
@@ -538,17 +591,27 @@
       </template>
 
       <template #preview>
-        <section
-          class="space-y-4 rounded-lg border p-6"
+        <ShellPanel
+          variant="section"
           aria-label="Single request preview"
         >
-          <h2 class="font-medium">Preview one request</h2>
+          <template #header>
+            <h2 class="text-highlighted text-xl font-semibold tracking-tight">
+              Preview one request
+            </h2>
+          </template>
 
-          <p class="text-muted text-sm">
-            Preview sends one logical request with the configured timeout and redirects. Clicking
-            confirms that you are authorized to send it. The response is bounded and known request
-            values are redacted. Preview is separate from load-test history.
-          </p>
+          <UAlert
+            :ui="{
+              title: 'text-highlighted',
+              description: 'text-default leading-relaxed opacity-100',
+            }"
+            title="Preview sends one request"
+            description="Preview sends one logical request with the configured timeout and redirects. Clicking confirms that you are authorized to send it. The response is bounded and known request values are redacted. Preview is separate from load-test history."
+            icon="i-hugeicons-information-circle"
+            color="info"
+            variant="soft"
+          />
 
           <div class="flex flex-wrap gap-3">
             <UButton
@@ -605,14 +668,14 @@
             </p>
 
             <pre
-              class="max-h-64 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
+              class="border-default max-h-64 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
               >{{ preview.headers.map(({ name, value }) => `${name}: ${value}`).join('\n') }}</pre>
 
             <pre
-              class="max-h-96 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
+              class="border-default max-h-96 overflow-auto rounded-md border p-3 text-xs break-all whitespace-pre-wrap"
               >{{ preview.body }}</pre>
           </template>
-        </section>
+        </ShellPanel>
       </template>
 
       <template #library>
@@ -654,3 +717,11 @@
     </UTabs>
   </div>
 </template>
+
+<style scoped>
+  @reference '../../assets/css/tailwind.css';
+
+  .authoring-workspace :deep(p code) {
+    @apply bg-default text-highlighted rounded px-1.5 py-0.5 font-mono text-xs;
+  }
+</style>

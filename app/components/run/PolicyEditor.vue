@@ -33,7 +33,7 @@
 </script>
 
 <template>
-  <div class="space-y-4 border-t pt-6">
+  <div class="border-default space-y-4 border-t pt-6">
     <h3 class="text-sm font-medium">Measurement window and automatic stopping</h3>
 
     <FormischField
@@ -42,24 +42,26 @@
       :path="['warmup_ms']"
     >
       <div class="max-w-xs space-y-2">
-        <label
-          class="text-sm font-medium"
-          for="warmup-ms"
-        >
-          Warm-up within scheduling duration (ms)
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            class="text-sm font-medium"
+            for="warmup-ms"
+          >
+            Warm-up within scheduling duration (ms)
+          </label>
 
-        <UInput
-          v-model="field.input"
-          v-bind="field.props"
-          :disabled="disabled"
-          :aria-invalid="Boolean(field.errors)"
-          id="warmup-ms"
-          aria-describedby="warmup-error"
-          type="number"
-          min="0"
-          step="1"
-        />
+          <UInput
+            v-model="field.input"
+            v-bind="field.props"
+            :disabled="disabled"
+            :aria-invalid="Boolean(field.errors)"
+            id="warmup-ms"
+            aria-describedby="warmup-error"
+            type="number"
+            min="0"
+            step="1"
+          />
+        </div>
 
         <p
           v-if="field.errors"
@@ -99,7 +101,6 @@
           :disabled="disabled || fieldArray.items.length >= 8"
           type="button"
           variant="outline"
-          size="sm"
           color="neutral"
           label="Add stop policy"
           @click="
@@ -125,7 +126,7 @@
         <div
           v-for="(item, index) in fieldArray.items"
           :key="item"
-          class="space-y-4 rounded-md border p-4"
+          class="border-default space-y-4 rounded-md border p-4"
         >
           <div class="flex items-center justify-between gap-3">
             <h4 class="text-sm font-medium">Stop policy {{ index + 1 }}</h4>
@@ -135,7 +136,6 @@
               :aria-label="`Remove stop policy ${index + 1}`"
               type="button"
               variant="ghost"
-              size="sm"
               color="neutral"
               label="Remove"
               @click="remove(form, { path: ['abort_policies'], at: index })"
@@ -149,26 +149,28 @@
               :path="['abort_policies', index, 'rule', 'metric']"
             >
               <div class="space-y-2">
-                <label
-                  :for="`policy-${item}-metric`"
-                  class="text-sm font-medium"
-                >
-                  Metric and unit
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`policy-${item}-metric`"
+                    class="text-sm font-medium"
+                  >
+                    Metric and unit
+                  </label>
 
-                <USelect
-                  v-model="field.input"
-                  :disabled="disabled"
-                  :name="field.props.name"
-                  :id="`policy-${item}-metric`"
-                  :items="[
-                    { label: 'Response p95 (ms)', value: 'response_p95_ms' },
-                    { label: 'HTTP failure (%)', value: 'http_failure_percent' },
-                    { label: 'Assertion failure (%)', value: 'assertion_failure_percent' },
-                    { label: 'HTTP requests/s', value: 'request_rate' },
-                  ]"
-                  class="w-full"
-                />
+                  <USelect
+                    v-model="field.input"
+                    :disabled="disabled"
+                    :name="field.props.name"
+                    :id="`policy-${item}-metric`"
+                    :items="[
+                      { label: 'Response p95 (ms)', value: 'response_p95_ms' },
+                      { label: 'HTTP failure (%)', value: 'http_failure_percent' },
+                      { label: 'Assertion failure (%)', value: 'assertion_failure_percent' },
+                      { label: 'HTTP requests/s', value: 'request_rate' },
+                    ]"
+                    class="w-full"
+                  />
+                </div>
               </div>
             </FormischField>
 
@@ -178,24 +180,26 @@
               :path="['abort_policies', index, 'rule', 'operator']"
             >
               <div class="space-y-2">
-                <label
-                  :for="`policy-${item}-operator`"
-                  class="text-sm font-medium"
-                >
-                  Required comparison
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`policy-${item}-operator`"
+                    class="text-sm font-medium"
+                  >
+                    Required comparison
+                  </label>
 
-                <USelect
-                  v-model="field.input"
-                  :disabled="disabled"
-                  :name="field.props.name"
-                  :id="`policy-${item}-operator`"
-                  :items="[
-                    { label: 'Strictly less than', value: 'less_than' },
-                    { label: 'Strictly greater than', value: 'greater_than' },
-                  ]"
-                  class="w-full"
-                />
+                  <USelect
+                    v-model="field.input"
+                    :disabled="disabled"
+                    :name="field.props.name"
+                    :id="`policy-${item}-operator`"
+                    :items="[
+                      { label: 'Strictly less than', value: 'less_than' },
+                      { label: 'Strictly greater than', value: 'greater_than' },
+                    ]"
+                    class="w-full"
+                  />
+                </div>
               </div>
             </FormischField>
 
@@ -205,24 +209,26 @@
               :path="['abort_policies', index, 'rule', 'limit']"
             >
               <div class="space-y-2">
-                <label
-                  :for="`policy-${item}-limit`"
-                  class="text-sm font-medium"
-                >
-                  Limit
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`policy-${item}-limit`"
+                    class="text-sm font-medium"
+                  >
+                    Limit
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`policy-${item}-limit`"
-                  :disabled="disabled"
-                  :aria-invalid="Boolean(field.errors)"
-                  :aria-describedby="`policy-${item}-limit-error`"
-                  type="number"
-                  min="0"
-                  step="any"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`policy-${item}-limit`"
+                    :disabled="disabled"
+                    :aria-invalid="Boolean(field.errors)"
+                    :aria-describedby="`policy-${item}-limit-error`"
+                    type="number"
+                    min="0"
+                    step="any"
+                  />
+                </div>
 
                 <p
                   v-if="field.errors"
@@ -243,24 +249,26 @@
               :path="['abort_policies', index, option.name]"
             >
               <div class="space-y-2">
-                <label
-                  :for="`policy-${item}-${option.name}`"
-                  class="text-sm font-medium"
-                >
-                  {{ option.label }}
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`policy-${item}-${option.name}`"
+                    class="text-sm font-medium"
+                  >
+                    {{ option.label }}
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`policy-${item}-${option.name}`"
-                  :disabled="disabled"
-                  :min="option.min"
-                  :step="option.step"
-                  :aria-invalid="Boolean(field.errors)"
-                  :aria-describedby="`policy-${item}-${option.name}-error`"
-                  type="number"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`policy-${item}-${option.name}`"
+                    :disabled="disabled"
+                    :min="option.min"
+                    :step="option.step"
+                    :aria-invalid="Boolean(field.errors)"
+                    :aria-describedby="`policy-${item}-${option.name}-error`"
+                    type="number"
+                  />
+                </div>
 
                 <p
                   v-if="field.errors"

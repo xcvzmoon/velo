@@ -57,7 +57,7 @@
 <template>
   <FormischForm
     :of="form"
-    class="space-y-4 rounded-md border p-4"
+    class="border-default space-y-4 rounded-md border p-4"
     @submit="
       emit('apply', $event);
       emit('dirty', false);
@@ -69,23 +69,25 @@
       :path="['seed']"
     >
       <div class="space-y-2">
-        <label
-          :for="`${formId}-seed`"
-          class="text-sm font-medium"
-        >
-          Selection seed
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="`${formId}-seed`"
+            class="text-sm font-medium"
+          >
+            Selection seed
+          </label>
 
-        <UInput
-          v-model="field.input"
-          v-bind="field.props"
-          :id="`${formId}-seed`"
-          :disabled="disabled"
-          type="number"
-          min="0"
-          max="4294967295"
-          step="1"
-        />
+          <UInput
+            v-model="field.input"
+            v-bind="field.props"
+            :id="`${formId}-seed`"
+            :disabled="disabled"
+            type="number"
+            min="0"
+            max="4294967295"
+            step="1"
+          />
+        </div>
 
         <p
           v-if="field.errors"
@@ -104,20 +106,22 @@
         :path="['id']"
       >
         <div class="space-y-2">
-          <label
-            :for="`${formId}-id`"
-            class="text-sm font-medium"
-          >
-            Scenario name / stable ID
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${formId}-id`"
+              class="text-sm font-medium"
+            >
+              Scenario name / stable ID
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${formId}-id`"
-            :disabled="disabled"
-            autocomplete="off"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${formId}-id`"
+              :disabled="disabled"
+              autocomplete="off"
+            />
+          </div>
 
           <p
             v-if="field.errors"
@@ -135,23 +139,25 @@
         :path="['weight']"
       >
         <div class="space-y-2">
-          <label
-            :for="`${formId}-weight`"
-            class="text-sm font-medium"
-          >
-            Relative selection weight
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${formId}-weight`"
+              class="text-sm font-medium"
+            >
+              Relative selection weight
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${formId}-weight`"
-            :disabled="disabled"
-            type="number"
-            min="1"
-            max="10000"
-            step="1"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${formId}-weight`"
+              :disabled="disabled"
+              type="number"
+              min="1"
+              max="10000"
+              step="1"
+            />
+          </div>
 
           <p
             v-if="field.errors"

@@ -148,7 +148,7 @@
   <div class="space-y-4">
     <FormischForm
       :of="form"
-      class="space-y-4 rounded-md border p-4"
+      class="border-default space-y-4 rounded-md border p-4"
       @submit="apply"
     >
       <div class="grid gap-4 sm:grid-cols-2">
@@ -158,20 +158,22 @@
           :path="['id']"
         >
           <div class="space-y-2">
-            <label
-              :for="`${formId}-id`"
-              class="text-sm font-medium"
-            >
-              Step name / stable ID
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`${formId}-id`"
+                class="text-sm font-medium"
+              >
+                Step name / stable ID
+              </label>
 
-            <UInput
-              v-model="field.input"
-              v-bind="field.props"
-              :id="`${formId}-id`"
-              :disabled="disabled"
-              autocomplete="off"
-            />
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :id="`${formId}-id`"
+                :disabled="disabled"
+                autocomplete="off"
+              />
+            </div>
 
             <p
               v-if="field.errors"
@@ -189,23 +191,25 @@
           :path="['think_ms']"
         >
           <div class="space-y-2">
-            <label
-              :for="`${formId}-think`"
-              class="text-sm font-medium"
-            >
-              Think time after step (ms)
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`${formId}-think`"
+                class="text-sm font-medium"
+              >
+                Think time after step (ms)
+              </label>
 
-            <UInput
-              v-model="field.input"
-              v-bind="field.props"
-              :id="`${formId}-think`"
-              :disabled="disabled"
-              type="number"
-              min="0"
-              max="3600000"
-              step="1"
-            />
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :id="`${formId}-think`"
+                :disabled="disabled"
+                type="number"
+                min="0"
+                max="3600000"
+                step="1"
+              />
+            </div>
 
             <p
               v-if="field.errors"
@@ -224,24 +228,26 @@
         :path="['on_failure']"
       >
         <div class="space-y-2">
-          <label
-            :for="`${formId}-failure`"
-            class="text-sm font-medium"
-          >
-            On HTTP, assertion or required extraction failure
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${formId}-failure`"
+              class="text-sm font-medium"
+            >
+              On HTTP, assertion or required extraction failure
+            </label>
 
-          <USelect
-            v-model="field.input"
-            :disabled="disabled"
-            :name="field.props.name"
-            :id="`${formId}-failure`"
-            :items="[
-              { label: 'Stop this iteration', value: 'stop' },
-              { label: 'Continue independent steps', value: 'continue' },
-            ]"
-            class="w-full"
-          />
+            <USelect
+              v-model="field.input"
+              :disabled="disabled"
+              :name="field.props.name"
+              :id="`${formId}-failure`"
+              :items="[
+                { label: 'Stop this iteration', value: 'stop' },
+                { label: 'Continue independent steps', value: 'continue' },
+              ]"
+              class="w-full"
+            />
+          </div>
         </div>
       </FormischField>
 
@@ -263,7 +269,7 @@
           <div
             v-for="(item, index) in rows.items"
             :key="item"
-            class="space-y-3 rounded-md border p-3"
+            class="border-default space-y-3 rounded-md border p-3"
           >
             <FormischField
               v-slot="field"
@@ -271,20 +277,22 @@
               :path="['extractions', index, 'name']"
             >
               <div class="space-y-1">
-                <label
-                  :for="`${formId}-${item}-name`"
-                  class="text-sm font-medium"
-                >
-                  Session variable name
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`${formId}-${item}-name`"
+                    class="text-sm font-medium"
+                  >
+                    Session variable name
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`${formId}-${item}-name`"
-                  :disabled="disabled"
-                  autocomplete="off"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`${formId}-${item}-name`"
+                    :disabled="disabled"
+                    autocomplete="off"
+                  />
+                </div>
 
                 <p
                   v-if="field.errors"
@@ -302,25 +310,27 @@
               :path="['extractions', index, 'kind']"
             >
               <div class="space-y-1">
-                <label
-                  :for="`${formId}-${item}-kind`"
-                  class="text-sm font-medium"
-                >
-                  Source
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`${formId}-${item}-kind`"
+                    class="text-sm font-medium"
+                  >
+                    Source
+                  </label>
 
-                <USelect
-                  v-model="field.input"
-                  :disabled="disabled"
-                  :name="field.props.name"
-                  :id="`${formId}-${item}-kind`"
-                  :items="[
-                    { label: 'JSON field', value: 'json' },
-                    { label: 'Response header', value: 'header' },
-                    { label: 'Response cookie', value: 'cookie' },
-                  ]"
-                  class="w-full"
-                />
+                  <USelect
+                    v-model="field.input"
+                    :disabled="disabled"
+                    :name="field.props.name"
+                    :id="`${formId}-${item}-kind`"
+                    :items="[
+                      { label: 'JSON field', value: 'json' },
+                      { label: 'Response header', value: 'header' },
+                      { label: 'Response cookie', value: 'cookie' },
+                    ]"
+                    class="w-full"
+                  />
+                </div>
               </div>
             </FormischField>
 
@@ -330,20 +340,22 @@
               :path="['extractions', index, 'selector']"
             >
               <div class="space-y-1">
-                <label
-                  :for="`${formId}-${item}-selector`"
-                  class="text-sm font-medium"
-                >
-                  JSON pointer, header or cookie name
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`${formId}-${item}-selector`"
+                    class="text-sm font-medium"
+                  >
+                    JSON pointer, header or cookie name
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`${formId}-${item}-selector`"
-                  :disabled="disabled"
-                  autocomplete="off"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`${formId}-${item}-selector`"
+                    :disabled="disabled"
+                    autocomplete="off"
+                  />
+                </div>
               </div>
             </FormischField>
 
@@ -354,24 +366,26 @@
                 :path="['extractions', index, 'required']"
               >
                 <div class="space-y-1">
-                  <label
-                    :for="`${formId}-${item}-required`"
-                    class="text-sm font-medium"
-                  >
-                    Required
-                  </label>
+                  <div class="grid min-w-0 gap-2">
+                    <label
+                      :for="`${formId}-${item}-required`"
+                      class="text-sm font-medium"
+                    >
+                      Required
+                    </label>
 
-                  <USelect
-                    :model-value="field.input ? 'yes' : 'no'"
-                    :disabled="disabled"
-                    :id="`${formId}-${item}-required`"
-                    :items="[
-                      { label: 'Yes', value: 'yes' },
-                      { label: 'No', value: 'no' },
-                    ]"
-                    class="w-full"
-                    @update:model-value="field.input = $event === 'yes'"
-                  />
+                    <USelect
+                      :model-value="field.input ? 'yes' : 'no'"
+                      :disabled="disabled"
+                      :id="`${formId}-${item}-required`"
+                      :items="[
+                        { label: 'Yes', value: 'yes' },
+                        { label: 'No', value: 'no' },
+                      ]"
+                      class="w-full"
+                      @update:model-value="field.input = $event === 'yes'"
+                    />
+                  </div>
                 </div>
               </FormischField>
 
@@ -381,24 +395,26 @@
                 :path="['extractions', index, 'overwrite']"
               >
                 <div class="space-y-1">
-                  <label
-                    :for="`${formId}-${item}-overwrite`"
-                    class="text-sm font-medium"
-                  >
-                    Allow overwrite
-                  </label>
+                  <div class="grid min-w-0 gap-2">
+                    <label
+                      :for="`${formId}-${item}-overwrite`"
+                      class="text-sm font-medium"
+                    >
+                      Allow overwrite
+                    </label>
 
-                  <USelect
-                    :model-value="field.input ? 'yes' : 'no'"
-                    :disabled="disabled"
-                    :id="`${formId}-${item}-overwrite`"
-                    :items="[
-                      { label: 'Yes', value: 'yes' },
-                      { label: 'No', value: 'no' },
-                    ]"
-                    class="w-full"
-                    @update:model-value="field.input = $event === 'yes'"
-                  />
+                    <USelect
+                      :model-value="field.input ? 'yes' : 'no'"
+                      :disabled="disabled"
+                      :id="`${formId}-${item}-overwrite`"
+                      :items="[
+                        { label: 'Yes', value: 'yes' },
+                        { label: 'No', value: 'no' },
+                      ]"
+                      class="w-full"
+                      @update:model-value="field.input = $event === 'yes'"
+                    />
+                  </div>
                 </div>
               </FormischField>
             </div>

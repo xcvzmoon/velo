@@ -40,22 +40,24 @@
       :path="['text']"
     >
       <div class="space-y-2">
-        <label
-          :for="inputId"
-          class="text-sm font-medium"
-        >
-          {{ label }}
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="inputId"
+            class="text-sm font-medium"
+          >
+            {{ label }}
+          </label>
 
-        <UTextarea
-          v-model="field.input"
-          v-bind="field.props"
-          :id="inputId"
-          :disabled="disabled"
-          :ui="{ base: 'min-h-64 font-mono text-xs md:text-xs' }"
-          spellcheck="false"
-          autocomplete="off"
-        />
+          <UTextarea
+            v-model="field.input"
+            v-bind="field.props"
+            :id="inputId"
+            :disabled="disabled"
+            :ui="{ base: 'font-mono' }"
+            spellcheck="false"
+            autocomplete="off"
+          />
+        </div>
 
         <p
           v-if="field.errors"

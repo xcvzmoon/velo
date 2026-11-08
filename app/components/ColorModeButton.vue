@@ -7,7 +7,6 @@
   <UButton
     :aria-label="`Switch to ${isDark ? 'light' : 'dark'} mode`"
     :icon="isDark ? 'i-hugeicons-moon-02' : 'i-hugeicons-sun-03'"
-    size="sm"
     color="neutral"
     variant="ghost"
     class="p-1.5"

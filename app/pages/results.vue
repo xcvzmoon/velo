@@ -17,23 +17,40 @@
 </script>
 
 <template>
-  <div>
+  <div class="mx-auto max-w-7xl min-w-0 space-y-6">
     <ShellPageHeading
       title="Results"
       description="Inspect measurements, compare against a baseline, and export run evidence."
-    />
+    >
+      <UButton
+        to="/tests"
+        label="Configure a test"
+        icon="i-hugeicons-test-tube-01"
+        color="neutral"
+        variant="outline"
+      />
+    </ShellPageHeading>
 
     <UTabs
       :items="sections"
       :unmount-on-hide="false"
-      variant="link"
+      :ui="{
+        list: 'max-w-full overflow-x-auto rounded-xl bg-elevated/60 ring ring-inset ring-default',
+        trigger: 'shrink-0',
+        content: 'min-w-0 space-y-6',
+      }"
+      variant="pill"
+      color="neutral"
       class="gap-6"
     >
       <template #latest>
-        <template v-if="snapshot">
+        <div
+          v-if="snapshot"
+          class="space-y-6"
+        >
           <RunMonitor />
           <RunSummary />
-        </template>
+        </div>
 
         <ShellEmptyState
           v-else

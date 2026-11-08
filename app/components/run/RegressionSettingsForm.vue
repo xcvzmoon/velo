@@ -115,7 +115,7 @@
         <div
           v-for="(item, index) in array.items"
           :key="item"
-          class="grid gap-3 rounded-md border p-3 md:grid-cols-4"
+          class="border-default grid gap-3 rounded-md border p-3 md:grid-cols-4"
         >
           <FormischField
             v-slot="field"
@@ -123,22 +123,24 @@
             :path="['budgets', index, 'metric']"
           >
             <div class="space-y-2">
-              <label
-                :for="`${formId}-${item}-metric`"
-                class="text-sm font-medium"
-              >
-                Metric
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`${formId}-${item}-metric`"
+                  class="text-sm font-medium"
+                >
+                  Metric
+                </label>
 
-              <USelect
-                v-model="field.input"
-                :disabled="disabled"
-                :id="`${formId}-${item}-metric`"
-                :items="[
-                  ...metrics.map((metric) => ({ label: metric.label, value: metric.value })),
-                ]"
-                class="w-full"
-              />
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :id="`${formId}-${item}-metric`"
+                  :items="[
+                    ...metrics.map((metric) => ({ label: metric.label, value: metric.value })),
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -148,23 +150,25 @@
             :path="['budgets', index, 'limit']"
           >
             <div class="space-y-2">
-              <label
-                :for="`${formId}-${item}-limit`"
-                class="text-sm font-medium"
-              >
-                Maximum worsening
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`${formId}-${item}-limit`"
+                  class="text-sm font-medium"
+                >
+                  Maximum worsening
+                </label>
 
-              <UInput
-                v-model="field.input"
-                v-bind="field.props"
-                :id="`${formId}-${item}-limit`"
-                :disabled="disabled"
-                type="number"
-                min="0"
-                max="1000000000000"
-                step="any"
-              />
+                <UInput
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="`${formId}-${item}-limit`"
+                  :disabled="disabled"
+                  type="number"
+                  min="0"
+                  max="1000000000000"
+                  step="any"
+                />
+              </div>
 
               <p
                 v-if="field.errors"
@@ -182,23 +186,25 @@
             :path="['budgets', index, 'unit']"
           >
             <div class="space-y-2">
-              <label
-                :for="`${formId}-${item}-unit`"
-                class="text-sm font-medium"
-              >
-                Limit unit
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`${formId}-${item}-unit`"
+                  class="text-sm font-medium"
+                >
+                  Limit unit
+                </label>
 
-              <USelect
-                v-model="field.input"
-                :disabled="disabled"
-                :id="`${formId}-${item}-unit`"
-                :items="[
-                  { label: 'Absolute metric units', value: 'absolute' },
-                  { label: 'Relative percent', value: 'percentage' },
-                ]"
-                class="w-full"
-              />
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :id="`${formId}-${item}-unit`"
+                  :items="[
+                    { label: 'Absolute metric units', value: 'absolute' },
+                    { label: 'Relative percent', value: 'percentage' },
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -242,23 +248,25 @@
       :path="['review']"
     >
       <div class="space-y-2">
-        <label
-          :for="`${formId}-review`"
-          class="text-sm font-medium"
-        >
-          Configuration review
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="`${formId}-review`"
+            class="text-sm font-medium"
+          >
+            Configuration review
+          </label>
 
-        <USelect
-          v-model="field.input"
-          :disabled="disabled"
-          :id="`${formId}-review`"
-          :items="[
-            { label: 'Pending review', value: 'pending' },
-            { label: 'I reviewed differences and redacted request context', value: 'reviewed' },
-          ]"
-          class="w-full"
-        />
+          <USelect
+            v-model="field.input"
+            :disabled="disabled"
+            :id="`${formId}-review`"
+            :items="[
+              { label: 'Pending review', value: 'pending' },
+              { label: 'I reviewed differences and redacted request context', value: 'reviewed' },
+            ]"
+            class="w-full"
+          />
+        </div>
       </div>
     </FormischField>
 

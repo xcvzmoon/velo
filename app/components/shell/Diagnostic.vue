@@ -5,21 +5,23 @@
   const { message, error, checkConnection } = useDiagnostic();
   const form = useForm<typeof diagnosticInputSchema>({
     schema: diagnosticInputSchema,
-    initialInput: { label: 'Velo desktop' },
+    initialInput: { label: 'Velo Desktop' },
   });
 </script>
 
 <template>
-  <section
-    class="rounded-lg border p-6"
+  <ShellPanel
+    variant="inset"
     aria-labelledby="diagnostic-heading"
   >
-    <h2
-      id="diagnostic-heading"
-      class="text-base font-medium"
-    >
-      Native connection
-    </h2>
+    <template #header>
+      <h2
+        id="diagnostic-heading"
+        class="text-highlighted text-sm font-semibold"
+      >
+        Native connection
+      </h2>
+    </template>
 
     <p class="text-muted mt-2 max-w-lg text-sm leading-relaxed">
       Verify that the desktop app can communicate with the independent Rust engine. This check sends
@@ -37,22 +39,24 @@
         :path="['label']"
       >
         <div class="max-w-sm space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="diagnostic-label"
-          >
-            Diagnostic label
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="diagnostic-label"
+            >
+              Diagnostic label
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="form.isSubmitting"
-            :aria-invalid="Boolean(field.errors)"
-            id="diagnostic-label"
-            aria-describedby="diagnostic-label-help diagnostic-label-error"
-            autocomplete="off"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :disabled="form.isSubmitting"
+              :aria-invalid="Boolean(field.errors)"
+              id="diagnostic-label"
+              aria-describedby="diagnostic-label-help diagnostic-label-error"
+              autocomplete="off"
+            />
+          </div>
 
           <p
             id="diagnostic-label-help"
@@ -88,5 +92,5 @@
     >
       {{ message }}
     </p>
-  </section>
+  </ShellPanel>
 </template>

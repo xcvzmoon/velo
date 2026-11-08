@@ -140,11 +140,13 @@
 </script>
 
 <template>
-  <section
-    class="space-y-5 rounded-md border p-4"
+  <ShellPanel
+    variant="inset"
     aria-label="Baseline comparison"
   >
-    <h3 class="font-medium">Candidate release and regression report</h3>
+    <template #header>
+      <h3 class="font-medium">Candidate release and regression report</h3>
+    </template>
 
     <p class="text-muted text-sm">Candidate {{ candidate.id }}</p>
 
@@ -251,5 +253,5 @@
         />
       </div>
     </template>
-  </section>
+  </ShellPanel>
 </template>

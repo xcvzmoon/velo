@@ -101,7 +101,6 @@
         :label="capitalize(preset)"
         type="button"
         variant="outline"
-        size="sm"
         color="neutral"
         @click="applyPreset(preset)"
       />
@@ -121,25 +120,27 @@
   >
     <div class="space-y-5">
       <div class="max-w-xs space-y-2">
-        <label
-          class="text-sm font-medium"
-          for="workload-kind"
-        >
-          Workload
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            class="text-sm font-medium"
+            for="workload-kind"
+          >
+            Workload
+          </label>
 
-        <USelect
-          v-model="mode.input"
-          :disabled="disabled"
-          :name="mode.props.name"
-          :items="[
-            { label: 'Constant VUs', value: 'constant' },
-            { label: 'Ramping VUs', value: 'ramping' },
-            { label: 'Constant arrival rate', value: 'arrival' },
-          ]"
-          id="workload-kind"
-          class="w-full"
-        />
+          <USelect
+            v-model="mode.input"
+            :disabled="disabled"
+            :name="mode.props.name"
+            :items="[
+              { label: 'Constant VUs', value: 'constant' },
+              { label: 'Ramping VUs', value: 'ramping' },
+              { label: 'Constant arrival rate', value: 'arrival' },
+            ]"
+            id="workload-kind"
+            class="w-full"
+          />
+        </div>
       </div>
 
       <div
@@ -154,23 +155,25 @@
           :path="[option.name]"
         >
           <div class="space-y-2">
-            <label
-              :for="`request-${option.name}`"
-              class="text-sm font-medium"
-            >
-              {{ option.label }}
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`request-${option.name}`"
+                class="text-sm font-medium"
+              >
+                {{ option.label }}
+              </label>
 
-            <UInput
-              v-model="field.input"
-              v-bind="field.props"
-              :id="`request-${option.name}`"
-              :aria-invalid="Boolean(field.errors)"
-              :aria-describedby="`request-${option.name}-error`"
-              type="number"
-              min="1"
-              step="1"
-            />
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :id="`request-${option.name}`"
+                :aria-invalid="Boolean(field.errors)"
+                :aria-describedby="`request-${option.name}-error`"
+                type="number"
+                min="1"
+                step="1"
+              />
+            </div>
 
             <p
               v-if="field.errors"
@@ -202,23 +205,25 @@
           :path="['start_vus']"
         >
           <div class="max-w-xs space-y-2">
-            <label
-              class="text-sm font-medium"
-              for="start-vus"
-            >
-              Starting VUs
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                class="text-sm font-medium"
+                for="start-vus"
+              >
+                Starting VUs
+              </label>
 
-            <UInput
-              v-model="field.input"
-              v-bind="field.props"
-              :aria-invalid="Boolean(field.errors)"
-              id="start-vus"
-              aria-describedby="start-vus-error"
-              type="number"
-              min="0"
-              step="1"
-            />
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :aria-invalid="Boolean(field.errors)"
+                id="start-vus"
+                aria-describedby="start-vus-error"
+                type="number"
+                min="0"
+                step="1"
+              />
+            </div>
 
             <p
               v-if="field.errors"
@@ -244,7 +249,6 @@
                 :disabled="disabled"
                 type="button"
                 variant="outline"
-                size="sm"
                 color="neutral"
                 label="Add stage"
                 @click="
@@ -259,7 +263,7 @@
             <div
               v-for="(item, index) in fieldArray.items"
               :key="item"
-              class="grid items-start gap-3 rounded-md border p-4 sm:grid-cols-[auto_1fr_1fr_auto]"
+              class="border-default grid items-start gap-3 rounded-md border p-4 sm:grid-cols-[auto_1fr_1fr_auto]"
             >
               <p class="text-muted pt-2 text-xs">{{ index + 1 }}</p>
 
@@ -271,23 +275,25 @@
                 :path="['stages', index, name]"
               >
                 <div class="space-y-2">
-                  <label
-                    :for="`stage-${item}-${name}`"
-                    class="text-sm font-medium"
-                  >
-                    {{ label }}
-                  </label>
+                  <div class="grid min-w-0 gap-2">
+                    <label
+                      :for="`stage-${item}-${name}`"
+                      class="text-sm font-medium"
+                    >
+                      {{ label }}
+                    </label>
 
-                  <UInput
-                    v-model="field.input"
-                    v-bind="field.props"
-                    :id="`stage-${item}-${name}`"
-                    :min="min"
-                    :aria-invalid="Boolean(field.errors)"
-                    :aria-describedby="`stage-${item}-${name}-error`"
-                    type="number"
-                    step="1"
-                  />
+                    <UInput
+                      v-model="field.input"
+                      v-bind="field.props"
+                      :id="`stage-${item}-${name}`"
+                      :min="min"
+                      :aria-invalid="Boolean(field.errors)"
+                      :aria-describedby="`stage-${item}-${name}-error`"
+                      type="number"
+                      step="1"
+                    />
+                  </div>
 
                   <p
                     v-if="field.errors"

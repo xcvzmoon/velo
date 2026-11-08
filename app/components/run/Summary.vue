@@ -10,32 +10,34 @@
 </script>
 
 <template>
-  <section
+  <ShellPanel
     v-if="snapshot && !active"
     :aria-labelledby="headingId"
-    class="mt-8 space-y-6 rounded-lg border p-6"
+    variant="section"
   >
-    <div>
-      <h2
-        :id="headingId"
-        class="text-lg font-medium"
-      >
-        Final summary
-      </h2>
+    <template #header>
+      <div>
+        <h2
+          :id="headingId"
+          class="text-highlighted text-lg font-semibold"
+        >
+          Final summary
+        </h2>
 
-      <p class="text-muted mt-2 text-sm">
-        {{
-          snapshot.measurement.complete
-            ? 'Scheduling completed.'
-            : 'Partial run. Measurements cover observed work only.'
-        }}
-        Stored summaries are available in Results history when local storage is available.
-      </p>
-    </div>
+        <p class="text-muted mt-2 text-sm">
+          {{
+            snapshot.measurement.complete
+              ? 'Scheduling completed.'
+              : 'Partial run. Measurements cover observed work only.'
+          }}
+          Stored summaries are available in Results history when local storage is available.
+        </p>
+      </div>
+    </template>
 
     <div
       v-if="snapshot.dataset"
-      class="space-y-2 rounded-md border p-4 text-sm"
+      class="border-default space-y-2 rounded-md border p-4 text-sm"
     >
       <h3 class="font-medium">Dataset outcome</h3>
 
@@ -77,7 +79,7 @@
       <div
         v-for="(value, name) in snapshot.metrics.counters"
         :key="name"
-        class="flex justify-between gap-4 border-b pb-2"
+        class="border-default flex justify-between gap-4 border-b pb-2"
       >
         <dt class="text-muted capitalize">{{ name.replaceAll('_', ' ') }}</dt>
         <dd class="font-mono">{{ value }}</dd>
@@ -90,18 +92,18 @@
           actual: snapshot.actual_us,
         }"
         :key="name"
-        class="flex justify-between gap-4 border-b pb-2"
+        class="border-default flex justify-between gap-4 border-b pb-2"
       >
         <dt class="text-muted capitalize">{{ name }} duration</dt>
         <dd class="font-mono">{{ (Number(value) / 1e6).toFixed(3) }} s</dd>
       </div>
 
-      <div class="flex justify-between gap-4 border-b pb-2">
+      <div class="border-default flex justify-between gap-4 border-b pb-2">
         <dt class="text-muted">Peak requested / actual VUs</dt>
         <dd class="font-mono">{{ snapshot.confirmation.vus }} / {{ snapshot.max_vus }}</dd>
       </div>
 
-      <div class="flex justify-between gap-4 border-b pb-2">
+      <div class="border-default flex justify-between gap-4 border-b pb-2">
         <dt class="text-muted">Evaluated HTTP failure rate</dt>
 
         <dd class="font-mono">
@@ -120,7 +122,7 @@
           iterations: snapshot.evaluated.iteration_rate,
         }"
         :key="name"
-        class="flex justify-between gap-4 border-b pb-2"
+        class="border-default flex justify-between gap-4 border-b pb-2"
       >
         <dt class="text-muted capitalize">Evaluated {{ name }} per second</dt>
         <dd class="font-mono">{{ value.toFixed(2) }}</dd>
@@ -303,5 +305,5 @@
       time and includes drain. Aggregation wait: {{ snapshot.metrics.aggregation_wait_us }} μs;
       maximum in flight: {{ snapshot.metrics.max_in_flight }}.
     </p>
-  </section>
+  </ShellPanel>
 </template>

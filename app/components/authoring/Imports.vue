@@ -32,35 +32,37 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Request import"
   >
-    <h2 class="font-medium">Import a request</h2>
+    <template #header><h2 class="text-highlighted font-semibold">Import a request</h2></template>
 
     <p class="text-muted text-sm">
       Paste a cURL command, OpenAPI 3 JSON, or Postman v2 collection JSON. Conversion runs offline.
       Scripts and external references never execute.
     </p>
 
-    <label
-      class="text-sm font-medium"
-      for="import-format"
-    >
-      Source format
-    </label>
+    <div class="grid min-w-0 gap-2">
+      <label
+        class="text-sm font-medium"
+        for="import-format"
+      >
+        Source format
+      </label>
 
-    <USelect
-      v-model="format"
-      :disabled="disabled || busy"
-      :items="[
-        { label: 'cURL', value: 'curl' },
-        { label: 'OpenAPI 3 JSON', value: 'openapi' },
-        { label: 'Postman v2 JSON', value: 'postman' },
-      ]"
-      id="import-format"
-      class="w-full"
-    />
+      <USelect
+        v-model="format"
+        :disabled="disabled || busy"
+        :items="[
+          { label: 'cURL', value: 'curl' },
+          { label: 'OpenAPI 3 JSON', value: 'openapi' },
+          { label: 'Postman v2 JSON', value: 'postman' },
+        ]"
+        id="import-format"
+        class="w-full"
+      />
+    </div>
 
     <AuthoringTextForm
       :disabled="disabled || busy"
@@ -79,22 +81,24 @@
     </p>
 
     <template v-if="candidate">
-      <label
-        class="text-sm font-medium"
-        for="import-operation"
-      >
-        Request to import
-      </label>
+      <div class="grid min-w-0 gap-2">
+        <label
+          class="text-sm font-medium"
+          for="import-operation"
+        >
+          Request to import
+        </label>
 
-      <USelect
-        v-model="selected"
-        :disabled="disabled || busy"
-        :items="[
-          ...candidates.map((entry, index) => ({ label: entry.name, value: String(index) })),
-        ]"
-        id="import-operation"
-        class="w-full"
-      />
+        <USelect
+          v-model="selected"
+          :disabled="disabled || busy"
+          :items="[
+            ...candidates.map((entry, index) => ({ label: entry.name, value: String(index) })),
+          ]"
+          id="import-operation"
+          class="w-full"
+        />
+      </div>
 
       <p class="font-mono text-xs break-all">
         {{ candidate.config.method }} {{ candidate.config.url }}
@@ -121,5 +125,5 @@
         @click="emit('apply', candidate.config)"
       />
     </template>
-  </section>
+  </ShellPanel>
 </template>

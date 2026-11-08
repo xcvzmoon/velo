@@ -189,19 +189,30 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Test data"
   >
-    <h2 class="font-medium">Test data</h2>
+    <template #header>
+      <h2 class="text-highlighted text-xl font-semibold tracking-tight">Test data</h2>
+    </template>
 
-    <p class="text-muted text-sm">
-      Prepare up to 10,000 records before load. Bind fields using the existing
+    <p class="text-default max-w-3xl text-base leading-relaxed">
+      Prepare up to
+      <strong class="text-highlighted font-semibold">10,000 records</strong>
+      before load. Bind fields using
       <code v-text="'{{email}}'" />
-      syntax. Generated login identities need existing accounts on the target; generation does not
-      create accounts. Unique allocation reserves each record once, but generated values may contain
-      duplicates.
+      .
     </p>
+
+    <UAlert
+      :ui="{ title: 'text-highlighted', description: 'text-default leading-relaxed opacity-100' }"
+      title="Generated data does not create accounts"
+      description="Login identities must already exist on the target. Unique allocation reserves each record once, but generated values may contain duplicates."
+      icon="i-hugeicons-alert-circle"
+      color="warning"
+      variant="soft"
+    />
 
     <Form
       :of="form"
@@ -217,20 +228,22 @@
           :path="[setting.name]"
         >
           <div class="space-y-2">
-            <label
-              :for="`${prefix}-${setting.name}`"
-              class="text-sm font-medium"
-            >
-              {{ setting.label }}
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`${prefix}-${setting.name}`"
+                class="text-sm font-medium"
+              >
+                {{ setting.label }}
+              </label>
 
-            <USelect
-              v-model="field.input"
-              :disabled="disabled"
-              :id="`${prefix}-${setting.name}`"
-              :items="[...setting.choices.map((choice) => ({ label: choice, value: choice }))]"
-              class="w-full"
-            />
+              <USelect
+                v-model="field.input"
+                :disabled="disabled"
+                :id="`${prefix}-${setting.name}`"
+                :items="[...setting.choices.map((choice) => ({ label: choice, value: choice }))]"
+                class="w-full"
+              />
+            </div>
           </div>
         </Field>
 
@@ -242,20 +255,22 @@
           :path="[name]"
         >
           <div class="space-y-2">
-            <label
-              :for="`${prefix}-${name}`"
-              class="text-sm font-medium"
-            >
-              {{ name === 'seed' ? 'Seed' : 'Faker record count' }}
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`${prefix}-${name}`"
+                class="text-sm font-medium"
+              >
+                {{ name === 'seed' ? 'Seed' : 'Faker record count' }}
+              </label>
 
-            <UInput
-              v-model="field.input"
-              v-bind="field.props"
-              :id="`${prefix}-${name}`"
-              :disabled="disabled"
-              inputmode="numeric"
-            />
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :id="`${prefix}-${name}`"
+                :disabled="disabled"
+                inputmode="numeric"
+              />
+            </div>
 
             <p
               v-if="field.errors"
@@ -279,25 +294,27 @@
           v-if="(getInput(form).kind === 'faker') === (name === 'fields')"
           class="space-y-2"
         >
-          <label
-            :for="`${prefix}-${name}`"
-            class="text-sm font-medium"
-          >
-            {{
-              name === 'fields'
-                ? 'Ordered field definitions (JSON)'
-                : 'Variable-to-source-column mapping (JSON)'
-            }}
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${prefix}-${name}`"
+              class="text-sm font-medium"
+            >
+              {{
+                name === 'fields'
+                  ? 'Ordered field definitions (JSON)'
+                  : 'Variable-to-source-column mapping (JSON)'
+              }}
+            </label>
 
-          <UTextarea
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${prefix}-${name}`"
-            :disabled="disabled"
-            :ui="{ base: 'min-h-40 font-mono text-xs md:text-xs' }"
-            spellcheck="false"
-          />
+            <UTextarea
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${prefix}-${name}`"
+              :disabled="disabled"
+              :ui="{ base: 'font-mono' }"
+              spellcheck="false"
+            />
+          </div>
 
           <p
             v-if="field.errors"
@@ -348,5 +365,5 @@
       each index; network completion order is unspecified. Arrival workloads support run and
       iteration lifetimes.
     </p>
-  </section>
+  </ShellPanel>
 </template>

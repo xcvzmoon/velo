@@ -150,8 +150,8 @@
     </header>
 
     <UAlert
-      :ui="{ title: 'text-highlighted', description: 'text-default' }"
       v-if="error"
+      :ui="{ title: 'text-highlighted', description: 'text-default' }"
       :description="error"
       title="Native run connection"
       color="warning"
@@ -159,8 +159,8 @@
     />
 
     <UAlert
-      :ui="{ title: 'text-highlighted', description: 'text-default' }"
       v-if="historyError || historyStatus"
+      :ui="{ title: 'text-highlighted', description: 'text-default' }"
       :title="historyError ? 'History unavailable' : 'History may be incomplete'"
       :description="historyError ?? `${historyStatus}: Some run evidence may not have been stored.`"
       color="warning"
@@ -182,8 +182,8 @@
       />
 
       <UAlert
-        :ui="{ title: 'text-highlighted', description: 'text-default' }"
         v-if="limitations.length"
+        :ui="{ title: 'text-highlighted', description: 'text-default' }"
         :description="limitations.join(' ')"
         title="Measurement notes"
         color="warning"

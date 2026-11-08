@@ -5,7 +5,7 @@ export default defineAppConfig({
       neutral: 'zinc',
     },
     icons: {
-      loading: 'i-lucide-loader',
+      loading: 'i-hugeicons-loader',
     },
     button: {
       slots: {
@@ -159,10 +159,17 @@ export default defineAppConfig({
         },
       },
     },
+    empty: {
+      slots: {
+        avatar: 'bg-transparent ring-0',
+      },
+      defaultVariants: {
+        variant: 'naked',
+      },
+    },
     textarea: {
       slots: {
         root: 'w-full',
-        base: 'min-h-24',
       },
     },
     tabs: {

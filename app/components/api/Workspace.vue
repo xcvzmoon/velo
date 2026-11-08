@@ -401,11 +401,13 @@
       {{ state.error }}
     </p>
 
-    <div class="grid items-start gap-5 xl:grid-cols-[18rem_minmax(0,1fr)]">
-      <section
-        class="space-y-4 rounded-lg border p-5"
-        aria-label="API collections"
-      >
+    <div class="grid min-w-0 items-start gap-6 xl:grid-cols-[20rem_minmax(0,1fr)]">
+      <ShellPanel aria-label="API collections">
+        <template #header>
+          <h2 class="text-highlighted text-sm font-semibold">Collections</h2>
+          <p class="text-muted mt-1 text-xs">Organize requests and shared environments.</p>
+        </template>
+
         <div class="flex flex-wrap gap-2">
           <UButton
             :disabled="state.busy"
@@ -526,7 +528,7 @@
               :disabled="state.busy || documentDirty"
               variant="outline"
               color="neutral"
-              label="Edit collection JSON, defaults, environments, and extractions"
+              label="Edit collection JSON"
               @click="editDocument"
             />
 
@@ -557,19 +559,21 @@
               :path="['search']"
             >
               <div class="space-y-2">
-                <label
-                  class="text-sm font-medium"
-                  for="api-collection-search"
-                >
-                  Search requests and folders
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    class="text-sm font-medium"
+                    for="api-collection-search"
+                  >
+                    Search requests and folders
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  id="api-collection-search"
-                  type="search"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    id="api-collection-search"
+                    type="search"
+                  />
+                </div>
               </div>
             </Field>
           </Form>
@@ -586,20 +590,23 @@
             @run="changeSelection"
           />
         </template>
-      </section>
+      </ShellPanel>
 
       <UTabs
         :items="sections"
         :unmount-on-hide="false"
-        variant="link"
+        :ui="{
+          list: 'max-w-full overflow-x-auto rounded-xl bg-elevated/60 ring ring-inset ring-default',
+          trigger: 'shrink-0',
+          content: 'min-w-0 space-y-6',
+        }"
+        variant="pill"
+        color="neutral"
         class="min-w-0 gap-5"
       >
         <template #requests>
           <div class="space-y-5">
-            <section
-              v-if="documentMode"
-              class="space-y-4 rounded-lg border p-5"
-            >
+            <ShellPanel v-if="documentMode">
               <p class="text-muted text-sm">
                 Edit names, descriptions, usage notes, folder defaults, variables, environments,
                 response JSON pointers to redact, assertions, and extraction rules. Apply validates
@@ -622,7 +629,7 @@
                 label="Back to requests"
                 @click="closeDocument"
               />
-            </section>
+            </ShellPanel>
 
             <section
               v-show="!documentMode"
@@ -744,12 +751,15 @@
               :revision="state.result?.id ?? null"
             />
 
-            <section
+            <ShellPanel
               v-if="state.result"
-              class="space-y-4 rounded-lg border p-5"
               aria-label="Functional run evidence"
             >
-              <h2 class="font-medium">Functional run · {{ state.result.state }}</h2>
+              <template #header>
+                <h2 class="text-highlighted font-semibold">
+                  Functional run · {{ state.result.state }}
+                </h2>
+              </template>
 
               <p
                 class="text-sm"
@@ -780,30 +790,32 @@
                 v-for="(result, index) in state.result.results"
                 :key="index"
                 :open="state.result.results.length === 1"
-                class="space-y-3 border-t pt-3"
+                class="border-default border-t pt-4"
               >
                 <summary class="cursor-pointer text-sm">
                   Iteration {{ result.iteration }} · {{ result.name }} · {{ result.state }}
                 </summary>
 
-                <p
-                  v-if="result.error"
-                  class="text-error text-xs"
-                  role="alert"
-                >
-                  {{ result.error }}
-                </p>
+                <div class="min-w-0 space-y-4 pt-4">
+                  <p
+                    v-if="result.error"
+                    class="text-error text-xs"
+                    role="alert"
+                  >
+                    {{ result.error }}
+                  </p>
 
-                <ApiResponse
-                  v-if="result.response"
-                  :response="result.response"
-                  :assertions="
-                    state.result.requests.find((request) => request.id === result.request_id)
-                      ?.definition.config.assertions
-                  "
-                />
+                  <ApiResponse
+                    v-if="result.response"
+                    :response="result.response"
+                    :assertions="
+                      state.result.requests.find((request) => request.id === result.request_id)
+                        ?.definition.config.assertions
+                    "
+                  />
+                </div>
               </details>
-            </section>
+            </ShellPanel>
 
             <ShellEmptyState
               v-if="!collection"

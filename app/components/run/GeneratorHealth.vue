@@ -77,7 +77,7 @@
 <template>
   <section
     :aria-labelledby="headingId"
-    class="@container space-y-4 rounded-lg border p-4"
+    class="border-default @container space-y-4 rounded-lg border p-4"
   >
     <h3
       :id="headingId"
@@ -125,23 +125,26 @@
 
     <RunArrivalMetrics :snapshot="snapshot" />
 
-    <details class="text-muted text-xs">
+    <details class="text-muted border-default border-t pt-4 text-xs">
       <summary class="cursor-pointer">Measurement scope and rate windows</summary>
 
-      <p class="text-muted text-xs leading-relaxed">
-        Native sampling targets 1 s, independently of display updates. CPU is normalized to all
-        {{ current?.logical_cpus ?? 'available' }} logical CPUs: 100% means total machine CPU
-        capacity. Native process scope excludes WebView subprocesses. Resident memory and host
-        available RAM use MiB (1,048,576 bytes); available RAM follows OS accounting, not a measured
-        memory-stall metric. Native state: {{ snapshot.telemetry?.status ?? 'unavailable' }}.
-        <template v-if="current">
-          Last sample at {{ (Number(current.sampled_at_us) / 1e6).toFixed(2) }} s over
-          {{ (Number(current.interval_us) / 1e6).toFixed(2) }} s.
-        </template>
-        Samples more than 2.5 s old are unavailable. Short runs may finish before a CPU window
-        exists. Started and completed HTTP rates share the elapsed scheduling-plus-drain window;
-        completions include HTTP, transport and timeout outcomes, and exclude cancellations.
-      </p>
+      <div class="min-w-0 space-y-4 pt-4">
+        <p class="text-muted text-xs leading-relaxed">
+          Native sampling targets 1 s, independently of display updates. CPU is normalized to all
+          {{ current?.logical_cpus ?? 'available' }} logical CPUs: 100% means total machine CPU
+          capacity. Native process scope excludes WebView subprocesses. Resident memory and host
+          available RAM use MiB (1,048,576 bytes); available RAM follows OS accounting, not a
+          measured memory-stall metric. Native state:
+          {{ snapshot.telemetry?.status ?? 'unavailable' }}.
+          <template v-if="current">
+            Last sample at {{ (Number(current.sampled_at_us) / 1e6).toFixed(2) }} s over
+            {{ (Number(current.interval_us) / 1e6).toFixed(2) }} s.
+          </template>
+          Samples more than 2.5 s old are unavailable. Short runs may finish before a CPU window
+          exists. Started and completed HTTP rates share the elapsed scheduling-plus-drain window;
+          completions include HTTP, transport and timeout outcomes, and exclude cancellations.
+        </p>
+      </div>
     </details>
 
     <p
@@ -239,42 +242,46 @@
       />
     </div>
 
-    <details class="text-muted text-xs">
+    <details class="text-muted border-default border-t pt-4 text-xs">
       <summary class="cursor-pointer">Pressure indicators, gaps and retention</summary>
 
-      <p class="text-muted text-xs leading-relaxed">
-        Pressure markers cite CPU ≥90% of machine capacity, available host RAM ≤10%, or observed
-        admission drops and missed slots. These are indicators, not throughput limits or a diagnosis
-        of the target service, database or network. No listed evidence does not prove spare
-        capacity. Missing resource data never means healthy capacity. HTTP and assertion failures
-        remain separate. Timelines use workload-relative seconds, including warm-up and drain.
-        Native charts use the native sample timestamps; repeated samples are shown once. Gaps over
-        2.5 s are not connected. Retention is bounded to 600 aggregate samples; native samples
-        between display updates are not retained.
-        {{
-          stride && stride > 1
-            ? `History is downsampled to every ${stride} aggregate intervals; omitted peaks cannot be reconstructed.`
-            : ''
-        }}
-      </p>
+      <div class="min-w-0 space-y-4 pt-4">
+        <p class="text-muted text-xs leading-relaxed">
+          Pressure markers cite CPU ≥90% of machine capacity, available host RAM ≤10%, or observed
+          admission drops and missed slots. These are indicators, not throughput limits or a
+          diagnosis of the target service, database or network. No listed evidence does not prove
+          spare capacity. Missing resource data never means healthy capacity. HTTP and assertion
+          failures remain separate. Timelines use workload-relative seconds, including warm-up and
+          drain. Native charts use the native sample timestamps; repeated samples are shown once.
+          Gaps over 2.5 s are not connected. Retention is bounded to 600 aggregate samples; native
+          samples between display updates are not retained.
+          {{
+            stride && stride > 1
+              ? `History is downsampled to every ${stride} aggregate intervals; omitted peaks cannot be reconstructed.`
+              : ''
+          }}
+        </p>
+      </div>
     </details>
 
     <details
       v-if="!incomplete && evidenceRows.length"
-      class="text-xs"
+      class="border-default border-t pt-4 text-xs"
     >
       <summary class="cursor-pointer">
         Latest retained interval evidence (up to 20 observations)
       </summary>
 
-      <ul class="mt-3 space-y-2 font-mono">
-        <li
-          v-for="(row, index) in evidenceRows"
-          :key="index"
-        >
-          {{ row.seconds.toFixed(2) }} s: {{ row.evidence.join('; ') }}
-        </li>
-      </ul>
+      <div class="min-w-0 space-y-4 pt-4">
+        <ul class="space-y-2 font-mono">
+          <li
+            v-for="(row, index) in evidenceRows"
+            :key="index"
+          >
+            {{ row.seconds.toFixed(2) }} s: {{ row.evidence.join('; ') }}
+          </li>
+        </ul>
+      </div>
     </details>
   </section>
 </template>

@@ -12,7 +12,7 @@
 </script>
 
 <template>
-  <div class="space-y-4 border-t pt-6">
+  <div class="border-default space-y-4 border-t pt-6">
     <h3 class="text-sm font-medium">Final thresholds</h3>
 
     <p class="text-muted text-xs leading-relaxed">
@@ -34,7 +34,6 @@
         <UButton
           :disabled="disabled"
           type="button"
-          size="sm"
           variant="outline"
           color="neutral"
           label="Add threshold"
@@ -68,26 +67,28 @@
             :path="['thresholds', index, 'metric']"
           >
             <div class="space-y-2">
-              <label
-                :for="`threshold-${item}-metric`"
-                class="text-sm font-medium"
-              >
-                Metric and unit
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`threshold-${item}-metric`"
+                  class="text-sm font-medium"
+                >
+                  Metric and unit
+                </label>
 
-              <USelect
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-                :id="`threshold-${item}-metric`"
-                :items="[
-                  { label: 'Response p95 (ms)', value: 'response_p95_ms' },
-                  { label: 'HTTP failure (%)', value: 'http_failure_percent' },
-                  { label: 'Assertion failure (%)', value: 'assertion_failure_percent' },
-                  { label: 'Requests/s', value: 'request_rate' },
-                ]"
-                class="w-full"
-              />
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :id="`threshold-${item}-metric`"
+                  :items="[
+                    { label: 'Response p95 (ms)', value: 'response_p95_ms' },
+                    { label: 'HTTP failure (%)', value: 'http_failure_percent' },
+                    { label: 'Assertion failure (%)', value: 'assertion_failure_percent' },
+                    { label: 'Requests/s', value: 'request_rate' },
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -97,24 +98,26 @@
             :path="['thresholds', index, 'operator']"
           >
             <div class="space-y-2">
-              <label
-                :for="`threshold-${item}-operator`"
-                class="text-sm font-medium"
-              >
-                Comparison
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`threshold-${item}-operator`"
+                  class="text-sm font-medium"
+                >
+                  Comparison
+                </label>
 
-              <USelect
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-                :id="`threshold-${item}-operator`"
-                :items="[
-                  { label: 'Strictly less than', value: 'less_than' },
-                  { label: 'Strictly greater than', value: 'greater_than' },
-                ]"
-                class="w-full"
-              />
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :id="`threshold-${item}-operator`"
+                  :items="[
+                    { label: 'Strictly less than', value: 'less_than' },
+                    { label: 'Strictly greater than', value: 'greater_than' },
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -124,23 +127,25 @@
             :path="['thresholds', index, 'limit']"
           >
             <div class="space-y-2">
-              <label
-                :for="`threshold-${item}-limit`"
-                class="text-sm font-medium"
-              >
-                Limit
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`threshold-${item}-limit`"
+                  class="text-sm font-medium"
+                >
+                  Limit
+                </label>
 
-              <UInput
-                v-model="field.input"
-                v-bind="field.props"
-                :id="`threshold-${item}-limit`"
-                :aria-invalid="Boolean(field.errors)"
-                :aria-describedby="`threshold-${item}-error`"
-                type="number"
-                min="0"
-                step="any"
-              />
+                <UInput
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="`threshold-${item}-limit`"
+                  :aria-invalid="Boolean(field.errors)"
+                  :aria-describedby="`threshold-${item}-error`"
+                  type="number"
+                  min="0"
+                  step="any"
+                />
+              </div>
 
               <p
                 v-if="field.errors"

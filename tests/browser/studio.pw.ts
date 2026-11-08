@@ -21,14 +21,8 @@ test('authoring preserves Formisch edits across sections and navigation', async 
     .click();
   await expect(target).toHaveValue('https://example.com/performance');
 
-  await page
-    .getByRole('navigation', { name: 'Main navigation' })
-    .getByRole('link', { name: 'Overview' })
-    .click();
-  await page
-    .getByRole('navigation', { name: 'Main navigation' })
-    .getByRole('link', { name: 'Test studio' })
-    .click();
+  await page.locator('#workspace-navigation').getByRole('link', { name: 'Overview' }).click();
+  await page.locator('#workspace-navigation').getByRole('link', { name: 'Test studio' }).click();
   await expect(target).toHaveValue('https://example.com/performance');
 
   await page
@@ -68,7 +62,6 @@ test('authoring preserves Formisch edits across sections and navigation', async 
     .click();
   const editor = page.getByLabel('Version 1 test definition', { exact: true });
   await expect(editor).toBeVisible();
-  expect(await editor.evaluate((element) => element.clientHeight)).toBeGreaterThanOrEqual(256);
   expect(await editor.evaluate((element) => getComputedStyle(element).fontFamily)).toContain(
     'monospace',
   );

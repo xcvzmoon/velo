@@ -37,45 +37,47 @@
 </script>
 
 <template>
-  <details class="space-y-3 rounded-lg border p-5">
+  <details class="border-default border-y py-4">
     <summary class="cursor-pointer text-sm font-medium">
       Interactive session · {{ environment ?? 'shared variables' }}
     </summary>
 
-    <p class="text-muted text-xs">
-      Cookies and extracted variables stay in memory, isolated by collection and environment.
-      Independent collection runs use separate sessions. Values are masked.
-    </p>
+    <div class="min-w-0 space-y-4 pt-4">
+      <p class="text-muted text-xs">
+        Cookies and extracted variables stay in memory, isolated by collection and environment.
+        Independent collection runs use separate sessions. Values are masked.
+      </p>
 
-    <p
-      v-if="error"
-      class="text-error text-sm"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      <p
+        v-if="error"
+        class="text-error text-sm"
+        role="alert"
+      >
+        {{ error }}
+      </p>
 
-    <pre
-      v-if="session"
-      class="overflow-auto font-mono text-xs whitespace-pre-wrap"
-      >{{ JSON.stringify(session, null, 2) }}</pre>
+      <pre
+        v-if="session"
+        class="overflow-auto font-mono text-xs whitespace-pre-wrap"
+        >{{ JSON.stringify(session, null, 2) }}</pre>
 
-    <div class="flex gap-2">
-      <UButton
-        :disabled="disabled"
-        variant="outline"
-        color="neutral"
-        label="Inspect session"
-        @click="refresh"
-      />
+      <div class="flex gap-2">
+        <UButton
+          :disabled="disabled"
+          variant="outline"
+          color="neutral"
+          label="Inspect session"
+          @click="refresh"
+        />
 
-      <UButton
-        :disabled="disabled"
-        variant="outline"
-        color="neutral"
-        label="Clear cookies and extracted variables"
-        @click="clear"
-      />
+        <UButton
+          :disabled="disabled"
+          variant="outline"
+          color="neutral"
+          label="Clear cookies and extracted variables"
+          @click="clear"
+        />
+      </div>
     </div>
   </details>
 </template>

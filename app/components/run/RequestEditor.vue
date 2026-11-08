@@ -202,33 +202,42 @@
 </script>
 
 <template>
-  <section
-    class="rounded-lg border p-6"
+  <ShellPanel
+    :variant="apiMode || stepMode ? 'card' : 'section'"
     aria-labelledby="request-editor-heading"
   >
-    <h2
-      id="request-editor-heading"
-      class="text-base font-medium"
-    >
-      {{ apiMode ? 'API request' : stepMode ? 'Step request' : 'Request configuration' }}
-    </h2>
+    <template #header>
+      <h2
+        :class="apiMode || stepMode ? 'text-base' : 'text-lg tracking-tight'"
+        id="request-editor-heading"
+        class="text-highlighted font-semibold"
+      >
+        {{ apiMode ? 'API request' : stepMode ? 'Step request' : 'Request configuration' }}
+      </h2>
+    </template>
 
-    <p
+    <UAlert
       v-if="!stepMode && !apiMode"
-      class="text-muted mt-2 text-sm leading-relaxed"
+      :ui="{ title: 'text-highlighted', description: 'text-default leading-relaxed opacity-100' }"
+      title="Execution model"
+      icon="i-hugeicons-information-circle"
+      color="info"
+      variant="soft"
     >
-      <template v-if="scenarioMode">
-        Multi-step scenarios are enabled. Workload, transport, timeout, inspection limits and
-        budgets below apply to all steps. Edit each step's HTTP content in Scenarios. The standalone
-        request supplies defaults for new steps.
-      </template>
+      <template #description>
+        <template v-if="scenarioMode">
+          Multi-step scenarios are enabled. Workload, transport, timeout, inspection limits and
+          budgets below apply to all steps. Edit each step's HTTP content in Scenarios. The
+          standalone request supplies defaults for new steps.
+        </template>
 
-      <template v-else>
-        Choose closed-loop users or a scheduled arrival rate. Closed-loop users wait for their
-        response before sending another request. Automatic retries are disabled. Configured
-        redirects stay on the target origin.
+        <template v-else>
+          Choose closed-loop users or a scheduled arrival rate. Closed-loop users wait for their
+          response before sending another request. Automatic retries are disabled. Configured
+          redirects stay on the target origin.
+        </template>
       </template>
-    </p>
+    </UAlert>
 
     <FormischForm
       :of="form"
@@ -248,30 +257,32 @@
             :path="['method']"
           >
             <div class="space-y-2">
-              <label
-                class="text-sm font-medium"
-                for="request-method"
-              >
-                Method
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  class="text-sm font-medium"
+                  for="request-method"
+                >
+                  Method
+                </label>
 
-              <USelect
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-                :aria-invalid="Boolean(field.errors)"
-                :items="[
-                  { label: 'GET', value: 'GET' },
-                  { label: 'POST', value: 'POST' },
-                  { label: 'PUT', value: 'PUT' },
-                  { label: 'PATCH', value: 'PATCH' },
-                  { label: 'DELETE', value: 'DELETE' },
-                  { label: 'HEAD', value: 'HEAD' },
-                  { label: 'OPTIONS', value: 'OPTIONS' },
-                ]"
-                id="request-method"
-                class="w-full"
-              />
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :aria-invalid="Boolean(field.errors)"
+                  :items="[
+                    { label: 'GET', value: 'GET' },
+                    { label: 'POST', value: 'POST' },
+                    { label: 'PUT', value: 'PUT' },
+                    { label: 'PATCH', value: 'PATCH' },
+                    { label: 'DELETE', value: 'DELETE' },
+                    { label: 'HEAD', value: 'HEAD' },
+                    { label: 'OPTIONS', value: 'OPTIONS' },
+                  ]"
+                  id="request-method"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -281,23 +292,25 @@
             :path="['url']"
           >
             <div class="space-y-2">
-              <label
-                class="text-sm font-medium"
-                for="request-url"
-              >
-                Target URL
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  class="text-sm font-medium"
+                  for="request-url"
+                >
+                  Target URL
+                </label>
 
-              <UInput
-                v-model="field.input"
-                v-bind="field.props"
-                :aria-invalid="Boolean(field.errors)"
-                id="request-url"
-                aria-describedby="request-url-error"
-                type="url"
-                autocomplete="off"
-                spellcheck="false"
-              />
+                <UInput
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :aria-invalid="Boolean(field.errors)"
+                  id="request-url"
+                  aria-describedby="request-url-error"
+                  type="url"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
 
               <p
                 v-if="field.errors"
@@ -326,7 +339,6 @@
                 :disabled="disabled"
                 :label="`Add ${pairGroup.singular}`"
                 type="button"
-                size="sm"
                 variant="outline"
                 color="neutral"
                 @click="
@@ -353,23 +365,25 @@
                 :path="[pairGroup.name, index, 'name']"
               >
                 <div class="space-y-1">
-                  <label
-                    :for="`${pairGroup.name}-${item}-name`"
-                    class="sr-only text-sm font-medium"
-                  >
-                    {{ pairGroup.singular }} {{ index + 1 }} name
-                  </label>
+                  <div class="grid min-w-0 gap-2">
+                    <label
+                      :for="`${pairGroup.name}-${item}-name`"
+                      class="sr-only text-sm font-medium"
+                    >
+                      {{ pairGroup.singular }} {{ index + 1 }} name
+                    </label>
 
-                  <UInput
-                    v-model="field.input"
-                    v-bind="field.props"
-                    :id="`${pairGroup.name}-${item}-name`"
-                    :aria-invalid="Boolean(field.errors)"
-                    :aria-describedby="`${pairGroup.name}-${item}-name-error`"
-                    placeholder="Name"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
+                    <UInput
+                      v-model="field.input"
+                      v-bind="field.props"
+                      :id="`${pairGroup.name}-${item}-name`"
+                      :aria-invalid="Boolean(field.errors)"
+                      :aria-describedby="`${pairGroup.name}-${item}-name-error`"
+                      placeholder="Name"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                  </div>
 
                   <p
                     v-if="field.errors"
@@ -388,23 +402,25 @@
                 :path="[pairGroup.name, index, 'value']"
               >
                 <div class="space-y-1">
-                  <label
-                    :for="`${pairGroup.name}-${item}-value`"
-                    class="sr-only text-sm font-medium"
-                  >
-                    {{ pairGroup.singular }} {{ index + 1 }} value
-                  </label>
+                  <div class="grid min-w-0 gap-2">
+                    <label
+                      :for="`${pairGroup.name}-${item}-value`"
+                      class="sr-only text-sm font-medium"
+                    >
+                      {{ pairGroup.singular }} {{ index + 1 }} value
+                    </label>
 
-                  <UInput
-                    v-model="field.input"
-                    v-bind="field.props"
-                    :id="`${pairGroup.name}-${item}-value`"
-                    :aria-invalid="Boolean(field.errors)"
-                    :aria-describedby="`${pairGroup.name}-${item}-value-error`"
-                    placeholder="Value"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
+                    <UInput
+                      v-model="field.input"
+                      v-bind="field.props"
+                      :id="`${pairGroup.name}-${item}-value`"
+                      :aria-invalid="Boolean(field.errors)"
+                      :aria-describedby="`${pairGroup.name}-${item}-value-error`"
+                      placeholder="Value"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                  </div>
 
                   <p
                     v-if="field.errors"
@@ -442,11 +458,11 @@
 
         <div
           v-if="!stepMode"
-          class="space-y-4 border-t pt-6"
+          class="border-default space-y-4 border-t pt-6"
         >
           <h3
             v-if="!apiMode"
-            class="text-sm font-medium"
+            class="text-highlighted text-xs font-semibold tracking-wide uppercase"
           >
             Workload and local resource budgets
           </h3>
@@ -466,23 +482,25 @@
               :path="[option.name]"
             >
               <div class="space-y-2">
-                <label
-                  :for="`request-${option.name}`"
-                  class="text-sm font-medium"
-                >
-                  {{ option.label }}
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`request-${option.name}`"
+                    class="text-sm font-medium"
+                  >
+                    {{ option.label }}
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`request-${option.name}`"
-                  :min="option.min"
-                  :aria-invalid="Boolean(field.errors)"
-                  :aria-describedby="`request-${option.name}-error`"
-                  type="number"
-                  step="1"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`request-${option.name}`"
+                    :min="option.min"
+                    :aria-invalid="Boolean(field.errors)"
+                    :aria-describedby="`request-${option.name}-error`"
+                    type="number"
+                    step="1"
+                  />
+                </div>
 
                 <p
                   v-if="field.errors"
@@ -532,5 +550,5 @@
         />
       </fieldset>
     </FormischForm>
-  </section>
+  </ShellPanel>
 </template>

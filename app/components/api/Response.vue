@@ -60,8 +60,8 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-5"
+  <ShellPanel
+    variant="inset"
     aria-label="HTTP response"
   >
     <dl class="flex flex-wrap gap-5 text-sm">
@@ -129,22 +129,24 @@
         :path="['format']"
       >
         <div class="space-y-1">
-          <label
-            :for="`${prefix}-format`"
-            class="text-sm font-medium"
-          >
-            Body format
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${prefix}-format`"
+              class="text-sm font-medium"
+            >
+              Body format
+            </label>
 
-          <USelect
-            v-model="field.input"
-            :id="`${prefix}-format`"
-            :items="[
-              { label: 'Formatted JSON', value: 'json' },
-              { label: 'Raw text', value: 'raw' },
-            ]"
-            class="w-full"
-          />
+            <USelect
+              v-model="field.input"
+              :id="`${prefix}-format`"
+              :items="[
+                { label: 'Formatted JSON', value: 'json' },
+                { label: 'Raw text', value: 'raw' },
+              ]"
+              class="w-full"
+            />
+          </div>
         </div>
       </Field>
 
@@ -154,19 +156,21 @@
         :path="['search']"
       >
         <div class="space-y-1">
-          <label
-            :for="`${prefix}-search`"
-            class="text-sm font-medium"
-          >
-            Find in body
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${prefix}-search`"
+              class="text-sm font-medium"
+            >
+              Find in body
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${prefix}-search`"
-            type="search"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${prefix}-search`"
+              type="search"
+            />
+          </div>
         </div>
       </Field>
 
@@ -208,19 +212,21 @@
       class="bg-muted max-h-96 overflow-auto rounded-md p-4 font-mono text-xs break-all whitespace-pre-wrap"
       >{{ display }}</pre>
 
-    <details>
+    <details class="border-default border-t pt-4">
       <summary class="cursor-pointer text-sm">Response headers and cookies</summary>
 
-      <dl class="mt-3 space-y-2 font-mono text-xs">
-        <div
-          v-for="(header, index) in response.headers"
-          :key="index"
-          class="grid grid-cols-[minmax(6rem,1fr)_3fr] gap-3 break-all"
-        >
-          <dt>{{ header.name }}</dt>
-          <dd>{{ header.value }}</dd>
-        </div>
-      </dl>
+      <div class="min-w-0 space-y-4 pt-4">
+        <dl class="space-y-2 font-mono text-xs">
+          <div
+            v-for="(header, index) in response.headers"
+            :key="index"
+            class="grid grid-cols-[minmax(6rem,1fr)_3fr] gap-3 break-all"
+          >
+            <dt>{{ header.name }}</dt>
+            <dd>{{ header.value }}</dd>
+          </div>
+        </dl>
+      </div>
     </details>
 
     <div
@@ -237,5 +243,5 @@
         {{ assertions?.[index]?.id ?? `Check ${index + 1}` }}: {{ check.replaceAll('_', ' ') }}
       </p>
     </div>
-  </section>
+  </ShellPanel>
 </template>

@@ -60,67 +60,73 @@
 </script>
 
 <template>
-  <details class="space-y-3 rounded-lg border p-5">
+  <details class="border-default border-y py-4">
     <summary class="cursor-pointer text-sm font-medium">Shared test data</summary>
 
-    <AuthoringDataset
-      :definition="definition"
-      :disabled="disabled || busy"
-      @apply="apply"
-      @dirty="emit('dirty', $event)"
-    />
+    <div class="min-w-0 space-y-4 pt-4">
+      <AuthoringDataset
+        :definition="definition"
+        :disabled="disabled || busy"
+        @apply="apply"
+        @dirty="emit('dirty', $event)"
+      />
 
-    <template v-if="definition">
-      <div
-        v-if="definition.source.kind !== 'faker'"
-        class="space-y-2"
-      >
-        <label
-          class="text-sm font-medium"
-          for="api-dataset-file"
+      <template v-if="definition">
+        <div
+          v-if="definition.source.kind !== 'faker'"
+          class="space-y-2"
         >
-          CSV or JSON file (up to 8 MiB)
-        </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="api-dataset-file"
+            >
+              CSV or JSON file (up to 8 MiB)
+            </label>
 
-        <UFileUpload
-          :disabled="disabled || busy"
-          :accept="definition.source.kind === 'csv' ? '.csv,text/csv' : '.json,application/json'"
-          :model-value="null"
-          :preview="false"
-          id="api-dataset-file"
-          label="Choose a CSV or JSON file"
-          reset
-          @update:model-value="read"
-        />
-      </div>
+            <UFileUpload
+              :disabled="disabled || busy"
+              :accept="
+                definition.source.kind === 'csv' ? '.csv,text/csv' : '.json,application/json'
+              "
+              :model-value="null"
+              :preview="false"
+              id="api-dataset-file"
+              label="Choose a CSV or JSON file"
+              reset
+              @update:model-value="read"
+            />
+          </div>
+        </div>
 
-      <div class="flex items-center gap-3">
-        <UButton
-          :disabled="disabled || busy"
-          variant="outline"
-          color="neutral"
-          label="Prepare records"
-          @click="prepare"
-        />
+        <div class="flex items-center gap-3">
+          <UButton
+            :disabled="disabled || busy"
+            variant="outline"
+            color="neutral"
+            label="Prepare records"
+            @click="prepare"
+          />
 
-        <UButton
-          v-if="busy"
-          variant="outline"
-          color="neutral"
-          label="Cancel preparation"
-          @click="preparation?.abort()"
-        />
+          <UButton
+            v-if="busy"
+            variant="outline"
+            color="neutral"
+            label="Cancel preparation"
+            @click="preparation?.abort()"
+          />
 
-        <p class="text-muted text-xs">{{ count }} records prepared in memory.</p>
-      </div>
-    </template>
+          <p class="text-muted text-xs">{{ count }} records prepared in memory.</p>
+        </div>
+      </template>
 
-    <p
-      v-if="error"
-      class="text-error text-sm"
-      role="alert"
-    >
-      {{ error }}
-    </p>
+      <p
+        v-if="error"
+        class="text-error text-sm"
+        role="alert"
+      >
+        {{ error }}
+      </p>
+    </div>
   </details>
 </template>

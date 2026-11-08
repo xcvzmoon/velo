@@ -59,7 +59,7 @@
 <template>
   <FormischForm
     :of="form"
-    class="space-y-3 rounded-md border p-4"
+    class="border-default space-y-3 rounded-md border p-4"
     @submit="emit('save', $event)"
   >
     <h4 class="text-sm font-medium">Release context</h4>
@@ -76,29 +76,31 @@
       :path="[name]"
     >
       <div class="space-y-2">
-        <label
-          :for="`${formId}-${name}`"
-          class="text-sm font-medium"
-        >
-          {{ label }}
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="`${formId}-${name}`"
+            class="text-sm font-medium"
+          >
+            {{ label }}
+          </label>
 
-        <UTextarea
-          v-if="name === 'notes'"
-          v-model="field.input"
-          v-bind="field.props"
-          :id="`${formId}-${name}`"
-          :disabled="disabled"
-        />
+          <UTextarea
+            v-if="name === 'notes'"
+            v-model="field.input"
+            v-bind="field.props"
+            :id="`${formId}-${name}`"
+            :disabled="disabled"
+          />
 
-        <UInput
-          v-else
-          v-model="field.input"
-          v-bind="field.props"
-          :id="`${formId}-${name}`"
-          :disabled="disabled"
-          autocomplete="off"
-        />
+          <UInput
+            v-else
+            v-model="field.input"
+            v-bind="field.props"
+            :id="`${formId}-${name}`"
+            :disabled="disabled"
+            autocomplete="off"
+          />
+        </div>
 
         <p
           v-if="field.errors"

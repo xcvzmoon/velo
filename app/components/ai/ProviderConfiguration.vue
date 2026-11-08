@@ -84,21 +84,23 @@
         :path="['provider']"
       >
         <div class="max-w-sm space-y-2">
-          <label
-            :for="`${inputId}-provider`"
-            class="text-sm font-medium"
-          >
-            Provider
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${inputId}-provider`"
+              class="text-sm font-medium"
+            >
+              Provider
+            </label>
 
-          <USelect
-            :model-value="field.input"
-            :disabled="disabled"
-            :id="`${inputId}-provider`"
-            :items="providerItems"
-            class="w-full"
-            @update:model-value="selectProvider"
-          />
+            <USelect
+              :model-value="field.input"
+              :disabled="disabled"
+              :id="`${inputId}-provider`"
+              :items="providerItems"
+              class="w-full"
+              @update:model-value="selectProvider"
+            />
+          </div>
         </div>
       </FormischField>
 
@@ -108,21 +110,23 @@
         :path="['model']"
       >
         <div class="max-w-lg space-y-2">
-          <label
-            :for="`${inputId}-model`"
-            class="text-sm font-medium"
-          >
-            Model ID
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${inputId}-model`"
+              class="text-sm font-medium"
+            >
+              Model ID
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${inputId}-model`"
-            :disabled="disabled"
-            placeholder="Enter a model available from this provider"
-            autocomplete="off"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${inputId}-model`"
+              :disabled="disabled"
+              placeholder="Enter a model available from this provider"
+              autocomplete="off"
+            />
+          </div>
 
           <p
             v-if="field.errors"
@@ -140,23 +144,25 @@
         :path="['endpoint']"
       >
         <div class="space-y-2">
-          <label
-            :for="`${inputId}-endpoint`"
-            class="text-sm font-medium"
-          >
-            {{ customEndpoint ? 'Complete API endpoint' : 'Provider endpoint' }}
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${inputId}-endpoint`"
+              class="text-sm font-medium"
+            >
+              {{ customEndpoint ? 'Complete API endpoint' : 'Provider endpoint' }}
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${inputId}-endpoint`"
-            :disabled="disabled || !customEndpoint"
-            placeholder="Enter the complete API endpoint URL"
-            type="url"
-            autocomplete="off"
-            spellcheck="false"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${inputId}-endpoint`"
+              :disabled="disabled || !customEndpoint"
+              placeholder="Enter the complete API endpoint URL"
+              type="url"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
 
           <p class="text-muted text-xs">
             {{

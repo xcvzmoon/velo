@@ -39,7 +39,7 @@
 </script>
 
 <template>
-  <div class="space-y-4 border-t pt-6">
+  <div class="border-default space-y-4 border-t pt-6">
     <h3 class="text-sm font-medium">Authentication and transport</h3>
 
     <p class="text-muted text-xs leading-relaxed">
@@ -56,28 +56,30 @@
     >
       <div class="space-y-4">
         <div class="max-w-xs space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="request-auth"
-          >
-            Authentication
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="request-auth"
+            >
+              Authentication
+            </label>
 
-          <USelect
-            v-model="mode.input"
-            :disabled="disabled"
-            :name="mode.props.name"
-            :aria-invalid="Boolean(mode.errors)"
-            :items="[
-              { label: 'None / custom header', value: 'none' },
-              { label: 'Bearer token', value: 'bearer' },
-              { label: 'Basic', value: 'basic' },
-              { label: 'API key', value: 'api_key' },
-            ]"
-            id="request-auth"
-            aria-describedby="request-auth-error"
-            class="w-full"
-          />
+            <USelect
+              v-model="mode.input"
+              :disabled="disabled"
+              :name="mode.props.name"
+              :aria-invalid="Boolean(mode.errors)"
+              :items="[
+                { label: 'None / custom header', value: 'none' },
+                { label: 'Bearer token', value: 'bearer' },
+                { label: 'Basic', value: 'basic' },
+                { label: 'API key', value: 'api_key' },
+              ]"
+              id="request-auth"
+              aria-describedby="request-auth-error"
+              class="w-full"
+            />
+          </div>
 
           <p
             v-if="mode.errors"
@@ -96,24 +98,26 @@
           :path="['apiKeyPlacement']"
         >
           <div class="max-w-xs space-y-2">
-            <label
-              class="text-sm font-medium"
-              for="api-key-placement"
-            >
-              API key placement
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                class="text-sm font-medium"
+                for="api-key-placement"
+              >
+                API key placement
+              </label>
 
-            <USelect
-              v-model="field.input"
-              :disabled="disabled"
-              :name="field.props.name"
-              :items="[
-                { label: 'Header', value: 'header' },
-                { label: 'Query parameter', value: 'query' },
-              ]"
-              id="api-key-placement"
-              class="w-full"
-            />
+              <USelect
+                v-model="field.input"
+                :disabled="disabled"
+                :name="field.props.name"
+                :items="[
+                  { label: 'Header', value: 'header' },
+                  { label: 'Query parameter', value: 'query' },
+                ]"
+                id="api-key-placement"
+                class="w-full"
+              />
+            </div>
 
             <p class="text-muted text-xs">Query credentials may appear in server access logs.</p>
           </div>
@@ -134,25 +138,27 @@
               :path="[option.name]"
             >
               <div class="space-y-2">
-                <label
-                  :for="`request-${option.name}`"
-                  class="text-sm font-medium"
-                >
-                  {{ option.label }}
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`request-${option.name}`"
+                    class="text-sm font-medium"
+                  >
+                    {{ option.label }}
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`request-${option.name}`"
-                  :type="
-                    option.name === 'authUsername' || option.name === 'apiKeyName'
-                      ? 'text'
-                      : 'password'
-                  "
-                  autocomplete="off"
-                  spellcheck="false"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`request-${option.name}`"
+                    :type="
+                      option.name === 'authUsername' || option.name === 'apiKeyName'
+                        ? 'text'
+                        : 'password'
+                    "
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                </div>
               </div>
             </FormischField>
           </template>
@@ -170,25 +176,27 @@
         :path="['protocol']"
       >
         <div class="space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="request-protocol"
-          >
-            HTTP protocol
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="request-protocol"
+            >
+              HTTP protocol
+            </label>
 
-          <USelect
-            v-model="field.input"
-            :disabled="disabled"
-            :name="field.props.name"
-            :items="[
-              { label: 'Negotiate HTTP/1.1 or HTTP/2', value: 'auto' },
-              { label: 'Require HTTP/1.1', value: 'http1' },
-              { label: 'Require HTTP/2', value: 'http2' },
-            ]"
-            id="request-protocol"
-            class="w-full"
-          />
+            <USelect
+              v-model="field.input"
+              :disabled="disabled"
+              :name="field.props.name"
+              :items="[
+                { label: 'Negotiate HTTP/1.1 or HTTP/2', value: 'auto' },
+                { label: 'Require HTTP/1.1', value: 'http1' },
+                { label: 'Require HTTP/2', value: 'http2' },
+              ]"
+              id="request-protocol"
+              class="w-full"
+            />
+          </div>
         </div>
       </FormischField>
 
@@ -198,23 +206,25 @@
         :path="['max_redirects']"
       >
         <div class="space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="request-redirects"
-          >
-            Maximum redirects (0 disables)
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="request-redirects"
+            >
+              Maximum redirects (0 disables)
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :aria-invalid="Boolean(field.errors)"
-            id="request-redirects"
-            aria-describedby="request-redirects-error"
-            type="number"
-            min="0"
-            step="1"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :aria-invalid="Boolean(field.errors)"
+              id="request-redirects"
+              aria-describedby="request-redirects-error"
+              type="number"
+              min="0"
+              step="1"
+            />
+          </div>
 
           <p
             v-if="field.errors"

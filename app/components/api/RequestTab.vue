@@ -88,75 +88,86 @@
 
 <template>
   <div class="space-y-5">
-    <Form
-      :of="form"
-      class="space-y-3"
-      @submit="() => {}"
+    <ShellPanel
+      variant="section"
+      aria-label="Request details"
     >
-      <Field
-        v-for="name in fields"
-        v-slot="field"
-        :key="name"
+      <template #header>
+        <h2 class="text-highlighted text-sm font-semibold">Request details</h2>
+      </template>
+
+      <Form
         :of="form"
-        :path="[name]"
+        class="space-y-3"
+        @submit="() => {}"
       >
-        <div class="space-y-2">
-          <label
-            :for="`${inputId}-${name}`"
-            class="text-sm font-medium capitalize"
-          >
-            {{ name }}
-          </label>
+        <Field
+          v-for="name in fields"
+          v-slot="field"
+          :key="name"
+          :of="form"
+          :path="[name]"
+        >
+          <div class="space-y-2">
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`${inputId}-${name}`"
+                class="text-sm font-medium capitalize"
+              >
+                {{ name }}
+              </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${inputId}-${name}`"
-            :disabled="disabled"
-            :aria-invalid="Boolean(field.errors)"
-            autocomplete="off"
-          />
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :id="`${inputId}-${name}`"
+                :disabled="disabled"
+                :aria-invalid="Boolean(field.errors)"
+                autocomplete="off"
+              />
+            </div>
 
-          <p
-            v-if="field.errors"
-            class="text-error text-xs"
-            role="alert"
-          >
-            {{ field.errors.join(' ') }}
-          </p>
-        </div>
-      </Field>
+            <p
+              v-if="field.errors"
+              class="text-error text-xs"
+              role="alert"
+            >
+              {{ field.errors.join(' ') }}
+            </p>
+          </div>
+        </Field>
 
-      <Field
-        v-slot="field"
-        :of="form"
-        :path="['inherit_auth']"
-      >
-        <div class="flex items-center gap-2">
-          <UCheckbox
-            :id="`${inputId}-inherit`"
-            :model-value="field.input"
-            :disabled="disabled"
-            @update:model-value="field.input = $event === true"
-          />
+        <Field
+          v-slot="field"
+          :of="form"
+          :path="['inherit_auth']"
+        >
+          <div class="flex items-center gap-2">
+            <UCheckbox
+              :id="`${inputId}-inherit`"
+              :model-value="field.input"
+              :disabled="disabled"
+              @update:model-value="field.input = $event === true"
+            />
 
-          <label
-            :for="`${inputId}-inherit`"
-            class="text-sm font-medium"
-          >
-            Inherit authentication when this request uses None
-          </label>
-        </div>
-      </Field>
-    </Form>
+            <label
+              :for="`${inputId}-inherit`"
+              class="text-sm font-medium"
+            >
+              Inherit authentication when this request uses None
+            </label>
+          </div>
+        </Field>
+      </Form>
 
-    <p class="text-muted text-xs">
-      Scope precedence: collection defaults → outer folder → inner folder → request variables →
-      environment → dataset. Request headers override inherited names. Use the resolved preview to
-      inspect effective settings. Store sensitive values in Secrets and reference them with
-      <code v-pre>{{secret:name}}</code>
-      .
-    </p>
+      <p class="text-muted text-xs">
+        Scope precedence: collection defaults → outer folder → inner folder → request variables →
+        environment → dataset. Request headers override inherited names. Use the resolved preview to
+        inspect effective settings. Store sensitive values in Secrets and reference them with
+        <code v-pre>{{secret:name}}</code>
+        .
+      </p>
+    </ShellPanel>
 
     <RunRequestEditor
       :loaded="loaded"

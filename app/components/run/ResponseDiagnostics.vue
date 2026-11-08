@@ -6,7 +6,7 @@
 
 <template>
   <section
-    class="space-y-4 rounded-md border p-4"
+    class="border-default space-y-4 rounded-md border p-4"
     aria-label="Response assertions and failure diagnostics"
   >
     <h3 class="text-sm font-medium">Response assertions and failure diagnostics</h3>
@@ -104,23 +104,27 @@
 
     <details
       v-if="diagnostics.samples.length"
-      class="text-xs"
+      class="border-default border-t pt-4 text-xs"
     >
       <summary class="cursor-pointer">
         {{ diagnostics.samples.length }} redacted representative samples
       </summary>
 
-      <ul class="mt-3 space-y-2">
-        <li
-          v-for="(sample, index) in diagnostics.samples"
-          :key="index"
-          class="rounded border p-2"
-        >
-          {{ sample.assertion === null ? 'Request' : diagnostics.assertions[sample.assertion]?.id }}
-          · HTTP {{ sample.status ?? 'unavailable' }} · {{ sample.cause.replaceAll('_', ' ') }}.
-          Response content withheld.
-        </li>
-      </ul>
+      <div class="min-w-0 space-y-4 pt-4">
+        <ul class="space-y-2">
+          <li
+            v-for="(sample, index) in diagnostics.samples"
+            :key="index"
+            class="border-default rounded border p-2"
+          >
+            {{
+              sample.assertion === null ? 'Request' : diagnostics.assertions[sample.assertion]?.id
+            }}
+            · HTTP {{ sample.status ?? 'unavailable' }} · {{ sample.cause.replaceAll('_', ' ') }}.
+            Response content withheld.
+          </li>
+        </ul>
+      </div>
     </details>
 
     <p class="text-muted text-xs leading-relaxed">

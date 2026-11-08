@@ -157,7 +157,6 @@
         "
         :ui="{ root: 'min-h-40 py-6', title: 'text-sm', description: 'text-xs' }"
         icon="i-hugeicons-chart-line-data-01"
-        variant="subtle"
       />
 
       <p
@@ -180,7 +179,6 @@
       title="Your first run starts here"
       description="Configure a request or scenario, review its workload, and authorize the run. Its activity will appear here."
       icon="i-hugeicons-chart-line-data-01"
-      variant="naked"
     >
       <template #actions>
         <UButton

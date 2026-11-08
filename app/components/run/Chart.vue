@@ -193,7 +193,7 @@
 </script>
 
 <template>
-  <section class="min-w-0 rounded-lg border p-4">
+  <section class="border-default min-w-0 rounded-lg border p-4">
     <div class="mb-4 flex items-baseline justify-between gap-3">
       <h3 class="text-sm font-medium">{{ title }}</h3>
       <span class="text-muted font-mono text-xs">{{ unit }}</span>

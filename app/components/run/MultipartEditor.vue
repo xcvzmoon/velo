@@ -27,7 +27,6 @@
       <UButton
         :disabled="disabled"
         type="button"
-        size="sm"
         variant="outline"
         color="neutral"
         label="Add multipart field"
@@ -49,7 +48,7 @@
       <div
         v-for="(item, index) in fieldArray.items"
         :key="item"
-        class="space-y-3 rounded-md border p-4"
+        class="border-default space-y-3 rounded-md border p-4"
       >
         <div class="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <FormischField
@@ -58,20 +57,22 @@
             :path="['multipartParts', index, 'name']"
           >
             <div class="space-y-2">
-              <label
-                :for="`multipart-${item}-name`"
-                class="text-sm font-medium"
-              >
-                Field name
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`multipart-${item}-name`"
+                  class="text-sm font-medium"
+                >
+                  Field name
+                </label>
 
-              <UInput
-                v-model="field.input"
-                v-bind="field.props"
-                :id="`multipart-${item}-name`"
-                autocomplete="off"
-                spellcheck="false"
-              />
+                <UInput
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="`multipart-${item}-name`"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -81,24 +82,26 @@
             :path="['multipartParts', index, 'kind']"
           >
             <div class="space-y-2">
-              <label
-                :for="`multipart-${item}-kind`"
-                class="text-sm font-medium"
-              >
-                Content
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`multipart-${item}-kind`"
+                  class="text-sm font-medium"
+                >
+                  Content
+                </label>
 
-              <USelect
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-                :id="`multipart-${item}-kind`"
-                :items="[
-                  { label: 'Text', value: 'text' },
-                  { label: 'File', value: 'file' },
-                ]"
-                class="w-full"
-              />
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :id="`multipart-${item}-kind`"
+                  :items="[
+                    { label: 'Text', value: 'text' },
+                    { label: 'File', value: 'file' },
+                  ]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -134,20 +137,22 @@
             :path="['multipartParts', index, 'value']"
           >
             <div class="space-y-2">
-              <label
-                :for="`multipart-${item}-value`"
-                class="text-sm font-medium"
-              >
-                Value
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`multipart-${item}-value`"
+                  class="text-sm font-medium"
+                >
+                  Value
+                </label>
 
-              <UTextarea
-                v-model="field.input"
-                v-bind="field.props"
-                :id="`multipart-${item}-value`"
-                autocomplete="off"
-                spellcheck="false"
-              />
+                <UTextarea
+                  v-model="field.input"
+                  v-bind="field.props"
+                  :id="`multipart-${item}-value`"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </div>
             </div>
           </FormischField>
         </FormischField>

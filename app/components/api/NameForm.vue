@@ -30,21 +30,23 @@
       :path="['name']"
     >
       <div class="min-w-0 flex-1 space-y-1">
-        <label
-          :for="inputId"
-          class="text-sm font-medium"
-        >
-          {{ label }}
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="inputId"
+            class="text-sm font-medium"
+          >
+            {{ label }}
+          </label>
 
-        <UInput
-          v-model="field.input"
-          v-bind="field.props"
-          :id="inputId"
-          :disabled="disabled"
-          :aria-invalid="Boolean(field.errors)"
-          autocomplete="off"
-        />
+          <UInput
+            v-model="field.input"
+            v-bind="field.props"
+            :id="inputId"
+            :disabled="disabled"
+            :aria-invalid="Boolean(field.errors)"
+            autocomplete="off"
+          />
+        </div>
 
         <p
           v-if="field.errors"

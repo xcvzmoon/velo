@@ -31,7 +31,7 @@
     <li
       v-for="entry in visible"
       :key="entry.id"
-      class="space-y-2 border-l pl-3"
+      class="border-default space-y-2 border-l pl-3"
     >
       <div class="flex flex-wrap items-center gap-1">
         <UButton
@@ -45,7 +45,6 @@
         <UButton
           :disabled="disabled"
           :aria-label="`Move ${entry.name} up`"
-          size="sm"
           variant="ghost"
           color="neutral"
           label="↑"
@@ -55,7 +54,6 @@
         <UButton
           :disabled="disabled"
           :aria-label="`Move ${entry.name} down`"
-          size="sm"
           variant="ghost"
           color="neutral"
           label="↓"
@@ -64,7 +62,6 @@
 
         <UButton
           :disabled="disabled"
-          size="sm"
           variant="ghost"
           color="neutral"
           label="Duplicate"
@@ -84,7 +81,6 @@
           :aria-pressed="selectedIds.includes(entry.id)"
           :variant="selectedIds.includes(entry.id) ? 'soft' : 'outline'"
           :label="selectedIds.includes(entry.id) ? 'Selected for run' : 'Select for run'"
-          size="sm"
           @click="emit('run', entry.id)"
         />
       </div>
@@ -93,7 +89,6 @@
         <div class="flex gap-2">
           <UButton
             :disabled="disabled"
-            size="sm"
             variant="outline"
             color="neutral"
             label="Add request"
@@ -102,7 +97,6 @@
 
           <UButton
             :disabled="disabled"
-            size="sm"
             variant="outline"
             color="neutral"
             label="Add folder"

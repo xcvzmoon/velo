@@ -23,36 +23,39 @@
 </script>
 
 <template>
-  <section
+  <ShellPanel
     v-if="snapshot"
-    class="bg-elevated/30 space-y-6 rounded-xl border p-5"
     aria-label="Current run"
   >
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <p class="text-muted text-xs tracking-widest uppercase">Run {{ snapshot.run_id }}</p>
+    <template #header>
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p class="text-muted text-xs tracking-widest uppercase">Run {{ snapshot.run_id }}</p>
 
-        <h2 class="mt-2 text-xl font-medium break-all">{{ snapshot.confirmation.origin }}</h2>
+          <h2 class="text-highlighted mt-2 text-xl font-semibold break-all">
+            {{ snapshot.confirmation.origin }}
+          </h2>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <UBadge
+            :color="active ? 'primary' : snapshot.state === 'failed' ? 'error' : 'neutral'"
+            :label="snapshot.state"
+            variant="subtle"
+            class="capitalize"
+            role="status"
+          />
+
+          <UButton
+            v-if="active"
+            :disabled="busy || snapshot.state === 'stopping'"
+            :label="snapshot.state === 'stopping' ? 'Draining…' : 'Stop run'"
+            color="error"
+            @click="$runs.stop()"
+          />
+        </div>
       </div>
-
-      <div class="flex items-center gap-3">
-        <UBadge
-          :color="active ? 'primary' : snapshot.state === 'failed' ? 'error' : 'neutral'"
-          :label="snapshot.state"
-          variant="subtle"
-          class="capitalize"
-          role="status"
-        />
-
-        <UButton
-          v-if="active"
-          :disabled="busy || snapshot.state === 'stopping'"
-          :label="snapshot.state === 'stopping' ? 'Draining…' : 'Stop run'"
-          color="error"
-          @click="$runs.stop()"
-        />
-      </div>
-    </div>
+    </template>
 
     <UProgress
       :model-value="progress"
@@ -62,12 +65,12 @@
     />
 
     <dl class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <div class="bg-muted/50 rounded-lg border p-4">
+      <div class="bg-muted/50 border-default rounded-lg border p-4">
         <dt class="text-muted text-xs">Requests started</dt>
         <dd class="mt-2 font-mono text-xl break-all">{{ snapshot.metrics.counters.started }}</dd>
       </div>
 
-      <div class="bg-muted/50 rounded-lg border p-4">
+      <div class="bg-muted/50 border-default rounded-lg border p-4">
         <dt class="text-muted text-xs">Elapsed / scheduling target</dt>
 
         <dd class="mt-2 font-mono text-lg">
@@ -76,7 +79,7 @@
         </dd>
       </div>
 
-      <div class="bg-muted/50 rounded-lg border p-4">
+      <div class="bg-muted/50 border-default rounded-lg border p-4">
         <dt class="text-muted text-xs">Desired / actual VUs</dt>
 
         <dd class="mt-2">
@@ -90,7 +93,7 @@
         </dd>
       </div>
 
-      <div class="bg-muted/50 rounded-lg border p-4">
+      <div class="bg-muted/50 border-default rounded-lg border p-4">
         <dt class="text-muted text-xs">In flight</dt>
         <dd class="mt-2 font-mono text-xl break-all">{{ snapshot.metrics.counters.in_flight }}</dd>
       </div>
@@ -218,5 +221,5 @@
       Actual VUs include retiring users; slow retirees may defer a later ramp-up within the worker
       budget. Empty response populations have no percentile. Request rates exclude cancellations.
     </p>
-  </section>
+  </ShellPanel>
 </template>

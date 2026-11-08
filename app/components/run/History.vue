@@ -115,21 +115,23 @@
 </script>
 
 <template>
-  <section
-    class="mt-8 space-y-5 rounded-lg border p-6"
+  <ShellPanel
+    variant="section"
     aria-label="Run history"
   >
-    <div class="flex items-center justify-between gap-4">
-      <h2 class="font-medium">Run history</h2>
+    <template #header>
+      <div class="flex items-center justify-between gap-4">
+        <h2 class="text-highlighted font-semibold">Run history</h2>
 
-      <UButton
-        :disabled="busy"
-        variant="outline"
-        color="neutral"
-        label="Refresh latest"
-        @click="refresh()"
-      />
-    </div>
+        <UButton
+          :disabled="busy"
+          variant="outline"
+          color="neutral"
+          label="Refresh latest"
+          @click="refresh()"
+        />
+      </div>
+    </template>
 
     <p class="text-muted text-sm">
       Summaries remain until deletion. Select up to two runs to compare observed results. Matching
@@ -184,7 +186,7 @@
       <li
         v-for="entry in entries"
         :key="entry.id"
-        class="flex flex-wrap items-center gap-3 border-b pb-3 text-sm"
+        class="border-default flex flex-wrap items-center gap-3 border-b pb-3 text-sm"
       >
         <span class="flex-1">
           {{ new Date(Number(entry.created_at) * 1000).toLocaleString() }} · {{ entry.method }}
@@ -259,5 +261,5 @@
         :entry="entry"
       />
     </div>
-  </section>
+  </ShellPanel>
 </template>

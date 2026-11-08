@@ -143,13 +143,13 @@
 
       <details
         v-if="previous"
-        class="rounded-md border p-3"
+        class="border-default border-y py-4"
       >
         <summary class="cursor-pointer text-sm">Current definition before replacement</summary>
 
-        <pre class="mt-3 max-h-80 overflow-auto text-xs">{{
-          JSON.stringify(previous, null, 2)
-        }}</pre>
+        <div class="min-w-0 space-y-4 pt-4">
+          <pre class="max-h-80 overflow-auto text-xs">{{ JSON.stringify(previous, null, 2) }}</pre>
+        </div>
       </details>
 
       <AuthoringTextForm

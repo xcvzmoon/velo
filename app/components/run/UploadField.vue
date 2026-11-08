@@ -104,20 +104,22 @@
         :path="['multipartParts', index, property]"
       >
         <div class="space-y-2">
-          <label
-            :for="`multipart-${item}-${property}`"
-            class="text-sm font-medium"
-          >
-            {{ property === 'filename' ? 'Upload filename' : 'MIME type' }}
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`multipart-${item}-${property}`"
+              class="text-sm font-medium"
+            >
+              {{ property === 'filename' ? 'Upload filename' : 'MIME type' }}
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`multipart-${item}-${property}`"
-            autocomplete="off"
-            spellcheck="false"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`multipart-${item}-${property}`"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </div>
         </div>
       </FormischField>
     </div>

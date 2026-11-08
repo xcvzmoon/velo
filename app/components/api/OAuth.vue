@@ -188,11 +188,11 @@
 </script>
 
 <template>
-  <section
-    class="space-y-4 rounded-lg border p-5"
+  <ShellPanel
+    variant="inset"
     aria-label="OAuth 2.0 credentials"
   >
-    <h2 class="font-medium">OAuth 2.0</h2>
+    <template #header><h2 class="text-highlighted font-semibold">OAuth 2.0</h2></template>
 
     <p class="text-muted text-sm">
       Acquire or refresh tokens explicitly. Velo stores tokens in the OS credential store and uses a
@@ -213,24 +213,26 @@
         :path="['grant']"
       >
         <div class="space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="oauth-grant"
-          >
-            Grant
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="oauth-grant"
+            >
+              Grant
+            </label>
 
-          <USelect
-            v-model="field.input"
-            :disabled="disabled || busy"
-            :name="field.props.name"
-            :items="[
-              { label: 'Authorization code with PKCE', value: 'authorization_code' },
-              { label: 'Client credentials', value: 'client_credentials' },
-            ]"
-            id="oauth-grant"
-            class="w-full"
-          />
+            <USelect
+              v-model="field.input"
+              :disabled="disabled || busy"
+              :name="field.props.name"
+              :items="[
+                { label: 'Authorization code with PKCE', value: 'authorization_code' },
+                { label: 'Client credentials', value: 'client_credentials' },
+              ]"
+              id="oauth-grant"
+              class="w-full"
+            />
+          </div>
         </div>
       </FormischField>
 
@@ -243,23 +245,25 @@
           :path="[option.name]"
         >
           <div class="space-y-2">
-            <label
-              :for="`oauth-${option.name}`"
-              class="text-sm font-medium"
-            >
-              {{ option.label }}
-            </label>
+            <div class="grid min-w-0 gap-2">
+              <label
+                :for="`oauth-${option.name}`"
+                class="text-sm font-medium"
+              >
+                {{ option.label }}
+              </label>
 
-            <UInput
-              v-model="field.input"
-              v-bind="field.props"
-              :id="`oauth-${option.name}`"
-              :disabled="disabled || busy"
-              :placeholder="option.placeholder"
-              :aria-invalid="Boolean(field.errors)"
-              autocomplete="off"
-              spellcheck="false"
-            />
+              <UInput
+                v-model="field.input"
+                v-bind="field.props"
+                :id="`oauth-${option.name}`"
+                :disabled="disabled || busy"
+                :placeholder="option.placeholder"
+                :aria-invalid="Boolean(field.errors)"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
 
             <p
               v-if="field.errors"
@@ -323,5 +327,5 @@
     >
       {{ message }}
     </p>
-  </section>
+  </ShellPanel>
 </template>

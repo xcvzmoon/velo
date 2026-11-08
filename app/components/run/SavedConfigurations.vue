@@ -53,11 +53,9 @@
 
 <template>
   <section
-    class="space-y-4 rounded-lg border p-6"
+    class="space-y-4"
     aria-label="Saved configurations"
   >
-    <h2 class="font-medium">Saved configurations</h2>
-
     <p class="text-muted text-sm">
       Open an earlier saved configuration in the unified editor. Remembered fields remain OS-store
       references in definitions and exports. Select local upload files again. Save further changes

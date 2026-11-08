@@ -7,7 +7,6 @@
     :title="title"
     :description="description"
     icon="i-hugeicons-test-tube-01"
-    variant="subtle"
   >
     <template
       v-if="$slots.default"

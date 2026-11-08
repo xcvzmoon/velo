@@ -122,7 +122,7 @@
 <template>
   <Form
     :of="form"
-    class="space-y-3 rounded-md border p-4"
+    class="border-default space-y-3 rounded-md border p-4"
     @submit="add"
   >
     <p class="text-sm font-medium">Add a generated field</p>
@@ -132,19 +132,21 @@
       :of="form"
       :path="['name']"
     >
-      <label
-        :for="`${prefix}-name`"
-        class="text-sm font-medium"
-      >
-        Variable name
-      </label>
+      <div class="grid min-w-0 gap-2">
+        <label
+          :for="`${prefix}-name`"
+          class="text-sm font-medium"
+        >
+          Variable name
+        </label>
 
-      <UInput
-        v-model="field.input"
-        v-bind="field.props"
-        :id="`${prefix}-name`"
-        :disabled="props.disabled"
-      />
+        <UInput
+          v-model="field.input"
+          v-bind="field.props"
+          :id="`${prefix}-name`"
+          :disabled="props.disabled"
+        />
+      </div>
 
       <p
         v-if="field.errors"
@@ -159,24 +161,26 @@
       :of="form"
       :path="['kind']"
     >
-      <label
-        :for="`${prefix}-kind`"
-        class="text-sm font-medium"
-      >
-        Faker generator or explicit value
-      </label>
+      <div class="grid min-w-0 gap-2">
+        <label
+          :for="`${prefix}-kind`"
+          class="text-sm font-medium"
+        >
+          Faker generator or explicit value
+        </label>
 
-      <USelect
-        v-model="field.input"
-        :disabled="props.disabled"
-        :id="`${prefix}-kind`"
-        :items="[
-          ...['first_name', 'last_name', 'uuid', 'email', 'integer', 'literal', 'copy'].map(
-            (kind) => ({ label: kind, value: kind }),
-          ),
-        ]"
-        class="w-full"
-      />
+        <USelect
+          v-model="field.input"
+          :disabled="props.disabled"
+          :id="`${prefix}-kind`"
+          :items="[
+            ...['first_name', 'last_name', 'uuid', 'email', 'integer', 'literal', 'copy'].map(
+              (kind) => ({ label: kind, value: kind }),
+            ),
+          ]"
+          class="w-full"
+        />
+      </div>
     </Field>
 
     <Field
@@ -195,19 +199,21 @@
           (getInput(form).kind === 'copy' && argument.name === 'field')
         "
       >
-        <label
-          :for="`${prefix}-${argument.name}`"
-          class="text-sm font-medium"
-        >
-          {{ argument.label }}
-        </label>
+        <div class="grid min-w-0 gap-2">
+          <label
+            :for="`${prefix}-${argument.name}`"
+            class="text-sm font-medium"
+          >
+            {{ argument.label }}
+          </label>
 
-        <UInput
-          v-model="field.input"
-          v-bind="field.props"
-          :id="`${prefix}-${argument.name}`"
-          :disabled="props.disabled"
-        />
+          <UInput
+            v-model="field.input"
+            v-bind="field.props"
+            :id="`${prefix}-${argument.name}`"
+            :disabled="props.disabled"
+          />
+        </div>
 
         <p
           v-if="field.errors"

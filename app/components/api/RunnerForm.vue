@@ -74,10 +74,10 @@
 <template>
   <Form
     :of="form"
-    class="space-y-4 rounded-lg border p-5"
+    class="border-default bg-default space-y-4 rounded-xl border p-5 shadow-sm"
     @submit="submit"
   >
-    <h2 class="font-medium">Send or run ordered functional checks</h2>
+    <h2 class="text-highlighted font-semibold">Send or run ordered functional checks</h2>
 
     <p class="text-muted text-sm">
       Run scope: {{ selection }}. Requests execute sequentially, with no automatic retries. Sending
@@ -91,26 +91,28 @@
         :path="['environment']"
       >
         <div class="space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="api-environment"
-          >
-            Environment
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              class="text-sm font-medium"
+              for="api-environment"
+            >
+              Environment
+            </label>
 
-          <USelect
-            v-model="field.input"
-            :disabled="disabled"
-            :items="[
-              { label: 'Shared variables', value: '__shared__' },
-              ...environments.map((name) => ({ label: name, value: name })),
-            ]"
-            id="api-environment"
-            class="w-full"
-            @update:model-value="
-              emit('environment', String($event) === '__shared__' ? null : String($event))
-            "
-          />
+            <USelect
+              v-model="field.input"
+              :disabled="disabled"
+              :items="[
+                { label: 'Shared variables', value: '__shared__' },
+                ...environments.map((name) => ({ label: name, value: name })),
+              ]"
+              id="api-environment"
+              class="w-full"
+              @update:model-value="
+                emit('environment', String($event) === '__shared__' ? null : String($event))
+              "
+            />
+          </div>
         </div>
       </Field>
 
@@ -122,21 +124,23 @@
         :path="[name]"
       >
         <div class="space-y-2">
-          <label
-            :for="`api-${name}`"
-            class="text-sm font-medium"
-          >
-            {{ name === 'iterations' ? 'Iterations' : 'Delay between requests (ms)' }}
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`api-${name}`"
+              class="text-sm font-medium"
+            >
+              {{ name === 'iterations' ? 'Iterations' : 'Delay between requests (ms)' }}
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`api-${name}`"
-            :disabled="disabled"
-            type="number"
-            min="0"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`api-${name}`"
+              :disabled="disabled"
+              type="number"
+              min="0"
+            />
+          </div>
 
           <p
             v-if="field.errors"
@@ -171,44 +175,48 @@
       </div>
     </Field>
 
-    <details>
+    <details class="border-default border-t pt-4">
       <summary class="cursor-pointer text-sm">Prepared dataset rows</summary>
 
-      <p class="text-muted my-2 text-xs">
-        Optional JSON array of prepared scalar string records. Configure the shared dataset recipe
-        in the request definition. CSV/JSON and Faker preparation uses the same recipe as Tests.
-      </p>
+      <div class="min-w-0 space-y-4 pt-4">
+        <p class="text-muted text-xs">
+          Optional JSON array of prepared scalar string records. Configure the shared dataset recipe
+          in the request definition. CSV/JSON and Faker preparation uses the same recipe as Tests.
+        </p>
 
-      <Field
-        v-slot="field"
-        :of="form"
-        :path="['rows']"
-      >
-        <div class="space-y-2">
-          <label
-            class="text-sm font-medium"
-            for="api-prepared-rows"
-          >
-            Prepared rows (JSON)
-          </label>
+        <Field
+          v-slot="field"
+          :of="form"
+          :path="['rows']"
+        >
+          <div class="space-y-2">
+            <div class="grid min-w-0 gap-2">
+              <label
+                class="text-sm font-medium"
+                for="api-prepared-rows"
+              >
+                Prepared rows (JSON)
+              </label>
 
-          <UTextarea
-            v-model="field.input"
-            v-bind="field.props"
-            :disabled="disabled"
-            :ui="{ base: 'font-mono text-xs md:text-xs' }"
-            id="api-prepared-rows"
-          />
+              <UTextarea
+                v-model="field.input"
+                v-bind="field.props"
+                :disabled="disabled"
+                :ui="{ base: 'font-mono' }"
+                id="api-prepared-rows"
+              />
+            </div>
 
-          <p
-            v-if="field.errors"
-            class="text-error text-xs"
-            role="alert"
-          >
-            {{ field.errors.join(' ') }}
-          </p>
-        </div>
-      </Field>
+            <p
+              v-if="field.errors"
+              class="text-error text-xs"
+              role="alert"
+            >
+              {{ field.errors.join(' ') }}
+            </p>
+          </div>
+        </Field>
+      </div>
     </details>
 
     <Field

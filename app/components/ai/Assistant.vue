@@ -68,11 +68,10 @@
 </script>
 
 <template>
-  <section
-    :aria-label="title"
-    class="space-y-5 rounded-lg border p-6"
-  >
-    <h2 class="font-medium">{{ title }}</h2>
+  <ShellPanel :aria-label="title">
+    <template #header>
+      <h2 class="text-highlighted font-semibold">{{ title }}</h2>
+    </template>
 
     <p class="text-muted text-sm">
       Optional assistance from your selected provider. Configure provider keys in Settings, or use a
@@ -97,21 +96,23 @@
         :path="['description']"
       >
         <div class="space-y-2">
-          <label
-            :for="`${inputId}-description`"
-            class="text-sm font-medium"
-          >
-            Instructions and optional API context
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${inputId}-description`"
+              class="text-sm font-medium"
+            >
+              Instructions and optional API context
+            </label>
 
-          <UTextarea
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${inputId}-description`"
-            :disabled="disabled || busy"
-            placeholder="Describe the endpoint, workload goals, assertions, and data you need."
-            autocomplete="off"
-          />
+            <UTextarea
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${inputId}-description`"
+              :disabled="disabled || busy"
+              placeholder="Describe the endpoint, workload goals, assertions, and data you need."
+              autocomplete="off"
+            />
+          </div>
 
           <p
             v-if="field.errors"
@@ -208,7 +209,7 @@
       <pre
         :id="evidenceId"
         tabindex="0"
-        class="max-h-96 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
+        class="border-default max-h-96 overflow-auto rounded-md border p-3 text-xs whitespace-pre-wrap"
         >{{ reviewedContent }}</pre>
 
       <UButton
@@ -261,5 +262,5 @@
       :evidence-id="evidenceId"
       @apply="emit('apply', $event)"
     />
-  </section>
+  </ShellPanel>
 </template>

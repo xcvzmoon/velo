@@ -84,7 +84,7 @@
 </script>
 
 <template>
-  <div class="space-y-4 border-t pt-6">
+  <div class="border-default space-y-4 border-t pt-6">
     <h3 class="text-sm font-medium">Response assertions and diagnostics</h3>
 
     <p class="text-muted text-xs leading-relaxed">
@@ -103,7 +103,6 @@
         <UButton
           :disabled="disabled || rows.items.length >= 32"
           type="button"
-          size="sm"
           variant="outline"
           color="neutral"
           label="Add assertion"
@@ -133,7 +132,7 @@
         <div
           v-for="(item, index) in rows.items"
           :key="item"
-          class="space-y-3 rounded-md border p-4"
+          class="border-default space-y-3 rounded-md border p-4"
         >
           <FormischField
             v-slot="field"
@@ -141,21 +140,23 @@
             :path="['assertions', index, 'kind']"
           >
             <div class="space-y-2">
-              <label
-                :for="`${editorId}-${item}-kind`"
-                class="text-sm font-medium"
-              >
-                Condition
-              </label>
+              <div class="grid min-w-0 gap-2">
+                <label
+                  :for="`${editorId}-${item}-kind`"
+                  class="text-sm font-medium"
+                >
+                  Condition
+                </label>
 
-              <USelect
-                v-model="field.input"
-                :disabled="disabled"
-                :name="field.props.name"
-                :id="`${editorId}-${item}-kind`"
-                :items="[...kinds.map((kind) => ({ label: kind.label, value: kind.value }))]"
-                class="w-full"
-              />
+                <USelect
+                  v-model="field.input"
+                  :disabled="disabled"
+                  :name="field.props.name"
+                  :id="`${editorId}-${item}-kind`"
+                  :items="[...kinds.map((kind) => ({ label: kind.label, value: kind.value }))]"
+                  class="w-full"
+                />
+              </div>
             </div>
           </FormischField>
 
@@ -168,21 +169,23 @@
               :path="['assertions', index, entry.name]"
             >
               <div class="space-y-2">
-                <label
-                  :for="`${editorId}-${item}-${entry.name}`"
-                  class="text-sm font-medium"
-                >
-                  {{ entry.label }}
-                </label>
+                <div class="grid min-w-0 gap-2">
+                  <label
+                    :for="`${editorId}-${item}-${entry.name}`"
+                    class="text-sm font-medium"
+                  >
+                    {{ entry.label }}
+                  </label>
 
-                <UInput
-                  v-model="field.input"
-                  v-bind="field.props"
-                  :id="`${editorId}-${item}-${entry.name}`"
-                  :aria-invalid="Boolean(field.errors)"
-                  :aria-describedby="`${editorId}-${item}-${entry.name}-error`"
-                  :placeholder="entry.placeholder"
-                />
+                  <UInput
+                    v-model="field.input"
+                    v-bind="field.props"
+                    :id="`${editorId}-${item}-${entry.name}`"
+                    :aria-invalid="Boolean(field.errors)"
+                    :aria-describedby="`${editorId}-${item}-${entry.name}-error`"
+                    :placeholder="entry.placeholder"
+                  />
+                </div>
 
                 <p
                   v-if="field.errors"
@@ -200,7 +203,6 @@
             :disabled="disabled"
             :aria-label="`Remove assertion ${index + 1}`"
             type="button"
-            size="sm"
             variant="ghost"
             color="neutral"
             label="Remove"
@@ -222,23 +224,25 @@
         :path="['inspection', limit.name]"
       >
         <div class="space-y-2">
-          <label
-            :for="`${editorId}-${limit.name}`"
-            class="text-sm font-medium"
-          >
-            {{ limit.label }}
-          </label>
+          <div class="grid min-w-0 gap-2">
+            <label
+              :for="`${editorId}-${limit.name}`"
+              class="text-sm font-medium"
+            >
+              {{ limit.label }}
+            </label>
 
-          <UInput
-            v-model="field.input"
-            v-bind="field.props"
-            :id="`${editorId}-${limit.name}`"
-            :min="limit.min"
-            :max="limit.max"
-            :aria-invalid="Boolean(field.errors)"
-            type="number"
-            step="1"
-          />
+            <UInput
+              v-model="field.input"
+              v-bind="field.props"
+              :id="`${editorId}-${limit.name}`"
+              :min="limit.min"
+              :max="limit.max"
+              :aria-invalid="Boolean(field.errors)"
+              type="number"
+              step="1"
+            />
+          </div>
 
           <p
             v-if="field.errors"
