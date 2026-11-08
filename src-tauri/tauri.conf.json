@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Velo",
-        "width": 800,
-        "height": 600,
+        "minWidth": 1000,
+        "minHeight": 800,
         "resizable": true,
         "fullscreen": false,
         "center": true,
@@ -23,9 +23,7 @@
         "trafficLightPosition": {
           "x": 13,
           "y": 21
-        },
-        "minWidth": 640,
-        "minHeight": 480
+        }
       }
     ],
     "security": {
