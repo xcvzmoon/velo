@@ -10,8 +10,9 @@ Velo is a local desktop studio for testing HTTP APIs under load. Configure a req
 - Stop a run with graceful drain, navigate without interrupting it, and retain partial results.
 - Edit and share versioned JSON test definitions, select environments, import API requests, and preview one request.
 - Save tests with OS secret references and compare compatible historical runs.
+- Run exported definitions headlessly in CI with explicit target authorization and JSON, JUnit, or HTML reports.
 
-Velo runs one test at a time per application instance. It repeats one request; it does not provide scripted journeys, browser testing, or distributed load generation.
+Each desktop instance or CLI process runs one test at a time. Tests can repeat one request or run configured scenarios. Velo does not provide browser testing or distributed load generation.
 
 ## Run locally
 
@@ -22,7 +23,7 @@ pnpm install
 pnpm dev
 ```
 
-The development runner launches Nuxt and the native desktop shell together. Native execution and storage require the desktop app; a browser-only frontend cannot run load tests.
+The development runner launches Nuxt and the native desktop shell together. A browser-only frontend cannot run load tests. Use the desktop app for editing and local history, or the [headless CLI](docs/headless.md) for automation.
 
 ## Run your first test
 
@@ -44,6 +45,7 @@ The application uses Tauri 2 with a client-rendered Nuxt 4/Vue 3 frontend. Rust 
 | `app/`                   | Request editing, live monitoring, results, and native client                   |
 | `crates/velo-engine/`    | Desktop-independent Tokio/Reqwest engine and HDR metrics                       |
 | `crates/velo-contracts/` | Shared desktop contracts and binding exporter                                  |
+| `crates/velo-cli/`       | Headless runner and CI report adapter                                          |
 | `src-tauri/src/`         | Commands, run ownership, SQLite history, OS credentials, and desktop lifecycle |
 | `app/types/contracts.ts` | Generated Rust-owned TypeScript contracts                                      |
 | `docs/`                  | Implementation guides, development instructions, and dated evidence            |

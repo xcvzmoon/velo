@@ -6,6 +6,7 @@ These guides describe the current implementation. Delivery history and dated mea
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | [Test authoring](authoring.md)                                       | Definitions, environments, secret references, request imports, and preview                 |
 | [Test data](datasets.md)                                             | Seeded Faker generation, CSV/JSON imports, lifetimes, allocation, and exhaustion           |
+| [Headless CLI and CI](headless.md)                                   | Preparation, authorization, secret inputs, datasets, exit statuses, artifacts, and CI      |
 | [Architecture](architecture.md)                                      | Crate boundaries, frontend, and native communication                                       |
 | [Execution and measurements](execution.md)                           | HTTP options, scheduling, cancellation, metrics, and thresholds                            |
 | [Generator health](generator-health.md)                              | Native CPU/RAM, admission pressure, rate windows, retained timelines, and platform support |
