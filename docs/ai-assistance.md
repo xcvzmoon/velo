@@ -27,6 +27,7 @@ OpenAI requests use `store: false`. Other providers retain their own data-handli
 ## Native AI flow
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false}}}%%
 flowchart TD
     Input["Describe a test or select run evidence"] --> Config["Choose provider, model, endpoint, and key mode"]
     Config --> Review["Native redaction and frozen destination review"]

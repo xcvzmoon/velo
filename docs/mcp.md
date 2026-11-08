@@ -5,6 +5,7 @@
 ## MCP flow
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false}}}%%
 flowchart TD
     User["User configures startup grants"] --> Server["Local velo-mcp process over stdio"]
     Reports["Explicitly granted report files"] --> Snapshot["Frozen, redacted evidence snapshots"]
