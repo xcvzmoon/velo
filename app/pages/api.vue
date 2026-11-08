@@ -8,6 +8,7 @@
       title="API workspace"
       description="Organize HTTP requests, inspect responses, and run ordered functional checks."
     />
+
     <ApiWorkspace />
   </div>
 </template>

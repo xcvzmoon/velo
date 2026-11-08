@@ -132,16 +132,23 @@
       :of="form"
       :path="['name']"
     >
-      <Label :for="`${prefix}-name`">Variable name</Label>
-      <Input
+      <label
+        :for="`${prefix}-name`"
+        class="text-sm font-medium"
+      >
+        Variable name
+      </label>
+
+      <UInput
         v-model="field.input"
         v-bind="field.props"
         :id="`${prefix}-name`"
         :disabled="props.disabled"
       />
+
       <p
         v-if="field.errors"
-        class="text-destructive text-sm"
+        class="text-error text-sm"
       >
         {{ field.errors.join(' ') }}
       </p>
@@ -152,30 +159,24 @@
       :of="form"
       :path="['kind']"
     >
-      <Label :for="`${prefix}-kind`">Faker generator or explicit value</Label>
-      <Select
+      <label
+        :for="`${prefix}-kind`"
+        class="text-sm font-medium"
+      >
+        Faker generator or explicit value
+      </label>
+
+      <USelect
         v-model="field.input"
         :disabled="props.disabled"
-      >
-        <SelectTrigger :id="`${prefix}-kind`"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem
-            v-for="kind in [
-              'first_name',
-              'last_name',
-              'uuid',
-              'email',
-              'integer',
-              'literal',
-              'copy',
-            ]"
-            :key="kind"
-            :value="kind"
-          >
-            {{ kind }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
+        :id="`${prefix}-kind`"
+        :items="[
+          ...['first_name', 'last_name', 'uuid', 'email', 'integer', 'literal', 'copy'].map(
+            (kind) => ({ label: kind, value: kind }),
+          ),
+        ]"
+        class="w-full"
+      />
     </Field>
 
     <Field
@@ -194,28 +195,35 @@
           (getInput(form).kind === 'copy' && argument.name === 'field')
         "
       >
-        <Label :for="`${prefix}-${argument.name}`">{{ argument.label }}</Label>
-        <Input
+        <label
+          :for="`${prefix}-${argument.name}`"
+          class="text-sm font-medium"
+        >
+          {{ argument.label }}
+        </label>
+
+        <UInput
           v-model="field.input"
           v-bind="field.props"
           :id="`${prefix}-${argument.name}`"
           :disabled="props.disabled"
         />
+
         <p
           v-if="field.errors"
-          class="text-destructive text-sm"
+          class="text-error text-sm"
         >
           {{ field.errors.join(' ') }}
         </p>
       </template>
     </Field>
 
-    <Button
+    <UButton
       :disabled="props.disabled"
       type="submit"
       variant="outline"
-    >
-      Add field to recipe
-    </Button>
+      color="neutral"
+      label="Add field to recipe"
+    />
   </Form>
 </template>

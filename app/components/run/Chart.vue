@@ -13,6 +13,7 @@
     comparisonValues?: (number | null)[];
   }>();
 
+  const colorMode = useColorMode();
   const host = useTemplateRef<HTMLDivElement>('host');
 
   let chart: uPlot | null = null;
@@ -33,13 +34,13 @@
       {
         seconds: props.warmupSeconds,
         label: 'Measurement starts',
-        color: '#fbbf24',
+        color: colorMode.value === 'dark' ? '#fbbf24' : '#a16207',
         labelOffset: -17,
       },
       {
         seconds: props.automaticStopSeconds,
         label: 'Automatic stop',
-        color: '#f87171',
+        color: colorMode.value === 'dark' ? '#f87171' : '#b91c1c',
         labelOffset: -3,
       },
     ]) {
@@ -74,12 +75,13 @@
     context.restore();
   }
 
-  onMounted(() => {
+  function createChart(): void {
     const element = host.value;
     if (!element) {
       return;
     }
 
+    chart?.destroy();
     chart = new uPlot(
       {
         hooks: { draw: [drawBoundaries] },
@@ -102,7 +104,7 @@
           {
             label: props.comparisonValues ? 'Actual VUs' : props.unit,
             paths: props.binary ? uPlot.paths.stepped?.({ align: 1 }) : undefined,
-            stroke: '#38bdf8',
+            stroke: colorMode.value === 'dark' ? '#2dd4bf' : '#0f766e',
             width: 1.5,
             spanGaps: false,
             points: {
@@ -118,7 +120,7 @@
             ? [
                 {
                   label: 'Desired VUs',
-                  stroke: '#fbbf24',
+                  stroke: colorMode.value === 'dark' ? '#fbbf24' : '#a16207',
                   width: 1.5,
                   dash: [5, 4],
                   spanGaps: false,
@@ -132,15 +134,15 @@
         ],
         axes: [
           {
-            stroke: '#94a3b8',
-            grid: { stroke: '#64748b20' },
-            ticks: { stroke: '#64748b30' },
+            stroke: colorMode.value === 'dark' ? '#a1a1aa' : '#52525b',
+            grid: { stroke: colorMode.value === 'dark' ? '#27272a' : '#e4e4e7' },
+            ticks: { stroke: colorMode.value === 'dark' ? '#3f3f46' : '#d4d4d8' },
             font: '11px monospace',
           },
           {
-            stroke: '#94a3b8',
-            grid: { stroke: '#64748b20' },
-            ticks: { stroke: '#64748b30' },
+            stroke: colorMode.value === 'dark' ? '#a1a1aa' : '#52525b',
+            grid: { stroke: colorMode.value === 'dark' ? '#27272a' : '#e4e4e7' },
+            ticks: { stroke: colorMode.value === 'dark' ? '#3f3f46' : '#d4d4d8' },
             font: '11px monospace',
             size: 54,
             splits: props.binary ? () => [0, 1] : undefined,
@@ -151,7 +153,16 @@
       data(),
       element,
     );
+  }
 
+  watch(() => colorMode.value, createChart);
+
+  onMounted(() => {
+    createChart();
+    const element = host.value;
+    if (!element) {
+      return;
+    }
     observer = new ResizeObserver(([entry]) => {
       if (entry) {
         chart?.setSize({
@@ -185,14 +196,15 @@
   <section class="min-w-0 rounded-lg border p-4">
     <div class="mb-4 flex items-baseline justify-between gap-3">
       <h3 class="text-sm font-medium">{{ title }}</h3>
-      <span class="text-muted-foreground font-mono text-xs">{{ unit }}</span>
+      <span class="text-muted font-mono text-xs">{{ unit }}</span>
     </div>
 
     <p
       v-if="warmupSeconds || automaticStopSeconds !== undefined"
-      class="text-muted-foreground mb-3 text-xs"
+      class="text-muted mb-3 text-xs"
     >
       <span v-if="warmupSeconds">Measurement starts at {{ warmupSeconds }} s.</span>
+
       <span v-if="automaticStopSeconds !== undefined">
         Automatic stop at {{ automaticStopSeconds.toFixed(3) }} s.
       </span>

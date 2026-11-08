@@ -267,7 +267,7 @@
   >
     <h2 class="font-medium">Scenarios and user sessions</h2>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Each admitted iteration selects one weighted scenario and executes its steps in order. VU
       workloads repeat iterations; arrival workloads admit iterations. Requests per second and
       iterations per second are separate measurements. Weights are relative probabilities, so small
@@ -275,17 +275,17 @@
       admission order; scheduling determines how many iterations are admitted.
     </p>
 
-    <Button
+    <UButton
       v-if="!plan"
       :disabled="disabled"
       variant="outline"
+      color="neutral"
+      label="Enable multi-step scenarios"
       @click="enable"
-    >
-      Enable multi-step scenarios
-    </Button>
+    />
 
     <template v-else>
-      <p class="text-muted-foreground text-sm">
+      <p class="text-muted text-sm">
         Shared variables use
         <code v-text="'{{name}}'" />
         ; the active environment overrides shared values and dataset fields override both. Extracted
@@ -295,7 +295,7 @@
         iterations start with isolated sessions.
       </p>
 
-      <p class="text-muted-foreground text-sm">
+      <p class="text-muted text-sm">
         Setup runs once before measured traffic. Its values seed isolated user sessions. Cleanup
         runs once after measured traffic using setup state, including after stopping or failure
         where possible. Setup and cleanup each have a 30-second deadline and use the first prepared
@@ -303,7 +303,7 @@
         requests must use the reviewed origin; session values can change URL paths and queries only.
       </p>
 
-      <p class="text-muted-foreground text-xs">
+      <p class="text-muted text-xs">
         A plan supports 16 scenarios and 64 total steps, with at most 32 steps per scenario. Each
         user has a 32 KiB state budget for up to 32 extracted values and 32 cookies. Each extracted
         value is limited to 4 KiB. JSON extraction uses the configured response inspection limit.
@@ -313,67 +313,69 @@
         class="flex flex-wrap gap-2"
         aria-label="Scenario and lifecycle selection"
       >
-        <Button
+        <UButton
           :disabled="disabled || dirty"
-          :variant="selection.phase === 'setup' ? 'default' : 'outline'"
+          :variant="selection.phase === 'setup' ? 'solid' : 'outline'"
+          label="Setup"
           @click="select({ phase: 'setup' })"
-        >
-          Setup
-        </Button>
-        <Button
+        />
+
+        <UButton
           v-for="(scenario, index) in plan.scenarios"
           :key="index"
           :disabled="disabled || dirty"
-          :variant="selection.phase === 'load' && selection.index === index ? 'default' : 'outline'"
+          :variant="selection.phase === 'load' && selection.index === index ? 'solid' : 'outline'"
+          :label="`${scenario.id} · weight ${scenario.weight}`"
           @click="select({ phase: 'load', index })"
-        >
-          {{ scenario.id }} · weight {{ scenario.weight }}
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled || dirty"
-          :variant="selection.phase === 'cleanup' ? 'default' : 'outline'"
+          :variant="selection.phase === 'cleanup' ? 'solid' : 'outline'"
+          label="Cleanup"
           @click="select({ phase: 'cleanup' })"
-        >
-          Cleanup
-        </Button>
+        />
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <Button
+        <UButton
           :disabled="disabled || dirty || plan.scenarios.length >= 16 || totalSteps >= 64"
           variant="outline"
+          color="neutral"
+          label="Add scenario"
           @click="addScenario"
-        >
-          Add scenario
-        </Button>
-        <Button
+        />
+
+        <UButton
           v-if="selection.phase === 'load'"
           :disabled="disabled || dirty || plan.scenarios.length <= 1"
           variant="outline"
+          color="neutral"
+          label="Remove scenario"
           @click="removeScenario"
-        >
-          Remove scenario
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled || dirty"
           variant="outline"
+          color="neutral"
+          label="Use standalone request"
           @click="emit('change', null)"
-        >
-          Use standalone request
-        </Button>
-        <Button
+        />
+
+        <UButton
           v-if="dirty"
           :disabled="disabled"
           variant="outline"
+          color="neutral"
+          label="Discard unapplied settings"
           @click="discard"
-        >
-          Discard unapplied settings
-        </Button>
+        />
       </div>
 
       <p
         v-if="dirty"
-        class="text-muted-foreground text-sm"
+        class="text-muted text-sm"
         role="status"
       >
         Apply the edited settings and correct request errors before switching steps or reviewing
@@ -382,7 +384,7 @@
 
       <p
         v-if="error"
-        class="text-destructive text-sm"
+        class="text-error text-sm"
         role="alert"
       >
         {{ error }}
@@ -402,50 +404,52 @@
         class="flex flex-wrap gap-2"
         aria-label="Ordered steps"
       >
-        <Button
+        <UButton
           v-for="(step, index) in steps"
           :key="index"
           :disabled="disabled || dirty"
-          :variant="stepIndex === index ? 'default' : 'outline'"
+          :variant="stepIndex === index ? 'solid' : 'outline'"
+          :label="`${index + 1}. ${step.id}`"
           @click="
             stepIndex = index;
             discard();
           "
-        >
-          {{ index + 1 }}. {{ step.id }}
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled || dirty || steps.length >= 32 || totalSteps >= 64"
           variant="outline"
+          color="neutral"
+          label="Add step"
           @click="addStep"
-        >
-          Add step
-        </Button>
+        />
       </div>
 
       <template v-if="selectedStep">
         <div class="flex flex-wrap gap-2">
-          <Button
+          <UButton
             :disabled="disabled || dirty || stepIndex === 0"
             variant="outline"
+            color="neutral"
+            label="Move earlier"
             @click="moveStep(-1)"
-          >
-            Move earlier
-          </Button>
-          <Button
+          />
+
+          <UButton
             :disabled="disabled || dirty || stepIndex === steps.length - 1"
             variant="outline"
+            color="neutral"
+            label="Move later"
             @click="moveStep(1)"
-          >
-            Move later
-          </Button>
-          <Button
+          />
+
+          <UButton
             :disabled="disabled || dirty || (selection.phase === 'load' && steps.length <= 1)"
             variant="outline"
+            color="neutral"
+            label="Remove step"
             @click="removeStep"
-          >
-            Remove step
-          </Button>
+          />
         </div>
 
         <AuthoringScenarioStepForm
@@ -462,7 +466,7 @@
 
       <p
         v-else
-        class="text-muted-foreground text-sm"
+        class="text-muted text-sm"
       >
         No {{ selection.phase }} steps configured.
       </p>

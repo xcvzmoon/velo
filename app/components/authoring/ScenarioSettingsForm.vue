@@ -69,9 +69,14 @@
       :path="['seed']"
     >
       <div class="space-y-2">
-        <Label :for="`${formId}-seed`">Selection seed</Label>
+        <label
+          :for="`${formId}-seed`"
+          class="text-sm font-medium"
+        >
+          Selection seed
+        </label>
 
-        <Input
+        <UInput
           v-model="field.input"
           v-bind="field.props"
           :id="`${formId}-seed`"
@@ -84,7 +89,7 @@
 
         <p
           v-if="field.errors"
-          class="text-destructive text-xs"
+          class="text-error text-xs"
           role="alert"
         >
           {{ field.errors.join(' ') }}
@@ -99,9 +104,14 @@
         :path="['id']"
       >
         <div class="space-y-2">
-          <Label :for="`${formId}-id`">Scenario name / stable ID</Label>
+          <label
+            :for="`${formId}-id`"
+            class="text-sm font-medium"
+          >
+            Scenario name / stable ID
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`${formId}-id`"
@@ -111,7 +121,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -125,9 +135,14 @@
         :path="['weight']"
       >
         <div class="space-y-2">
-          <Label :for="`${formId}-weight`">Relative selection weight</Label>
+          <label
+            :for="`${formId}-weight`"
+            class="text-sm font-medium"
+          >
+            Relative selection weight
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`${formId}-weight`"
@@ -140,7 +155,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -149,12 +164,12 @@
       </FormischField>
     </template>
 
-    <Button
+    <UButton
       :disabled="disabled"
       type="submit"
       variant="outline"
-    >
-      Apply scenario settings
-    </Button>
+      color="neutral"
+      label="Apply scenario settings"
+    />
   </FormischForm>
 </template>

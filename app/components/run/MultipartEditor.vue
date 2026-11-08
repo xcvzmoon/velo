@@ -18,17 +18,19 @@
     :path="['multipartParts']"
   >
     <div class="space-y-4">
-      <p class="text-muted-foreground text-xs leading-relaxed">
+      <p class="text-muted text-xs leading-relaxed">
         Files stream from disk for each request and body-preserving redirect. Keep files unchanged
         during the run. Upload buffers count toward the request-data budget. The multipart boundary
         is managed by the client. File paths and contents are excluded from run reports.
       </p>
 
-      <Button
+      <UButton
         :disabled="disabled"
         type="button"
         size="sm"
         variant="outline"
+        color="neutral"
+        label="Add multipart field"
         @click="
           insert(form, {
             path: ['multipartParts'],
@@ -42,9 +44,7 @@
             },
           })
         "
-      >
-        Add multipart field
-      </Button>
+      />
 
       <div
         v-for="(item, index) in fieldArray.items"
@@ -58,9 +58,14 @@
             :path="['multipartParts', index, 'name']"
           >
             <div class="space-y-2">
-              <Label :for="`multipart-${item}-name`">Field name</Label>
+              <label
+                :for="`multipart-${item}-name`"
+                class="text-sm font-medium"
+              >
+                Field name
+              </label>
 
-              <Input
+              <UInput
                 v-model="field.input"
                 v-bind="field.props"
                 :id="`multipart-${item}-name`"
@@ -76,38 +81,37 @@
             :path="['multipartParts', index, 'kind']"
           >
             <div class="space-y-2">
-              <Label :for="`multipart-${item}-kind`">Content</Label>
+              <label
+                :for="`multipart-${item}-kind`"
+                class="text-sm font-medium"
+              >
+                Content
+              </label>
 
-              <Select
+              <USelect
                 v-model="field.input"
                 :disabled="disabled"
                 :name="field.props.name"
-              >
-                <SelectTrigger
-                  :id="`multipart-${item}-kind`"
-                  class="w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="file">File</SelectItem>
-                </SelectContent>
-              </Select>
+                :id="`multipart-${item}-kind`"
+                :items="[
+                  { label: 'Text', value: 'text' },
+                  { label: 'File', value: 'file' },
+                ]"
+                class="w-full"
+              />
             </div>
           </FormischField>
 
-          <Button
+          <UButton
             :disabled="disabled"
             :aria-label="`Remove multipart field ${index + 1}`"
             type="button"
             variant="ghost"
             class="sm:mt-6"
+            color="neutral"
+            label="Remove"
             @click="remove(form, { path: ['multipartParts'], at: index })"
-          >
-            Remove
-          </Button>
+          />
         </div>
 
         <FormischField
@@ -130,9 +134,14 @@
             :path="['multipartParts', index, 'value']"
           >
             <div class="space-y-2">
-              <Label :for="`multipart-${item}-value`">Value</Label>
+              <label
+                :for="`multipart-${item}-value`"
+                class="text-sm font-medium"
+              >
+                Value
+              </label>
 
-              <Textarea
+              <UTextarea
                 v-model="field.input"
                 v-bind="field.props"
                 :id="`multipart-${item}-value`"

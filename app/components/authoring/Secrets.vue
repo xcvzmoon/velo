@@ -48,7 +48,7 @@
   >
     <h2 class="font-medium">OS secrets</h2>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Use
       <code v-text="'{{secret:name}}'" />
       in request fields. Values stay in the OS credential store and are excluded from definitions
@@ -66,9 +66,14 @@
         :path="['name']"
       >
         <div class="space-y-2">
-          <Label for="secret-name">Secret name</Label>
+          <label
+            class="text-sm font-medium"
+            for="secret-name"
+          >
+            Secret name
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :disabled="disabled || busy"
@@ -78,7 +83,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
           >
             {{ field.errors.join(' ') }}
           </p>
@@ -91,9 +96,14 @@
         :path="['value']"
       >
         <div class="space-y-2">
-          <Label for="secret-value">Value</Label>
+          <label
+            class="text-sm font-medium"
+            for="secret-value"
+          >
+            Value
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :disabled="disabled || busy"
@@ -104,19 +114,18 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
           >
             {{ field.errors.join(' ') }}
           </p>
         </div>
       </FormischField>
 
-      <Button
+      <UButton
         :disabled="disabled || busy"
         type="submit"
-      >
-        Update OS secret
-      </Button>
+        label="Update OS secret"
+      />
     </FormischForm>
 
     <p

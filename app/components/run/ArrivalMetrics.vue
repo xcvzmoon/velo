@@ -19,12 +19,12 @@
         :key="name"
         class="flex justify-between gap-4"
       >
-        <dt class="text-muted-foreground capitalize">{{ name.replaceAll('_', ' ') }}</dt>
+        <dt class="text-muted capitalize">{{ name.replaceAll('_', ' ') }}</dt>
         <dd class="font-mono">{{ value }}</dd>
       </div>
     </dl>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       Requested {{ snapshot.confirmation.workload.rate }} iterations/s. Offered
       {{ rates.offered?.toFixed(2) ?? 'Unavailable' }}
       iterations/s; started {{ rates.started?.toFixed(2) ?? 'Unavailable' }}
@@ -36,7 +36,7 @@
 
     <p
       v-if="snapshot.arrival.capacity_drops !== '0' || snapshot.arrival.missed_deadlines !== '0'"
-      class="text-destructive text-xs"
+      class="text-error text-xs"
       role="status"
     >
       Admission pressure observed: capacity drops or missed arrival slots. Capacity drops and missed

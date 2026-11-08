@@ -28,7 +28,7 @@
 
     <div
       v-if="snapshot.automatic_stop"
-      class="text-destructive space-y-1"
+      class="text-error space-y-1"
     >
       <p>
         Automatic stop at {{ (Number(snapshot.automatic_stop.at_us) / 1e6).toFixed(3) }} s. Partial

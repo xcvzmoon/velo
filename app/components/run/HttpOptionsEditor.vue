@@ -42,7 +42,7 @@
   <div class="space-y-4 border-t pt-6">
     <h3 class="text-sm font-medium">Authentication and transport</h3>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       Credentials are excluded from reports. Saving omits them unless you explicitly remember the
       request in your OS credential store. Use HTTPS to protect them in transit. Redirects stay on
       the original origin; other origins and HTTPS downgrades fail as transport errors. HTTP/2
@@ -56,34 +56,33 @@
     >
       <div class="space-y-4">
         <div class="max-w-xs space-y-2">
-          <Label for="request-auth">Authentication</Label>
+          <label
+            class="text-sm font-medium"
+            for="request-auth"
+          >
+            Authentication
+          </label>
 
-          <Select
+          <USelect
             v-model="mode.input"
             :disabled="disabled"
             :name="mode.props.name"
-          >
-            <SelectTrigger
-              id="request-auth"
-              :aria-invalid="Boolean(mode.errors)"
-              aria-describedby="request-auth-error"
-              class="w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="none">None / custom header</SelectItem>
-              <SelectItem value="bearer">Bearer token</SelectItem>
-              <SelectItem value="basic">Basic</SelectItem>
-              <SelectItem value="api_key">API key</SelectItem>
-            </SelectContent>
-          </Select>
+            :aria-invalid="Boolean(mode.errors)"
+            :items="[
+              { label: 'None / custom header', value: 'none' },
+              { label: 'Bearer token', value: 'bearer' },
+              { label: 'Basic', value: 'basic' },
+              { label: 'API key', value: 'api_key' },
+            ]"
+            id="request-auth"
+            aria-describedby="request-auth-error"
+            class="w-full"
+          />
 
           <p
             v-if="mode.errors"
             id="request-auth-error"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ mode.errors[0] }}
@@ -97,21 +96,26 @@
           :path="['apiKeyPlacement']"
         >
           <div class="max-w-xs space-y-2">
-            <Label for="api-key-placement">API key placement</Label>
-            <Select
+            <label
+              class="text-sm font-medium"
+              for="api-key-placement"
+            >
+              API key placement
+            </label>
+
+            <USelect
               v-model="field.input"
               :disabled="disabled"
               :name="field.props.name"
-            >
-              <SelectTrigger id="api-key-placement"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="header">Header</SelectItem>
-                <SelectItem value="query">Query parameter</SelectItem>
-              </SelectContent>
-            </Select>
-            <p class="text-muted-foreground text-xs">
-              Query credentials may appear in server access logs.
-            </p>
+              :items="[
+                { label: 'Header', value: 'header' },
+                { label: 'Query parameter', value: 'query' },
+              ]"
+              id="api-key-placement"
+              class="w-full"
+            />
+
+            <p class="text-muted text-xs">Query credentials may appear in server access logs.</p>
           </div>
         </FormischField>
 
@@ -130,9 +134,14 @@
               :path="[option.name]"
             >
               <div class="space-y-2">
-                <Label :for="`request-${option.name}`">{{ option.label }}</Label>
+                <label
+                  :for="`request-${option.name}`"
+                  class="text-sm font-medium"
+                >
+                  {{ option.label }}
+                </label>
 
-                <Input
+                <UInput
                   v-model="field.input"
                   v-bind="field.props"
                   :id="`request-${option.name}`"
@@ -161,26 +170,25 @@
         :path="['protocol']"
       >
         <div class="space-y-2">
-          <Label for="request-protocol">HTTP protocol</Label>
+          <label
+            class="text-sm font-medium"
+            for="request-protocol"
+          >
+            HTTP protocol
+          </label>
 
-          <Select
+          <USelect
             v-model="field.input"
             :disabled="disabled"
             :name="field.props.name"
-          >
-            <SelectTrigger
-              id="request-protocol"
-              class="w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="auto">Negotiate HTTP/1.1 or HTTP/2</SelectItem>
-              <SelectItem value="http1">Require HTTP/1.1</SelectItem>
-              <SelectItem value="http2">Require HTTP/2</SelectItem>
-            </SelectContent>
-          </Select>
+            :items="[
+              { label: 'Negotiate HTTP/1.1 or HTTP/2', value: 'auto' },
+              { label: 'Require HTTP/1.1', value: 'http1' },
+              { label: 'Require HTTP/2', value: 'http2' },
+            ]"
+            id="request-protocol"
+            class="w-full"
+          />
         </div>
       </FormischField>
 
@@ -190,9 +198,14 @@
         :path="['max_redirects']"
       >
         <div class="space-y-2">
-          <Label for="request-redirects">Maximum redirects (0 disables)</Label>
+          <label
+            class="text-sm font-medium"
+            for="request-redirects"
+          >
+            Maximum redirects (0 disables)
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :aria-invalid="Boolean(field.errors)"
@@ -206,7 +219,7 @@
           <p
             v-if="field.errors"
             id="request-redirects-error"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors[0] }}

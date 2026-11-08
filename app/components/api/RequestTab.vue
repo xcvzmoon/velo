@@ -95,20 +95,20 @@
     >
       <Field
         v-for="name in fields"
-        :key="name"
         v-slot="field"
+        :key="name"
         :of="form"
         :path="[name]"
       >
         <div class="space-y-2">
-          <Label
+          <label
             :for="`${inputId}-${name}`"
-            class="capitalize"
+            class="text-sm font-medium capitalize"
           >
             {{ name }}
-          </Label>
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`${inputId}-${name}`"
@@ -119,7 +119,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -133,20 +133,24 @@
         :path="['inherit_auth']"
       >
         <div class="flex items-center gap-2">
-          <Checkbox
+          <UCheckbox
             :id="`${inputId}-inherit`"
             :model-value="field.input"
             :disabled="disabled"
             @update:model-value="field.input = $event === true"
           />
-          <Label :for="`${inputId}-inherit`">
+
+          <label
+            :for="`${inputId}-inherit`"
+            class="text-sm font-medium"
+          >
             Inherit authentication when this request uses None
-          </Label>
+          </label>
         </div>
       </Field>
     </Form>
 
-    <p class="text-muted-foreground text-xs">
+    <p class="text-muted text-xs">
       Scope precedence: collection defaults → outer folder → inner folder → request variables →
       environment → dataset. Request headers override inherited names. Use the resolved preview to
       inspect effective settings. Store sensitive values in Secrets and reference them with

@@ -3,13 +3,17 @@
 </script>
 
 <template>
-  <header class="mb-8 border-b pb-7">
-    <p class="text-muted-foreground mb-3 font-mono text-[10px] tracking-[0.16em] uppercase">
-      Velo / Studio
-    </p>
+  <header class="mb-6 flex flex-wrap items-start justify-between gap-4 border-b pb-6">
+    <div>
+      <h1 class="text-highlighted text-2xl font-semibold tracking-tight">{{ title }}</h1>
+      <p class="text-muted mt-2 max-w-2xl text-sm leading-relaxed">{{ description }}</p>
+    </div>
 
-    <h1 class="text-3xl font-medium tracking-tight">{{ title }}</h1>
-
-    <p class="text-muted-foreground mt-3 max-w-xl text-sm leading-relaxed">{{ description }}</p>
+    <div
+      v-if="$slots.default"
+      class="flex flex-wrap gap-2"
+    >
+      <slot />
+    </div>
   </header>
 </template>

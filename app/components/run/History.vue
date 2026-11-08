@@ -122,23 +122,23 @@
     <div class="flex items-center justify-between gap-4">
       <h2 class="font-medium">Run history</h2>
 
-      <Button
+      <UButton
         :disabled="busy"
         variant="outline"
+        color="neutral"
+        label="Refresh latest"
         @click="refresh()"
-      >
-        Refresh latest
-      </Button>
+      />
     </div>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Summaries remain until deletion. Select up to two runs to compare observed results. Matching
       origin, method, and workload does not guarantee identical request data or target conditions.
     </p>
 
     <p
       v-if="error || status"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{
@@ -147,9 +147,16 @@
       }}
     </p>
 
+    <USkeleton
+      v-if="busy"
+      class="h-16 w-full"
+      aria-label="Loading run history"
+      role="status"
+    />
+
     <p
-      v-if="!entries.length"
-      class="text-muted-foreground text-sm"
+      v-if="!busy && !entries.length"
+      class="text-muted text-sm"
     >
       No stored runs on this page.
     </p>
@@ -163,14 +170,14 @@
         }}
       </p>
 
-      <Button
+      <UButton
         v-if="baseline"
         :disabled="busy"
         variant="outline"
+        color="neutral"
+        label="Remove baseline"
         @click="pin(null)"
-      >
-        Remove baseline
-      </Button>
+      />
     </div>
 
     <ul class="space-y-3">
@@ -189,49 +196,49 @@
           {{ entry.metadata.tags.length ? ` · ${entry.metadata.tags.join(', ')}` : '' }}
         </span>
 
-        <Button
+        <UButton
           :disabled="
             busy ||
             baseline === entry.id ||
             (['starting', 'running', 'stopping'].includes(entry.snapshot.state) &&
               !entry.interrupted)
           "
+          :label="baseline === entry.id ? 'Baseline' : 'Pin baseline'"
           variant="outline"
+          color="neutral"
           @click="pin(entry.id)"
-        >
-          {{ baseline === entry.id ? 'Baseline' : 'Pin baseline' }}
-        </Button>
+        />
 
-        <Button
+        <UButton
           :disabled="busy"
           :aria-pressed="selected.some((item) => item.id === entry.id)"
+          :label="selected.some((item) => item.id === entry.id) ? 'Remove selection' : 'Select'"
           variant="outline"
+          color="neutral"
           @click="select(entry.id)"
-        >
-          {{ selected.some((item) => item.id === entry.id) ? 'Remove selection' : 'Select' }}
-        </Button>
+        />
 
-        <Button
+        <ShellConfirmAction
           :disabled="
             busy ||
             (!entry.interrupted &&
               ['starting', 'running', 'stopping'].includes(entry.snapshot.state))
           "
-          variant="ghost"
-          @click="remove(entry.id)"
-        >
-          Delete
-        </Button>
+          label="Delete"
+          title="Delete stored run?"
+          description="The stored measurements will be removed. Comparisons using this run will become unavailable."
+          @confirm="remove(entry.id)"
+        />
       </li>
     </ul>
 
-    <Button
+    <UButton
       :disabled="busy || entries.length < 25"
       variant="outline"
+      color="neutral"
+      label="Older runs"
       @click="refresh(true)"
-    >
-      Older runs
-    </Button>
+    />
 
     <RunComparison
       v-if="candidate"

@@ -58,7 +58,7 @@
   >
     <h2 class="font-medium">Saved configurations</h2>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Open an earlier saved configuration in the unified editor. Remembered fields remain OS-store
       references in definitions and exports. Select local upload files again. Save further changes
       under Saved tests. Configurations are listed in pages of 25.
@@ -66,7 +66,7 @@
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
@@ -82,38 +82,38 @@
           {{ entry.name }} · {{ entry.remembered ? 'OS credentials' : 'Sensitive fields omitted' }}
         </span>
 
-        <Button
+        <UButton
           :disabled="disabled || busy"
           variant="outline"
+          color="neutral"
+          label="Load"
           @click="load(entry.id)"
-        >
-          Load
-        </Button>
+        />
 
-        <Button
+        <ShellConfirmAction
           :disabled="disabled || busy"
-          variant="ghost"
-          @click="remove(entry.id)"
-        >
-          Delete
-        </Button>
+          label="Delete"
+          title="Delete saved configuration?"
+          description="This removes the saved configuration from this workspace."
+          @confirm="remove(entry.id)"
+        />
       </li>
     </ul>
 
-    <Button
+    <UButton
       :disabled="busy || disabled || saved.length < 25"
       variant="outline"
+      color="neutral"
+      label="Older configurations"
       @click="refresh(true)"
-    >
-      Older configurations
-    </Button>
+    />
 
-    <Button
+    <UButton
       :disabled="busy || disabled"
       variant="ghost"
+      color="neutral"
+      label="Latest configurations"
       @click="refresh()"
-    >
-      Latest configurations
-    </Button>
+    />
   </section>
 </template>

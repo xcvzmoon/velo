@@ -12,8 +12,8 @@
 <template>
   <section
     v-if="snapshot && !active"
-    class="mt-8 space-y-6 rounded-lg border p-6"
     :aria-labelledby="headingId"
+    class="mt-8 space-y-6 rounded-lg border p-6"
   >
     <div>
       <h2
@@ -23,7 +23,7 @@
         Final summary
       </h2>
 
-      <p class="text-muted-foreground mt-2 text-sm">
+      <p class="text-muted mt-2 text-sm">
         {{
           snapshot.measurement.complete
             ? 'Scheduling completed.'
@@ -38,6 +38,7 @@
       class="space-y-2 rounded-md border p-4 text-sm"
     >
       <h3 class="font-medium">Dataset outcome</h3>
+
       <p>
         {{ snapshot.dataset.records }} records from {{ snapshot.dataset.source }}
         <template v-if="snapshot.dataset.version">
@@ -45,10 +46,12 @@
         </template>
         ; seed {{ snapshot.dataset.seed }}.
       </p>
+
       <p>
         Lifetime {{ snapshot.dataset.lifetime }}, allocation {{ snapshot.dataset.allocation }},
         exhaustion policy {{ snapshot.dataset.exhaustion }}.
       </p>
+
       <p>
         {{ snapshot.dataset.allocated }} allocations; {{ snapshot.dataset.cycles }} repeat cycles.
         {{
@@ -63,7 +66,7 @@
 
     <p
       v-if="snapshot.failure_code"
-      class="text-destructive"
+      class="text-error"
     >
       {{ snapshot.failure_code }}
     </p>
@@ -76,7 +79,7 @@
         :key="name"
         class="flex justify-between gap-4 border-b pb-2"
       >
-        <dt class="text-muted-foreground capitalize">{{ name.replaceAll('_', ' ') }}</dt>
+        <dt class="text-muted capitalize">{{ name.replaceAll('_', ' ') }}</dt>
         <dd class="font-mono">{{ value }}</dd>
       </div>
 
@@ -89,17 +92,17 @@
         :key="name"
         class="flex justify-between gap-4 border-b pb-2"
       >
-        <dt class="text-muted-foreground capitalize">{{ name }} duration</dt>
+        <dt class="text-muted capitalize">{{ name }} duration</dt>
         <dd class="font-mono">{{ (Number(value) / 1e6).toFixed(3) }} s</dd>
       </div>
 
       <div class="flex justify-between gap-4 border-b pb-2">
-        <dt class="text-muted-foreground">Peak requested / actual VUs</dt>
+        <dt class="text-muted">Peak requested / actual VUs</dt>
         <dd class="font-mono">{{ snapshot.confirmation.vus }} / {{ snapshot.max_vus }}</dd>
       </div>
 
       <div class="flex justify-between gap-4 border-b pb-2">
-        <dt class="text-muted-foreground">Evaluated HTTP failure rate</dt>
+        <dt class="text-muted">Evaluated HTTP failure rate</dt>
 
         <dd class="font-mono">
           {{
@@ -119,7 +122,7 @@
         :key="name"
         class="flex justify-between gap-4 border-b pb-2"
       >
-        <dt class="text-muted-foreground capitalize">Evaluated {{ name }} per second</dt>
+        <dt class="text-muted capitalize">Evaluated {{ name }} per second</dt>
         <dd class="font-mono">{{ value.toFixed(2) }}</dd>
       </div>
     </dl>
@@ -128,57 +131,62 @@
       v-if="snapshot.thresholds.length"
       class="overflow-x-auto"
     >
-      <table class="w-full text-left text-xs">
-        <caption class="text-muted-foreground mb-3 text-left">
-          Final thresholds excluding warm-up for
-          {{ snapshot.measurement.complete ? 'completed' : 'partial' }} work. Comparisons use
-          unrounded values. Insufficient data cannot pass.
-        </caption>
+      <UTable
+        :data="snapshot.thresholds"
+        :columns="[
+          { id: 'metric', header: 'Metric / population' },
+          { id: 'required', header: 'Required' },
+          { id: 'observed', header: 'Observed' },
+          { id: 'status', header: 'Result' },
+        ]"
+        :ui="{ td: 'text-xs font-mono', th: 'text-xs' }"
+        tabindex="0"
+        class="w-full"
+      >
+        <template #caption>
+          <span class="text-muted mb-3 text-left">
+            Final thresholds excluding warm-up for
+            {{ snapshot.measurement.complete ? 'completed' : 'partial' }} work. Comparisons use
+            unrounded values. Insufficient data cannot pass.
+          </span>
+        </template>
 
-        <thead>
-          <tr>
-            <th class="p-2">Metric / population</th>
-            <th class="p-2">Required</th>
-            <th class="p-2">Observed</th>
-            <th class="p-2">Result</th>
-          </tr>
-        </thead>
+        <template #metric-cell="{ row }">
+          <span class="font-normal">
+            {{
+              row.original.rule.metric === 'response_p95_ms'
+                ? 'Completed response p95 (ms)'
+                : row.original.rule.metric === 'http_failure_percent'
+                  ? 'HTTP failure (%) / terminal attempts'
+                  : row.original.rule.metric === 'assertion_failure_percent'
+                    ? 'Assertion failure (%) / evaluated checks'
+                    : 'Terminal requests/s / evaluated duration'
+            }}
+          </span>
+        </template>
 
-        <tbody>
-          <tr
-            v-for="(result, index) in snapshot.thresholds"
-            :key="index"
-            class="border-t"
+        <template #required-cell="{ row }">
+          <span class="font-mono">
+            {{ row.original.rule.operator === 'less_than' ? '<' : '>' }}
+            {{ row.original.rule.limit }}
+          </span>
+        </template>
+
+        <template #observed-cell="{ row }">
+          <span class="font-mono">
+            {{ row.original.observed === null ? 'No data' : row.original.observed.toFixed(3) }}
+          </span>
+        </template>
+
+        <template #status-cell="{ row }">
+          <span
+            :class="row.original.status === 'passed' ? '' : 'text-error'"
+            class="capitalize"
           >
-            <th class="p-2 font-normal">
-              {{
-                result.rule.metric === 'response_p95_ms'
-                  ? 'Completed response p95 (ms)'
-                  : result.rule.metric === 'http_failure_percent'
-                    ? 'HTTP failure (%) / terminal attempts'
-                    : result.rule.metric === 'assertion_failure_percent'
-                      ? 'Assertion failure (%) / evaluated checks'
-                      : 'Terminal requests/s / evaluated duration'
-              }}
-            </th>
-
-            <td class="p-2 font-mono">
-              {{ result.rule.operator === 'less_than' ? '<' : '>' }} {{ result.rule.limit }}
-            </td>
-
-            <td class="p-2 font-mono">
-              {{ result.observed === null ? 'No data' : result.observed.toFixed(3) }}
-            </td>
-
-            <td
-              :class="result.status === 'passed' ? '' : 'text-destructive'"
-              class="p-2 capitalize"
-            >
-              {{ result.status.replaceAll('_', ' ') }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            {{ row.original.status.replaceAll('_', ' ') }}
+          </span>
+        </template>
+      </UTable>
     </div>
 
     <h3 class="text-sm font-medium">Full-run diagnostics, including warm-up</h3>
@@ -193,64 +201,102 @@
     <RunArrivalMetrics :snapshot="snapshot" />
 
     <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs">
-        <caption class="text-muted-foreground mb-3 text-left leading-relaxed">
-          Evaluated approximate HDR durations in milliseconds, three significant digits, range 1
-          μs–1 hour. Response latency includes completed HTTP responses of all statuses. Transport
-          and timeout durations are separate populations.
-        </caption>
+      <UTable
+        :data="[
+          { name: 'responses', population: snapshot.evaluated.response_latency },
+          { name: 'transport', population: snapshot.evaluated.transport_latency },
+          { name: 'timeouts', population: snapshot.evaluated.timeout_latency },
+        ]"
+        :columns="[
+          { id: 'name', header: 'Population' },
+          { id: 'samples', header: 'Samples' },
+          { id: 'out_of_range', header: 'Outside range' },
+          { id: 'mean', header: 'mean' },
+          { id: 'min', header: 'min' },
+          { id: 'max', header: 'max' },
+          { id: 'median', header: 'median' },
+          { id: 'p90', header: 'p90' },
+          { id: 'p95', header: 'p95' },
+          { id: 'p99', header: 'p99' },
+        ]"
+        :ui="{ td: 'text-xs font-mono', th: 'text-xs' }"
+        tabindex="0"
+        class="w-full"
+      >
+        <template #caption>
+          <span class="text-muted text-left text-xs leading-relaxed">
+            Evaluated approximate HDR durations in milliseconds, three significant digits, range 1
+            μs–1 hour. Response latency includes completed HTTP responses of all statuses. Transport
+            and timeout durations are separate populations.
+          </span>
+        </template>
 
-        <thead>
-          <tr>
-            <th class="p-2">Population</th>
-            <th class="p-2">Samples</th>
-            <th class="p-2">Outside range</th>
+        <template #name-cell="{ row }">
+          <span class="capitalize">{{ row.original.name }}</span>
+        </template>
 
-            <th
-              v-for="name in ['mean', 'min', 'max', 'median', 'p90', 'p95', 'p99']"
-              :key="name"
-              class="p-2"
-            >
-              {{ name }}
-            </th>
-          </tr>
-        </thead>
+        <template #samples-cell="{ row }">{{ row.original.population.samples }}</template>
+        <template #out_of_range-cell="{ row }">{{ row.original.population.out_of_range }}</template>
 
-        <tbody>
-          <tr
-            v-for="(population, name) in {
-              responses: snapshot.evaluated.response_latency,
-              transport: snapshot.evaluated.transport_latency,
-              timeouts: snapshot.evaluated.timeout_latency,
-            }"
-            :key="name"
-            class="border-t"
-          >
-            <th class="p-2 font-normal capitalize">{{ name }}</th>
-            <td class="p-2 font-mono">{{ population.samples }}</td>
-            <td class="p-2 font-mono">{{ population.out_of_range }}</td>
+        <template #mean-cell="{ row }">
+          {{
+            row.original.population.mean_us === null
+              ? 'Unavailable'
+              : (row.original.population.mean_us / 1000).toFixed(3)
+          }}
+        </template>
 
-            <td
-              v-for="(value, key) in {
-                mean: population.mean_us,
-                min: population.min_us,
-                max: population.max_us,
-                median: population.median_us,
-                p90: population.p90_us,
-                p95: population.p95_us,
-                p99: population.p99_us,
-              }"
-              :key="key"
-              class="p-2 font-mono"
-            >
-              {{ value === null ? '—' : (value / 1000).toFixed(3) }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+        <template #min-cell="{ row }">
+          {{
+            row.original.population.min_us === null
+              ? 'Unavailable'
+              : (row.original.population.min_us / 1000).toFixed(3)
+          }}
+        </template>
+
+        <template #max-cell="{ row }">
+          {{
+            row.original.population.max_us === null
+              ? 'Unavailable'
+              : (row.original.population.max_us / 1000).toFixed(3)
+          }}
+        </template>
+
+        <template #median-cell="{ row }">
+          {{
+            row.original.population.median_us === null
+              ? 'Unavailable'
+              : (row.original.population.median_us / 1000).toFixed(3)
+          }}
+        </template>
+
+        <template #p90-cell="{ row }">
+          {{
+            row.original.population.p90_us === null
+              ? 'Unavailable'
+              : (row.original.population.p90_us / 1000).toFixed(3)
+          }}
+        </template>
+
+        <template #p95-cell="{ row }">
+          {{
+            row.original.population.p95_us === null
+              ? 'Unavailable'
+              : (row.original.population.p95_us / 1000).toFixed(3)
+          }}
+        </template>
+
+        <template #p99-cell="{ row }">
+          {{
+            row.original.population.p99_us === null
+              ? 'Unavailable'
+              : (row.original.population.p99_us / 1000).toFixed(3)
+          }}
+        </template>
+      </UTable>
     </div>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       Body bytes are encoded response payload consumed, including partial failed responses. Headers,
       TLS, and retransmissions are excluded. HTTP failure rate divides status, transport, and
       timeout failures by non-cancelled terminal attempts. Evaluated throughput excludes warm-up

@@ -45,10 +45,10 @@ Vue: Composition API + `<script setup>` is the project direction (see `.agents/s
 
 ## UI components and forms
 
-- Use shadcn-vue components whenever they provide the required control. Use Input, Label, Button, Textarea, Checkbox, and other matching components instead of raw HTML controls.
-- Prefer composed shadcn-vue controls over native variants. For example, use Select instead of a native `<select>` or shadcn-vue NativeSelect.
+- Use Nuxt UI components whenever they provide the required control. Use UInput, UButton, UTextarea, UCheckbox, USelect, and other matching components instead of raw HTML controls. Use UFormField or semantic labels to associate fields with their controls.
+- Use USelect for selection, UModal for dialogs, and UNavigationMenu for application navigation. Wrap the application in UApp. Keep icons bundled locally for the desktop CSP.
 - Use Formisch (`@formisch/vue`) for forms, including form state, validation, submission, and field errors. Use Valibot schemas with Formisch; do not build parallel manual form handling or add another form library.
-- Keep semantic HTML for layout and content where no shadcn-vue component applies.
+- Keep semantic HTML for layout and content where no Nuxt UI component applies. Use Nuxt UI semantic theme tokens; check contrast in both light and dark modes. Keep editable tab panels mounted to preserve Formisch state.
 
 ## Editing Guidance
 

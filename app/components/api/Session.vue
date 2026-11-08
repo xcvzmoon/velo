@@ -41,36 +41,41 @@
     <summary class="cursor-pointer text-sm font-medium">
       Interactive session · {{ environment ?? 'shared variables' }}
     </summary>
-    <p class="text-muted-foreground text-xs">
+
+    <p class="text-muted text-xs">
       Cookies and extracted variables stay in memory, isolated by collection and environment.
       Independent collection runs use separate sessions. Values are masked.
     </p>
+
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
     </p>
+
     <pre
       v-if="session"
       class="overflow-auto font-mono text-xs whitespace-pre-wrap"
       >{{ JSON.stringify(session, null, 2) }}</pre>
+
     <div class="flex gap-2">
-      <Button
+      <UButton
         :disabled="disabled"
         variant="outline"
+        color="neutral"
+        label="Inspect session"
         @click="refresh"
-      >
-        Inspect session
-      </Button>
-      <Button
+      />
+
+      <UButton
         :disabled="disabled"
         variant="outline"
+        color="neutral"
+        label="Clear cookies and extracted variables"
         @click="clear"
-      >
-        Clear cookies and extracted variables
-      </Button>
+      />
     </div>
   </details>
 </template>

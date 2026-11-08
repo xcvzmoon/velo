@@ -4,6 +4,8 @@
   import { Field as FormischField, Form as FormischForm, useForm } from '@formisch/vue';
   import { confirmationSettingsSchema } from '~/schemas/run';
 
+  definePageMeta({ keepalive: true });
+
   const { $runs } = useNuxtApp();
   const { active, busy, error } = $runs;
 
@@ -13,11 +15,22 @@
   });
 
   const apiDefinition = useState<TestDefinition | null>('api-load-definition', () => null);
-  const loaded = shallowRef<TestDefinition | null>(apiDefinition.value);
-  apiDefinition.value = null;
+  const loaded = shallowRef<TestDefinition | null>(null);
 
   const confirmation = shallowRef<RunConfirmation | null>(null);
   const prepared = shallowRef<RunConfig | null>(null);
+
+  watch(
+    apiDefinition,
+    (definition) => {
+      if (definition) {
+        loaded.value = definition;
+        apiDefinition.value = null;
+        cancel();
+      }
+    },
+    { immediate: true },
+  );
 
   async function prepare(config: RunConfig): Promise<void> {
     confirmation.value = await $runs.prepare(config);
@@ -44,15 +57,15 @@
 <template>
   <div class="space-y-8">
     <ShellPageHeading
-      title="Tests"
-      description="Configure a request, review the load, and monitor your API."
+      title="Test studio"
+      description="Build a test, prepare its data, and review the requested load before execution."
     />
 
     <RunMonitor v-if="active" />
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
@@ -61,7 +74,7 @@
     <FormischForm
       v-if="confirmation"
       :of="confirmationForm"
-      class="space-y-5 rounded-lg border p-6"
+      class="bg-primary/5 border-primary/30 space-y-5 rounded-lg border p-6"
       aria-labelledby="confirmation-heading"
       @submit="start"
     >
@@ -73,12 +86,12 @@
           Review requested load
         </h2>
 
-        <p class="text-muted-foreground mt-2 text-sm">{{ confirmation.origin }}</p>
+        <p class="text-muted mt-2 text-sm">{{ confirmation.origin }}</p>
       </div>
 
       <dl class="grid gap-4 text-sm sm:grid-cols-2">
         <div>
-          <dt class="text-muted-foreground">Workload</dt>
+          <dt class="text-muted">Workload</dt>
 
           <dd class="mt-1 font-mono">
             <template v-if="confirmation.workload.kind === 'arrival'">
@@ -94,7 +107,7 @@
         </div>
 
         <div>
-          <dt class="text-muted-foreground">Local resource budgets</dt>
+          <dt class="text-muted">Local resource budgets</dt>
 
           <dd class="mt-1 font-mono">
             {{ confirmation.budget.max_vus }} tasks /
@@ -103,7 +116,7 @@
         </div>
       </dl>
 
-      <p class="text-muted-foreground text-sm">
+      <p class="text-muted text-sm">
         Warm-up {{ confirmation.warmup_ms / 1000 }} s within the schedule; evaluated admission
         window {{ (confirmation.duration_ms - confirmation.warmup_ms) / 1000 }} s.
         {{ confirmation.abort_policies.length }} automatic stop policies configured. In-flight
@@ -112,7 +125,7 @@
 
       <p
         v-if="confirmation.dataset"
-        class="text-muted-foreground text-sm"
+        class="text-muted text-sm"
       >
         Dataset: {{ confirmation.dataset.records }} records from {{ confirmation.dataset.source }}.
         Lifetime {{ confirmation.dataset.lifetime }}, allocation
@@ -137,7 +150,7 @@
           </li>
         </ol>
 
-        <p class="text-muted-foreground text-xs">
+        <p class="text-muted text-xs">
           Retiring users finish their current request. Actual VUs can lag the desired count during
           transitions.
         </p>
@@ -145,14 +158,14 @@
 
       <p
         v-if="confirmation.warnings.length"
-        class="text-destructive text-sm"
+        class="text-error text-sm"
         role="alert"
       >
         {{ confirmation.warnings.join(', ') }}: This load may saturate the generator or target.
         Review your local budgets before starting.
       </p>
 
-      <p class="text-muted-foreground text-sm leading-relaxed">
+      <p class="text-muted text-sm leading-relaxed">
         Starting acknowledges that you are authorized to load this target at the requested level.
         Velo does not verify ownership. Automatic retries are disabled. Configured redirects stay on
         the target origin. System certificate validation is enabled.
@@ -164,55 +177,59 @@
         :path="['updateIntervalMs']"
       >
         <div class="max-w-xs space-y-2">
-          <Label for="update-interval">Live update interval</Label>
+          <label
+            class="text-sm font-medium"
+            for="update-interval"
+          >
+            Live update interval
+          </label>
 
-          <Select
+          <USelect
             v-model="field.input"
             :disabled="busy"
             :name="field.props.name"
-          >
-            <SelectTrigger
-              id="update-interval"
-              class="w-full"
-            >
-              <SelectValue />
-            </SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="500">500 milliseconds</SelectItem>
-              <SelectItem value="1000">1 second</SelectItem>
-              <SelectItem value="2000">2 seconds</SelectItem>
-            </SelectContent>
-          </Select>
+            :items="[
+              { label: '500 milliseconds', value: '500' },
+              { label: '1 second', value: '1000' },
+              { label: '2 seconds', value: '2000' },
+            ]"
+            id="update-interval"
+            class="w-full"
+          />
         </div>
       </FormischField>
 
       <div class="flex flex-wrap gap-3">
-        <Button
+        <UButton
           :disabled="busy || active"
           type="submit"
-        >
-          I am authorized. Start run
-        </Button>
+          label="I am authorized. Start run"
+        />
 
-        <Button
+        <UButton
           :disabled="busy"
           type="button"
           variant="outline"
+          color="neutral"
+          label="Back to editor"
           @click="cancel"
-        >
-          Back to editor
-        </Button>
+        />
       </div>
     </FormischForm>
 
-    <RunSavedConfigurations
-      :disabled="active || busy"
-      @load="
-        loaded = $event;
-        cancel();
-      "
-    />
+    <details class="rounded-lg border p-4">
+      <summary class="text-muted cursor-pointer text-sm font-medium">
+        Saved request configurations
+      </summary>
+
+      <RunSavedConfigurations
+        :disabled="active || busy"
+        @load="
+          loaded = $event;
+          cancel();
+        "
+      />
+    </details>
 
     <AuthoringEditor
       :loaded="loaded"
@@ -221,17 +238,17 @@
       @invalidate="cancel"
     />
 
-    <p class="text-muted-foreground text-xs">
+    <p class="text-muted text-xs">
       Navigation preserves the active run. History is stored locally; storage failures appear in
       Results. Loading a configuration requires reviewing and authorizing it again.
     </p>
 
-    <Button
+    <UButton
       v-if="!active && $runs.snapshot.value"
       variant="outline"
-      as-child
-    >
-      <NuxtLink to="/results">Inspect latest results</NuxtLink>
-    </Button>
+      to="/results"
+      color="neutral"
+      label="Inspect latest results"
+    />
   </div>
 </template>

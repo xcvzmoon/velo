@@ -66,49 +66,53 @@
   >
     <dl class="flex flex-wrap gap-5 text-sm">
       <div>
-        <dt class="text-muted-foreground">Status</dt>
+        <dt class="text-muted">Status</dt>
         <dd>{{ response.status }}</dd>
       </div>
+
       <div>
-        <dt class="text-muted-foreground">Total elapsed</dt>
+        <dt class="text-muted">Total elapsed</dt>
         <dd>{{ response.elapsed_ms.toFixed(2) }} ms</dd>
       </div>
+
       <div>
-        <dt class="text-muted-foreground">Received</dt>
+        <dt class="text-muted">Received</dt>
         <dd>{{ response.received_bytes }} bytes{{ response.truncated ? ' (partial)' : '' }}</dd>
       </div>
     </dl>
 
     <p
       v-if="!response.content_retained"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
     >
       Response content was not retained under the history policy. Send the request explicitly to
       inspect a new response.
     </p>
 
-    <p class="text-muted-foreground text-xs">
+    <p class="text-muted text-xs">
       Elapsed time includes redirects and bounded body consumption. DNS, TLS, and connection timings
       are not measured. Body capture limit: {{ response.body_limit }} bytes.
     </p>
 
     <p
       v-if="response.truncated"
-      class="text-sm text-amber-600"
+      class="text-warning text-sm"
       role="status"
     >
       Capture was truncated at the body or header limit. Received size may be a lower bound.
     </p>
+
     <p
       v-if="response.redacted"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
     >
       Sensitive response fields and known request values were redacted. Copy and export use this
       redacted content.
     </p>
+
     <p
       v-if="response.body_format !== 'text'"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
     >
       Content is {{ response.body_format.replaceAll('_', ' ') }}. The body cannot be displayed as
       supported text.
@@ -125,14 +129,22 @@
         :path="['format']"
       >
         <div class="space-y-1">
-          <Label :for="`${prefix}-format`">Body format</Label>
-          <Select v-model="field.input">
-            <SelectTrigger :id="`${prefix}-format`"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="json">Formatted JSON</SelectItem>
-              <SelectItem value="raw">Raw text</SelectItem>
-            </SelectContent>
-          </Select>
+          <label
+            :for="`${prefix}-format`"
+            class="text-sm font-medium"
+          >
+            Body format
+          </label>
+
+          <USelect
+            v-model="field.input"
+            :id="`${prefix}-format`"
+            :items="[
+              { label: 'Formatted JSON', value: 'json' },
+              { label: 'Raw text', value: 'raw' },
+            ]"
+            class="w-full"
+          />
         </div>
       </Field>
 
@@ -142,8 +154,14 @@
         :path="['search']"
       >
         <div class="space-y-1">
-          <Label :for="`${prefix}-search`">Find in body</Label>
-          <Input
+          <label
+            :for="`${prefix}-search`"
+            class="text-sm font-medium"
+          >
+            Find in body
+          </label>
+
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`${prefix}-search`"
@@ -153,33 +171,35 @@
       </Field>
 
       <p
-        class="text-muted-foreground text-sm"
+        class="text-muted text-sm"
         aria-live="polite"
       >
         {{ matches }} matches
       </p>
-      <Button
+
+      <UButton
+        :disabled="!response.content_retained"
         type="button"
         variant="outline"
-        :disabled="!response.content_retained"
+        color="neutral"
+        label="Copy redacted body"
         @click="copy"
-      >
-        Copy redacted body
-      </Button>
-      <Button
+      />
+
+      <UButton
+        :disabled="!response.content_retained"
         type="button"
         variant="outline"
-        :disabled="!response.content_retained"
+        color="neutral"
+        label="Export redacted body"
         @click="download"
-      >
-        Export redacted body
-      </Button>
+      />
     </Form>
 
     <p
       v-if="error"
       role="alert"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
     >
       {{ error }}
     </p>
@@ -208,6 +228,7 @@
       class="space-y-2"
     >
       <h3 class="text-sm font-medium">Functional assertions</h3>
+
       <p
         v-for="(check, index) in response.checks"
         :key="index"

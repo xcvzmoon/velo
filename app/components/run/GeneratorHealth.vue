@@ -88,7 +88,8 @@
 
     <dl class="grid gap-4 text-sm @min-[20rem]:grid-cols-2 @min-[50rem]:grid-cols-4">
       <div>
-        <dt class="text-muted-foreground">Native process CPU / resident memory</dt>
+        <dt class="text-muted">Native process CPU / resident memory</dt>
+
         <dd class="mt-1 font-mono">
           {{ percent(current?.process_cpu_percent) }} /
           {{ mebibytes(current?.process_memory_bytes) }}
@@ -96,7 +97,8 @@
       </div>
 
       <div>
-        <dt class="text-muted-foreground">Host CPU / available RAM</dt>
+        <dt class="text-muted">Host CPU / available RAM</dt>
+
         <dd class="mt-1 font-mono">
           {{ percent(current?.system_cpu_percent) }} /
           {{ mebibytes(current?.system_available_memory_bytes) }}
@@ -104,7 +106,8 @@
       </div>
 
       <div>
-        <dt class="text-muted-foreground">Started / completed HTTP requests per second</dt>
+        <dt class="text-muted">Started / completed HTTP requests per second</dt>
+
         <dd class="mt-1 font-mono">
           {{ rates.started?.toFixed(2) ?? 'Unavailable' }} /
           {{ rates.completed?.toFixed(2) ?? 'Unavailable' }}
@@ -112,7 +115,8 @@
       </div>
 
       <div>
-        <dt class="text-muted-foreground">Desired / actual / retiring VUs</dt>
+        <dt class="text-muted">Desired / actual / retiring VUs</dt>
+
         <dd class="mt-1 font-mono">
           {{ snapshot.desired_vus }} / {{ snapshot.active_vus }} / {{ snapshot.retiring_vus }}
         </dd>
@@ -121,10 +125,10 @@
 
     <RunArrivalMetrics :snapshot="snapshot" />
 
-    <details class="text-muted-foreground text-xs">
+    <details class="text-muted text-xs">
       <summary class="cursor-pointer">Measurement scope and rate windows</summary>
 
-      <p class="text-muted-foreground text-xs leading-relaxed">
+      <p class="text-muted text-xs leading-relaxed">
         Native sampling targets 1 s, independently of display updates. CPU is normalized to all
         {{ current?.logical_cpus ?? 'available' }} logical CPUs: 100% means total machine CPU
         capacity. Native process scope excludes WebView subprocesses. Resident memory and host
@@ -142,7 +146,7 @@
 
     <p
       v-if="incomplete"
-      class="text-muted-foreground text-xs"
+      class="text-muted text-xs"
       role="status"
     >
       History has missing intervals. Latest resource observations remain visible; timeline charts
@@ -235,10 +239,10 @@
       />
     </div>
 
-    <details class="text-muted-foreground text-xs">
+    <details class="text-muted text-xs">
       <summary class="cursor-pointer">Pressure indicators, gaps and retention</summary>
 
-      <p class="text-muted-foreground text-xs leading-relaxed">
+      <p class="text-muted text-xs leading-relaxed">
         Pressure markers cite CPU ≥90% of machine capacity, available host RAM ≤10%, or observed
         admission drops and missed slots. These are indicators, not throughput limits or a diagnosis
         of the target service, database or network. No listed evidence does not prove spare

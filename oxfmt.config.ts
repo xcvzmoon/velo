@@ -27,7 +27,6 @@ export default defineConfig({
   ignorePatterns: [
     'CHANGELOG.md',
     '.agents/**',
-    'app/components/ui/**',
     'tools/oxlint/anti-slop/**',
     'tools/oxlint/custom/**',
   ],

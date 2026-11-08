@@ -18,7 +18,7 @@
       {{ new Date(Number(entry.created_at) * 1000).toLocaleString() }}
     </h3>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       {{ entry.interrupted ? 'Interrupted; last observed measurements' : entry.snapshot.state }} ·
       {{ entry.incomplete ? 'Missing history intervals' : 'No reported write gaps' }} ·
       {{
@@ -31,9 +31,9 @@
     <RunSummary :stored-snapshot="entry.snapshot" />
 
     <AiAssistant
-      task="explain"
       :evidence="selectAiEvidence(entry, null)"
       :disabled="false"
+      task="explain"
     />
 
     <RunGeneratorHealth
@@ -45,7 +45,7 @@
 
     <p
       v-if="entry.incomplete"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
     >
       Charts are hidden because history contains missing intervals. Cumulative observations remain
       shown.

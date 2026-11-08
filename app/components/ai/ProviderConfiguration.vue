@@ -16,6 +16,11 @@
   } from '~/schemas/ai';
 
   const providers: AiProvider[] = ['openai', 'anthropic', 'gemini', 'ollama', 'openai_compatible'];
+  const providerItems = providers.map((provider) => ({
+    label: aiProviderLabels[provider],
+    value: provider,
+  }));
+
   const props = defineProps<{ disabled: boolean }>();
   const emit = defineEmits<{ dirty: [value: boolean] }>();
   const selected = useAiProviderConfig();
@@ -79,25 +84,21 @@
         :path="['provider']"
       >
         <div class="max-w-sm space-y-2">
-          <Label :for="`${inputId}-provider`">Provider</Label>
+          <label
+            :for="`${inputId}-provider`"
+            class="text-sm font-medium"
+          >
+            Provider
+          </label>
 
-          <Select
+          <USelect
             :model-value="field.input"
             :disabled="disabled"
+            :id="`${inputId}-provider`"
+            :items="providerItems"
+            class="w-full"
             @update:model-value="selectProvider"
-          >
-            <SelectTrigger :id="`${inputId}-provider`"><SelectValue /></SelectTrigger>
-
-            <SelectContent>
-              <SelectItem
-                v-for="provider in providers"
-                :key="provider"
-                :value="provider"
-              >
-                {{ aiProviderLabels[provider] }}
-              </SelectItem>
-            </SelectContent>
-          </Select>
+          />
         </div>
       </FormischField>
 
@@ -107,9 +108,14 @@
         :path="['model']"
       >
         <div class="max-w-lg space-y-2">
-          <Label :for="`${inputId}-model`">Model ID</Label>
+          <label
+            :for="`${inputId}-model`"
+            class="text-sm font-medium"
+          >
+            Model ID
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`${inputId}-model`"
@@ -120,7 +126,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -134,11 +140,14 @@
         :path="['endpoint']"
       >
         <div class="space-y-2">
-          <Label :for="`${inputId}-endpoint`">
+          <label
+            :for="`${inputId}-endpoint`"
+            class="text-sm font-medium"
+          >
             {{ customEndpoint ? 'Complete API endpoint' : 'Provider endpoint' }}
-          </Label>
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`${inputId}-endpoint`"
@@ -149,7 +158,7 @@
             spellcheck="false"
           />
 
-          <p class="text-muted-foreground text-xs">
+          <p class="text-muted text-xs">
             {{
               customEndpoint
                 ? 'Use the complete chat endpoint. HTTPS is required except for HTTP on localhost or numeric loopback addresses. Keys are scoped to this endpoint.'
@@ -159,7 +168,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -174,35 +183,40 @@
         :path="['use_key']"
       >
         <div class="flex items-center gap-2">
-          <Checkbox
+          <UCheckbox
             :id="`${inputId}-key`"
             :model-value="field.input"
             :disabled="disabled"
             @update:model-value="field.input = $event === true"
           />
 
-          <Label :for="`${inputId}-key`">Use the stored API key for this endpoint</Label>
+          <label
+            :for="`${inputId}-key`"
+            class="text-sm font-medium"
+          >
+            Use the stored API key for this endpoint
+          </label>
         </div>
       </FormischField>
 
       <p
         v-if="form.errors"
-        class="text-destructive text-sm"
+        class="text-error text-sm"
         role="alert"
       >
         {{ form.errors.join(' ') }}
       </p>
 
-      <Button
+      <UButton
         :disabled="disabled"
         type="submit"
         variant="outline"
-      >
-        Use provider configuration
-      </Button>
+        color="neutral"
+        label="Use provider configuration"
+      />
     </FormischForm>
 
-    <p class="text-muted-foreground text-xs">
+    <p class="text-muted text-xs">
       Selected: {{ aiProviderLabels[selected.provider] }} · {{ selected.model }} ·
       {{ selected.endpoint }} ·
       {{ selected.use_key ? 'Stored key required' : 'No key; credential store is not accessed' }}.
@@ -211,7 +225,7 @@
 
     <p
       v-if="message"
-      class="text-muted-foreground text-sm"
+      class="text-muted text-sm"
       role="status"
     >
       {{ message }}

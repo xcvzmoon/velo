@@ -30,9 +30,14 @@
       :path="['name']"
     >
       <div class="min-w-0 flex-1 space-y-1">
-        <Label :for="inputId">{{ label }}</Label>
+        <label
+          :for="inputId"
+          class="text-sm font-medium"
+        >
+          {{ label }}
+        </label>
 
-        <Input
+        <UInput
           v-model="field.input"
           v-bind="field.props"
           :id="inputId"
@@ -43,7 +48,7 @@
 
         <p
           v-if="field.errors"
-          class="text-destructive text-xs"
+          class="text-error text-xs"
           role="alert"
         >
           {{ field.errors.join(' ') }}
@@ -51,11 +56,10 @@
       </div>
     </Field>
 
-    <Button
+    <UButton
       :disabled="disabled"
       type="submit"
-    >
-      Create
-    </Button>
+      label="Create"
+    />
   </Form>
 </template>

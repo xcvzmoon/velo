@@ -17,12 +17,11 @@
       title="Ready for your first run"
       description="Configure a GET or POST request, choose constant or ramping virtual users, and monitor live response times and throughput."
     >
-      <Button
+      <UButton
+        to="/tests"
+        label="Configure a test"
         variant="outline"
-        as-child
-      >
-        <NuxtLink to="/tests">Configure a test</NuxtLink>
-      </Button>
+      />
     </ShellEmptyState>
   </div>
 </template>

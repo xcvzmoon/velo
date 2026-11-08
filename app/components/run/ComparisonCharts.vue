@@ -12,7 +12,7 @@
   >
     <h4 class="text-sm font-medium">Baseline and candidate measurements</h4>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Each metric has its own zero-based scale. Bars show evaluated values, not percentage changes.
       Zero values have no visible bar; missing observations are unavailable. See the table for
       signed changes.
@@ -50,7 +50,7 @@
           </div>
         </div>
 
-        <div class="text-muted-foreground flex justify-between gap-2 text-xs">
+        <div class="text-muted flex justify-between gap-2 text-xs">
           <span>0</span>
           <span class="break-all">{{ chart.maximum ?? 'No observations' }}</span>
         </div>

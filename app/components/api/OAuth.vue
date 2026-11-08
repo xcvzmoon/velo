@@ -194,7 +194,7 @@
   >
     <h2 class="font-medium">OAuth 2.0</h2>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Acquire or refresh tokens explicitly. Velo stores tokens in the OS credential store and uses a
       Bearer secret reference in your request. PKCE opens your system browser and uses a temporary
       loopback callback with a random port. Register that loopback redirect with your provider. PKCE
@@ -213,35 +213,44 @@
         :path="['grant']"
       >
         <div class="space-y-2">
-          <Label for="oauth-grant">Grant</Label>
+          <label
+            class="text-sm font-medium"
+            for="oauth-grant"
+          >
+            Grant
+          </label>
 
-          <Select
+          <USelect
             v-model="field.input"
             :disabled="disabled || busy"
             :name="field.props.name"
-          >
-            <SelectTrigger id="oauth-grant"><SelectValue /></SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="authorization_code">Authorization code with PKCE</SelectItem>
-              <SelectItem value="client_credentials">Client credentials</SelectItem>
-            </SelectContent>
-          </Select>
+            :items="[
+              { label: 'Authorization code with PKCE', value: 'authorization_code' },
+              { label: 'Client credentials', value: 'client_credentials' },
+            ]"
+            id="oauth-grant"
+            class="w-full"
+          />
         </div>
       </FormischField>
 
       <div class="grid gap-4 sm:grid-cols-2">
         <FormischField
           v-for="option in fields"
-          :key="option.name"
           v-slot="field"
+          :key="option.name"
           :of="form"
           :path="[option.name]"
         >
           <div class="space-y-2">
-            <Label :for="`oauth-${option.name}`">{{ option.label }}</Label>
+            <label
+              :for="`oauth-${option.name}`"
+              class="text-sm font-medium"
+            >
+              {{ option.label }}
+            </label>
 
-            <Input
+            <UInput
               v-model="field.input"
               v-bind="field.props"
               :id="`oauth-${option.name}`"
@@ -254,7 +263,7 @@
 
             <p
               v-if="field.errors"
-              class="text-destructive text-xs"
+              class="text-error text-xs"
               role="alert"
             >
               {{ field.errors.join(' ') }}
@@ -264,43 +273,45 @@
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <Button
+        <UButton
           :disabled="disabled || busy"
           type="submit"
+          label="Acquire token"
           @click="refresh = false"
-        >
-          Acquire token
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled || busy"
           type="button"
           variant="outline"
+          color="neutral"
+          label="Refresh token"
           @click="requestRefresh"
-        >
-          Refresh token
-        </Button>
-        <Button
+        />
+
+        <UButton
           :disabled="disabled || busy"
           type="button"
           variant="outline"
+          color="neutral"
+          label="Forget local token"
           @click="forget"
-        >
-          Forget local token
-        </Button>
-        <Button
+        />
+
+        <UButton
           v-if="pending"
           type="button"
           variant="outline"
+          color="neutral"
+          label="Cancel OAuth"
           @click="cancel"
-        >
-          Cancel OAuth
-        </Button>
+        />
       </div>
     </FormischForm>
 
     <p
       v-if="pending?.redirect_uri"
-      class="text-muted-foreground font-mono text-xs break-all"
+      class="text-muted font-mono text-xs break-all"
     >
       Callback: {{ pending.redirect_uri }}
     </p>

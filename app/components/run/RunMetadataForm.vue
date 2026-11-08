@@ -64,21 +64,26 @@
   >
     <h4 class="text-sm font-medium">Release context</h4>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       These fields are exported. Include only information safe to share.
     </p>
 
     <FormischField
       v-for="{ name, label } in fields"
-      :key="name"
       v-slot="field"
+      :key="name"
       :of="form"
       :path="[name]"
     >
       <div class="space-y-2">
-        <Label :for="`${formId}-${name}`">{{ label }}</Label>
+        <label
+          :for="`${formId}-${name}`"
+          class="text-sm font-medium"
+        >
+          {{ label }}
+        </label>
 
-        <Textarea
+        <UTextarea
           v-if="name === 'notes'"
           v-model="field.input"
           v-bind="field.props"
@@ -86,7 +91,7 @@
           :disabled="disabled"
         />
 
-        <Input
+        <UInput
           v-else
           v-model="field.input"
           v-bind="field.props"
@@ -97,7 +102,7 @@
 
         <p
           v-if="field.errors"
-          class="text-destructive text-sm"
+          class="text-error text-sm"
           role="alert"
         >
           {{ field.errors.join(' ') }}
@@ -105,12 +110,12 @@
       </div>
     </FormischField>
 
-    <Button
+    <UButton
       :disabled="disabled"
       type="submit"
       variant="outline"
-    >
-      Save release context
-    </Button>
+      color="neutral"
+      label="Save release context"
+    />
   </FormischForm>
 </template>

@@ -79,15 +79,13 @@
     class="space-y-5"
     aria-label="AI suggestion"
   >
-    <p class="text-muted-foreground text-xs">
+    <p class="text-muted text-xs">
       {{ result.provider }} · {{ result.model }} ·
       {{ new Date(Number(result.generated_at) * 1000).toLocaleString() }}. Model output may vary.
       Target endpoints have not been verified.
     </p>
 
-    <p class="text-muted-foreground font-mono text-xs break-all">
-      Provider endpoint: {{ result.endpoint }}
-    </p>
+    <p class="text-muted font-mono text-xs break-all">Provider endpoint: {{ result.endpoint }}</p>
 
     <div
       v-if="result.observations.length"
@@ -136,7 +134,7 @@
     </template>
 
     <template v-if="result.definition">
-      <p class="text-muted-foreground text-sm">
+      <p class="text-muted text-sm">
         Review the current and proposed definitions below. Edit the proposal before applying it.
         Applying replaces the editor and preserves its current resource budgets. Dataset
         preparation, engine validation, load review, and target authorization are still required
@@ -165,7 +163,7 @@
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}

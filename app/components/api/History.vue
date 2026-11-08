@@ -55,11 +55,6 @@
     }
   }
   async function remove(id: string | null): Promise<void> {
-    if (
-      !window.confirm(id ? 'Delete this functional run?' : 'Delete all functional API history?')
-    ) {
-      return;
-    }
     try {
       await invoke('delete_api_history', { id });
       await refresh();
@@ -81,7 +76,8 @@
 <template>
   <details class="space-y-4 rounded-lg border p-5">
     <summary class="cursor-pointer font-medium">Functional API history</summary>
-    <p class="text-muted-foreground text-xs">
+
+    <p class="text-muted text-xs">
       History is separate from load-test results. Response content is excluded by default. Enabling
       content persistence stores only the bounded, redacted response.
     </p>
@@ -97,8 +93,14 @@
         :path="['limit']"
       >
         <div class="space-y-2">
-          <Label for="api-history-limit">Maximum retained runs (0 to 100)</Label>
-          <Input
+          <label
+            class="text-sm font-medium"
+            for="api-history-limit"
+          >
+            Maximum retained runs (0 to 100)
+          </label>
+
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :disabled="disabled"
@@ -107,9 +109,10 @@
             min="0"
             max="100"
           />
+
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -123,36 +126,42 @@
         :path="['persist_content']"
       >
         <div class="flex items-center gap-2">
-          <Checkbox
+          <UCheckbox
             :model-value="field.input"
             :disabled="disabled"
             id="api-history-content"
             @update:model-value="field.input = $event === true"
           />
-          <Label for="api-history-content">Persist redacted response content</Label>
+
+          <label
+            class="text-sm font-medium"
+            for="api-history-content"
+          >
+            Persist redacted response content
+          </label>
         </div>
       </Field>
 
-      <Button
+      <UButton
         :disabled="disabled"
         type="submit"
         variant="outline"
-      >
-        Save retention
-      </Button>
-      <Button
+        color="neutral"
+        label="Save retention"
+      />
+
+      <ShellConfirmAction
         :disabled="disabled"
-        type="button"
-        variant="outline"
-        @click="remove(null)"
-      >
-        Delete all history
-      </Button>
+        label="Delete all history"
+        title="Delete all API history?"
+        description="Stored functional evidence will be permanently removed."
+        @confirm="remove(null)"
+      />
     </Form>
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
@@ -168,33 +177,35 @@
           {{ run.state }} · {{ run.results.length }} recorded outcomes ·
           {{ run.environment ?? 'shared variables' }}
         </p>
+
         <div class="flex flex-wrap gap-2">
-          <Button
+          <UButton
             :disabled="disabled"
             size="sm"
             variant="outline"
+            color="neutral"
+            label="Inspect evidence"
             @click="emit('inspect', run)"
-          >
-            Inspect evidence
-          </Button>
-          <Button
+          />
+
+          <UButton
             v-for="result in run.results"
             :key="`${result.iteration}-${result.request_id}`"
             :disabled="disabled"
+            :label="`Restore ${result.name}`"
             size="sm"
             variant="ghost"
+            color="neutral"
             @click="restore(run, result.request_id)"
-          >
-            Restore {{ result.name }}
-          </Button>
-          <Button
+          />
+
+          <ShellConfirmAction
             :disabled="disabled"
-            size="sm"
-            variant="ghost"
-            @click="remove(run.id)"
-          >
-            Delete run
-          </Button>
+            label="Delete run"
+            title="Delete API run?"
+            description="Stored functional evidence will be permanently removed."
+            @confirm="remove(run.id)"
+          />
         </div>
       </li>
     </ol>

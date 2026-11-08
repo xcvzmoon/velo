@@ -87,7 +87,7 @@
   <div class="space-y-4 border-t pt-6">
     <h3 class="text-sm font-medium">Response assertions and diagnostics</h3>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       Check the final response after redirects. JSON fields use RFC 6901 pointers, such as /data/ok;
       an empty pointer selects the document. JSON equality uses a JSON value, including quotes for
       strings. Text checks use exact UTF-8 literals. Each check has its own outcome; assertion
@@ -100,31 +100,32 @@
       :path="['assertions']"
     >
       <div class="space-y-4">
-        <Button
+        <UButton
           :disabled="disabled || rows.items.length >= 32"
           type="button"
           size="sm"
           variant="outline"
+          color="neutral"
+          label="Add assertion"
           @click="
             insert(form, {
               path: ['assertions'],
               initialInput: { id: '', kind: 'status', target: '200', expected: '' },
             })
           "
-        >
-          Add assertion
-        </Button>
+        />
 
         <p
           v-if="rows.errors"
-          class="text-destructive text-xs"
+          class="text-error text-xs"
           role="alert"
         >
           {{ rows.errors[0] }}
         </p>
+
         <p
           v-if="!rows.items.length"
-          class="text-muted-foreground text-xs"
+          class="text-muted text-xs"
         >
           No response assertions configured.
         </p>
@@ -140,40 +141,41 @@
             :path="['assertions', index, 'kind']"
           >
             <div class="space-y-2">
-              <Label :for="`${editorId}-${item}-kind`">Condition</Label>
+              <label
+                :for="`${editorId}-${item}-kind`"
+                class="text-sm font-medium"
+              >
+                Condition
+              </label>
 
-              <Select
+              <USelect
                 v-model="field.input"
                 :disabled="disabled"
                 :name="field.props.name"
-              >
-                <SelectTrigger :id="`${editorId}-${item}-kind`"><SelectValue /></SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem
-                    v-for="kind in kinds"
-                    :key="kind.value"
-                    :value="kind.value"
-                  >
-                    {{ kind.label }}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                :id="`${editorId}-${item}-kind`"
+                :items="[...kinds.map((kind) => ({ label: kind.label, value: kind.value }))]"
+                class="w-full"
+              />
             </div>
           </FormischField>
 
           <div class="grid gap-3 sm:grid-cols-3">
             <FormischField
               v-for="entry in fields"
-              :key="entry.name"
               v-slot="field"
+              :key="entry.name"
               :of="form"
               :path="['assertions', index, entry.name]"
             >
               <div class="space-y-2">
-                <Label :for="`${editorId}-${item}-${entry.name}`">{{ entry.label }}</Label>
+                <label
+                  :for="`${editorId}-${item}-${entry.name}`"
+                  class="text-sm font-medium"
+                >
+                  {{ entry.label }}
+                </label>
 
-                <Input
+                <UInput
                   v-model="field.input"
                   v-bind="field.props"
                   :id="`${editorId}-${item}-${entry.name}`"
@@ -185,7 +187,7 @@
                 <p
                   v-if="field.errors"
                   :id="`${editorId}-${item}-${entry.name}-error`"
-                  class="text-destructive text-xs"
+                  class="text-error text-xs"
                   role="alert"
                 >
                   {{ field.errors[0] }}
@@ -194,16 +196,16 @@
             </FormischField>
           </div>
 
-          <Button
+          <UButton
             :disabled="disabled"
             :aria-label="`Remove assertion ${index + 1}`"
             type="button"
             size="sm"
             variant="ghost"
+            color="neutral"
+            label="Remove"
             @click="remove(form, { path: ['assertions'], at: index })"
-          >
-            Remove
-          </Button>
+          />
         </div>
       </div>
     </FormischFieldArray>
@@ -214,15 +216,20 @@
     >
       <FormischField
         v-for="limit in limits"
-        :key="limit.name"
         v-slot="field"
+        :key="limit.name"
         :of="form"
         :path="['inspection', limit.name]"
       >
         <div class="space-y-2">
-          <Label :for="`${editorId}-${limit.name}`">{{ limit.label }}</Label>
+          <label
+            :for="`${editorId}-${limit.name}`"
+            class="text-sm font-medium"
+          >
+            {{ limit.label }}
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="`${editorId}-${limit.name}`"
@@ -235,7 +242,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ field.errors[0] }}
@@ -244,7 +251,7 @@
       </FormischField>
     </div>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       Excess body bytes are drained and discarded. Body checks on truncated, encoded or invalid
       input are unavailable, never passed. Transport failures, timeouts and cancellations make all
       checks unavailable. Response latency includes body reading and bounded assertion processing.

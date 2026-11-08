@@ -25,59 +25,50 @@
 <template>
   <section
     v-if="snapshot"
-    class="space-y-6"
+    class="bg-elevated/30 space-y-6 rounded-xl border p-5"
     aria-label="Current run"
   >
     <div class="flex flex-wrap items-center justify-between gap-4">
       <div>
-        <p class="text-muted-foreground text-xs tracking-widest uppercase">
-          Run {{ snapshot.run_id }}
-        </p>
+        <p class="text-muted text-xs tracking-widest uppercase">Run {{ snapshot.run_id }}</p>
 
-        <h2 class="mt-2 text-xl font-medium">{{ snapshot.confirmation.origin }}</h2>
+        <h2 class="mt-2 text-xl font-medium break-all">{{ snapshot.confirmation.origin }}</h2>
       </div>
 
       <div class="flex items-center gap-3">
-        <span
-          class="rounded-md border px-3 py-1.5 font-mono text-xs capitalize"
+        <UBadge
+          :color="active ? 'primary' : snapshot.state === 'failed' ? 'error' : 'neutral'"
+          :label="snapshot.state"
+          variant="subtle"
+          class="capitalize"
           role="status"
-        >
-          {{ snapshot.state }}
-        </span>
+        />
 
-        <Button
+        <UButton
           v-if="active"
           :disabled="busy || snapshot.state === 'stopping'"
-          variant="destructive"
+          :label="snapshot.state === 'stopping' ? 'Draining…' : 'Stop run'"
+          color="error"
           @click="$runs.stop()"
-        >
-          {{ snapshot.state === 'stopping' ? 'Draining…' : 'Stop run' }}
-        </Button>
+        />
       </div>
     </div>
 
-    <div
-      :aria-valuenow="Math.round(progress)"
-      class="bg-muted h-1.5 overflow-hidden rounded-full"
-      role="progressbar"
-      aria-label="Scheduling progress"
-      aria-valuemin="0"
-      aria-valuemax="100"
-    >
-      <div
-        :style="{ width: `${progress}%` }"
-        class="bg-primary h-full"
-      />
-    </div>
+    <UProgress
+      :model-value="progress"
+      :max="100"
+      :get-value-label="() => 'Scheduling progress'"
+      size="xs"
+    />
 
     <dl class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <div class="rounded-lg border p-4">
-        <dt class="text-muted-foreground text-xs">Requests started</dt>
-        <dd class="mt-2 font-mono text-xl">{{ snapshot.metrics.counters.started }}</dd>
+      <div class="bg-muted/50 rounded-lg border p-4">
+        <dt class="text-muted text-xs">Requests started</dt>
+        <dd class="mt-2 font-mono text-xl break-all">{{ snapshot.metrics.counters.started }}</dd>
       </div>
 
-      <div class="rounded-lg border p-4">
-        <dt class="text-muted-foreground text-xs">Elapsed / scheduling target</dt>
+      <div class="bg-muted/50 rounded-lg border p-4">
+        <dt class="text-muted text-xs">Elapsed / scheduling target</dt>
 
         <dd class="mt-2 font-mono text-lg">
           {{ (Number(snapshot.actual_us) / 1e6).toFixed(1) }} /
@@ -85,21 +76,23 @@
         </dd>
       </div>
 
-      <div class="rounded-lg border p-4">
-        <dt class="text-muted-foreground text-xs">Desired / actual VUs</dt>
+      <div class="bg-muted/50 rounded-lg border p-4">
+        <dt class="text-muted text-xs">Desired / actual VUs</dt>
 
-        <dd class="mt-2 font-mono text-xl">
-          {{ snapshot.desired_vus }} / {{ snapshot.active_vus }}
+        <dd class="mt-2">
+          <span class="font-mono text-xl">
+            {{ snapshot.desired_vus }} / {{ snapshot.active_vus }}
+          </span>
+
+          <p class="text-muted mt-2 text-xs">
+            {{ snapshot.retiring_vus }} retiring · {{ snapshot.max_vus }} peak actual
+          </p>
         </dd>
-
-        <p class="text-muted-foreground mt-2 text-xs">
-          {{ snapshot.retiring_vus }} retiring · {{ snapshot.max_vus }} peak actual
-        </p>
       </div>
 
-      <div class="rounded-lg border p-4">
-        <dt class="text-muted-foreground text-xs">In flight</dt>
-        <dd class="mt-2 font-mono text-xl">{{ snapshot.metrics.counters.in_flight }}</dd>
+      <div class="bg-muted/50 rounded-lg border p-4">
+        <dt class="text-muted text-xs">In flight</dt>
+        <dd class="mt-2 font-mono text-xl break-all">{{ snapshot.metrics.counters.in_flight }}</dd>
       </div>
     </dl>
 
@@ -117,7 +110,7 @@
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
@@ -125,7 +118,7 @@
 
     <p
       v-if="snapshot.failure_code"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ snapshot.failure_code }}: The run failed. Measurements below include partial work.
@@ -137,7 +130,7 @@
         snapshot.metrics.counter_overflow ||
         snapshot.metrics.response_latency.out_of_range !== '0'
       "
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="status"
     >
       Measurement integrity warning. Aggregation interference:
@@ -212,7 +205,7 @@
       />
     </div>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       {{
         connected
           ? 'Live aggregate subscription connected.'

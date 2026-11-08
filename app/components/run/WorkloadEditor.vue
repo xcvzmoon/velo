@@ -94,20 +94,20 @@
     <h4 class="text-sm font-medium">Workload presets</h4>
 
     <div class="flex flex-wrap gap-2">
-      <Button
+      <UButton
         v-for="preset in ['smoke', 'stress', 'spike', 'soak'] as const"
         :key="preset"
         :disabled="disabled"
+        :label="capitalize(preset)"
         type="button"
         variant="outline"
         size="sm"
+        color="neutral"
         @click="applyPreset(preset)"
-      >
-        {{ capitalize(preset) }}
-      </Button>
+      />
     </div>
 
-    <p class="text-muted-foreground text-xs leading-relaxed">
+    <p class="text-muted text-xs leading-relaxed">
       Presets replace the schedule, warm-up and pacing with editable values. Peaks are capped at
       your worker budget. Budgets and stop policies stay unchanged. These names do not measure
       machine or target capacity.
@@ -121,26 +121,25 @@
   >
     <div class="space-y-5">
       <div class="max-w-xs space-y-2">
-        <Label for="workload-kind">Workload</Label>
+        <label
+          class="text-sm font-medium"
+          for="workload-kind"
+        >
+          Workload
+        </label>
 
-        <Select
+        <USelect
           v-model="mode.input"
           :disabled="disabled"
           :name="mode.props.name"
-        >
-          <SelectTrigger
-            id="workload-kind"
-            class="w-full"
-          >
-            <SelectValue />
-          </SelectTrigger>
-
-          <SelectContent>
-            <SelectItem value="constant">Constant VUs</SelectItem>
-            <SelectItem value="ramping">Ramping VUs</SelectItem>
-            <SelectItem value="arrival">Constant arrival rate</SelectItem>
-          </SelectContent>
-        </Select>
+          :items="[
+            { label: 'Constant VUs', value: 'constant' },
+            { label: 'Ramping VUs', value: 'ramping' },
+            { label: 'Constant arrival rate', value: 'arrival' },
+          ]"
+          id="workload-kind"
+          class="w-full"
+        />
       </div>
 
       <div
@@ -149,15 +148,20 @@
       >
         <FormischField
           v-for="option in mode.input === 'arrival' ? arrivalFields : constantFields"
-          :key="option.name"
           v-slot="field"
+          :key="option.name"
           :of="form"
           :path="[option.name]"
         >
           <div class="space-y-2">
-            <Label :for="`request-${option.name}`">{{ option.label }}</Label>
+            <label
+              :for="`request-${option.name}`"
+              class="text-sm font-medium"
+            >
+              {{ option.label }}
+            </label>
 
-            <Input
+            <UInput
               v-model="field.input"
               v-bind="field.props"
               :id="`request-${option.name}`"
@@ -171,7 +175,7 @@
             <p
               v-if="field.errors"
               :id="`request-${option.name}-error`"
-              class="text-destructive text-xs"
+              class="text-error text-xs"
               role="alert"
             >
               {{ field.errors[0] }}
@@ -182,7 +186,7 @@
 
       <p
         v-if="mode.input === 'arrival'"
-        class="text-muted-foreground text-xs leading-relaxed"
+        class="text-muted text-xs leading-relaxed"
       >
         Deadlines control admission; set iteration pacing to zero. Capacity limits concurrent
         requests. Expired deadlines and requests above capacity are dropped without a queue.
@@ -198,9 +202,14 @@
           :path="['start_vus']"
         >
           <div class="max-w-xs space-y-2">
-            <Label for="start-vus">Starting VUs</Label>
+            <label
+              class="text-sm font-medium"
+              for="start-vus"
+            >
+              Starting VUs
+            </label>
 
-            <Input
+            <UInput
               v-model="field.input"
               v-bind="field.props"
               :aria-invalid="Boolean(field.errors)"
@@ -214,7 +223,7 @@
             <p
               v-if="field.errors"
               id="start-vus-error"
-              class="text-destructive text-xs"
+              class="text-error text-xs"
               role="alert"
             >
               {{ field.errors[0] }}
@@ -231,20 +240,20 @@
             <div class="flex items-center justify-between gap-3">
               <h4 class="text-sm font-medium">Ramp stages</h4>
 
-              <Button
+              <UButton
                 :disabled="disabled"
                 type="button"
                 variant="outline"
                 size="sm"
+                color="neutral"
+                label="Add stage"
                 @click="
                   insert(form, {
                     path: ['stages'],
                     initialInput: { duration_ms: 10_000, target_vus: 0 },
                   })
                 "
-              >
-                Add stage
-              </Button>
+              />
             </div>
 
             <div
@@ -252,19 +261,24 @@
               :key="item"
               class="grid items-start gap-3 rounded-md border p-4 sm:grid-cols-[auto_1fr_1fr_auto]"
             >
-              <p class="text-muted-foreground pt-2 text-xs">{{ index + 1 }}</p>
+              <p class="text-muted pt-2 text-xs">{{ index + 1 }}</p>
 
               <FormischField
                 v-for="{ name, label, min } in stageFields"
-                :key="name"
                 v-slot="field"
+                :key="name"
                 :of="form"
                 :path="['stages', index, name]"
               >
                 <div class="space-y-2">
-                  <Label :for="`stage-${item}-${name}`">{{ label }}</Label>
+                  <label
+                    :for="`stage-${item}-${name}`"
+                    class="text-sm font-medium"
+                  >
+                    {{ label }}
+                  </label>
 
-                  <Input
+                  <UInput
                     v-model="field.input"
                     v-bind="field.props"
                     :id="`stage-${item}-${name}`"
@@ -278,7 +292,7 @@
                   <p
                     v-if="field.errors"
                     :id="`stage-${item}-${name}-error`"
-                    class="text-destructive text-xs"
+                    class="text-error text-xs"
                     role="alert"
                   >
                     {{ field.errors[0] }}
@@ -286,21 +300,21 @@
                 </div>
               </FormischField>
 
-              <Button
+              <UButton
                 :disabled="disabled"
                 :aria-label="`Remove stage ${index + 1}`"
                 type="button"
                 variant="ghost"
                 class="sm:mt-6"
+                color="neutral"
+                label="Remove"
                 @click="remove(form, { path: ['stages'], at: index })"
-              >
-                Remove
-              </Button>
+              />
             </div>
 
             <p
               v-if="fieldArray.errors"
-              class="text-destructive text-xs"
+              class="text-error text-xs"
               role="alert"
             >
               {{ fieldArray.errors[0] }}
@@ -308,7 +322,7 @@
           </div>
         </FormischFieldArray>
 
-        <p class="text-muted-foreground text-xs leading-relaxed">
+        <p class="text-muted text-xs leading-relaxed">
           Each stage ramps linearly from the previous count. Use the same target to hold a level.
           Zero VUs pauses new requests. Retiring users finish their current request and exit; they
           still occupy worker slots until cleanup finishes.

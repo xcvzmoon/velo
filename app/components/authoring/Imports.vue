@@ -38,61 +38,63 @@
   >
     <h2 class="font-medium">Import a request</h2>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Paste a cURL command, OpenAPI 3 JSON, or Postman v2 collection JSON. Conversion runs offline.
       Scripts and external references never execute.
     </p>
 
-    <Label for="import-format">Source format</Label>
+    <label
+      class="text-sm font-medium"
+      for="import-format"
+    >
+      Source format
+    </label>
 
-    <Select
+    <USelect
       v-model="format"
       :disabled="disabled || busy"
-    >
-      <SelectTrigger id="import-format"><SelectValue /></SelectTrigger>
-
-      <SelectContent>
-        <SelectItem value="curl">cURL</SelectItem>
-        <SelectItem value="openapi">OpenAPI 3 JSON</SelectItem>
-        <SelectItem value="postman">Postman v2 JSON</SelectItem>
-      </SelectContent>
-    </Select>
+      :items="[
+        { label: 'cURL', value: 'curl' },
+        { label: 'OpenAPI 3 JSON', value: 'openapi' },
+        { label: 'Postman v2 JSON', value: 'postman' },
+      ]"
+      id="import-format"
+      class="w-full"
+    />
 
     <AuthoringTextForm
+      :disabled="disabled || busy"
       source=""
       label="Request source"
       action="Convert requests"
-      :disabled="disabled || busy"
       @apply="convert"
     />
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}
     </p>
 
     <template v-if="candidate">
-      <Label for="import-operation">Request to import</Label>
+      <label
+        class="text-sm font-medium"
+        for="import-operation"
+      >
+        Request to import
+      </label>
 
-      <Select
+      <USelect
         v-model="selected"
         :disabled="disabled || busy"
-      >
-        <SelectTrigger id="import-operation"><SelectValue /></SelectTrigger>
-
-        <SelectContent>
-          <SelectItem
-            v-for="(entry, index) in candidates"
-            :key="index"
-            :value="String(index)"
-          >
-            {{ entry.name }}
-          </SelectItem>
-        </SelectContent>
-      </Select>
+        :items="[
+          ...candidates.map((entry, index) => ({ label: entry.name, value: String(index) })),
+        ]"
+        id="import-operation"
+        class="w-full"
+      />
 
       <p class="font-mono text-xs break-all">
         {{ candidate.config.method }} {{ candidate.config.url }}
@@ -111,13 +113,13 @@
         </li>
       </ul>
 
-      <Button
+      <UButton
         :disabled="disabled || busy"
         variant="outline"
+        color="neutral"
+        label="I reviewed the conversion. Apply request"
         @click="emit('apply', candidate.config)"
-      >
-        I reviewed the conversion. Apply request
-      </Button>
+      />
     </template>
   </section>
 </template>

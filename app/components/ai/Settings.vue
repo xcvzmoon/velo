@@ -87,7 +87,7 @@
   >
     <h2 class="font-medium">Native AI assistance</h2>
 
-    <p class="text-muted-foreground text-sm">
+    <p class="text-muted text-sm">
       Choose OpenAI, Anthropic, Gemini, Ollama, or an OpenAI-compatible service. Manual authoring
       and execution remain available without an AI provider. Review the destination and selected
       content before every submission. Selecting a configuration or storing a key sends no test
@@ -102,11 +102,11 @@
     <div class="space-y-2">
       <h3 class="text-sm font-medium">Key for {{ aiProviderLabels[selected.provider] }}</h3>
 
-      <p class="text-muted-foreground text-sm break-all">{{ selected.endpoint }}</p>
+      <p class="text-muted text-sm break-all">{{ selected.endpoint }}</p>
 
       <p
         v-if="!selected.use_key"
-        class="text-muted-foreground text-sm"
+        class="text-muted text-sm"
       >
         This configuration sends requests without a key and does not access the credential store.
         Enable stored-key authentication above if your endpoint requires it.
@@ -124,9 +124,14 @@
         :path="['value']"
       >
         <div class="max-w-lg space-y-2">
-          <Label :for="inputId">Provider API key</Label>
+          <label
+            :for="inputId"
+            class="text-sm font-medium"
+          >
+            Provider API key
+          </label>
 
-          <Input
+          <UInput
             v-model="field.input"
             v-bind="field.props"
             :id="inputId"
@@ -138,7 +143,7 @@
 
           <p
             v-if="field.errors"
-            class="text-destructive text-sm"
+            class="text-error text-sm"
             role="alert"
           >
             {{ field.errors.join(' ') }}
@@ -147,25 +152,24 @@
       </FormischField>
 
       <div class="flex flex-wrap gap-3">
-        <Button
+        <UButton
           :disabled="busy || configDirty || !selected.use_key"
           type="submit"
-        >
-          Store key securely
-        </Button>
+          label="Store key securely"
+        />
 
-        <Button
+        <UButton
           :disabled="busy || configDirty"
           type="button"
           variant="outline"
+          color="neutral"
+          label="Remove endpoint key"
           @click="remove"
-        >
-          Remove endpoint key
-        </Button>
+        />
       </div>
     </FormischForm>
 
-    <p class="text-muted-foreground text-xs">
+    <p class="text-muted text-xs">
       Keys stay in the OS credential store and are scoped to the selected provider and normalized
       endpoint. Changing an endpoint never reuses another endpoint's key. Keys are not read back
       into this form, model context, test definitions, or reports.
@@ -173,7 +177,7 @@
 
     <p
       v-if="error"
-      class="text-destructive text-sm"
+      class="text-error text-sm"
       role="alert"
     >
       {{ error }}

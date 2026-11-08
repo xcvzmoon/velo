@@ -64,6 +64,7 @@ type ApiWorkspace = {
 };
 /**
  * Owns local API drafts, explicit execution, and collection persistence.
+ * Destructive actions require confirmation in the calling UI.
  * @returns Shared in-memory drafts and actions; creating or editing never sends a request.
  * @example
  * ```ts
@@ -144,7 +145,7 @@ export function useApiWorkspace(): ApiWorkspace {
   }
   async function remove(): Promise<void> {
     const current = collection.value;
-    if (!current || !window.confirm(`Delete ${current.name} and all its requests?`)) {
+    if (!current) {
       return;
     }
     await perform(async () => {
@@ -226,9 +227,6 @@ export function useApiWorkspace(): ApiWorkspace {
   }
   function change(id: string, action: 'duplicate' | 'delete' | 'up' | 'down'): void {
     if (!collection.value) {
-      return;
-    }
-    if (action === 'delete' && !window.confirm('Delete this entry and its contents?')) {
       return;
     }
     changeApiEntry(collection.value.entries, id, action);

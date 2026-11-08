@@ -158,9 +158,14 @@
           :path="['id']"
         >
           <div class="space-y-2">
-            <Label :for="`${formId}-id`">Step name / stable ID</Label>
+            <label
+              :for="`${formId}-id`"
+              class="text-sm font-medium"
+            >
+              Step name / stable ID
+            </label>
 
-            <Input
+            <UInput
               v-model="field.input"
               v-bind="field.props"
               :id="`${formId}-id`"
@@ -170,7 +175,7 @@
 
             <p
               v-if="field.errors"
-              class="text-destructive text-xs"
+              class="text-error text-xs"
               role="alert"
             >
               {{ field.errors.join(' ') }}
@@ -184,9 +189,14 @@
           :path="['think_ms']"
         >
           <div class="space-y-2">
-            <Label :for="`${formId}-think`">Think time after step (ms)</Label>
+            <label
+              :for="`${formId}-think`"
+              class="text-sm font-medium"
+            >
+              Think time after step (ms)
+            </label>
 
-            <Input
+            <UInput
               v-model="field.input"
               v-bind="field.props"
               :id="`${formId}-think`"
@@ -199,7 +209,7 @@
 
             <p
               v-if="field.errors"
-              class="text-destructive text-xs"
+              class="text-error text-xs"
               role="alert"
             >
               {{ field.errors.join(' ') }}
@@ -214,22 +224,24 @@
         :path="['on_failure']"
       >
         <div class="space-y-2">
-          <Label :for="`${formId}-failure`">
+          <label
+            :for="`${formId}-failure`"
+            class="text-sm font-medium"
+          >
             On HTTP, assertion or required extraction failure
-          </Label>
+          </label>
 
-          <Select
+          <USelect
             v-model="field.input"
             :disabled="disabled"
             :name="field.props.name"
-          >
-            <SelectTrigger :id="`${formId}-failure`"><SelectValue /></SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="stop">Stop this iteration</SelectItem>
-              <SelectItem value="continue">Continue independent steps</SelectItem>
-            </SelectContent>
-          </Select>
+            :id="`${formId}-failure`"
+            :items="[
+              { label: 'Stop this iteration', value: 'stop' },
+              { label: 'Continue independent steps', value: 'continue' },
+            ]"
+            class="w-full"
+          />
         </div>
       </FormischField>
 
@@ -241,7 +253,7 @@
         <div class="space-y-4">
           <h3 class="text-sm font-medium">Response extraction</h3>
 
-          <p class="text-muted-foreground text-xs">
+          <p class="text-muted text-xs">
             Use JSON pointers such as /token, a response header name, or a Set-Cookie name.
             Reference a value later with
             <code v-text="'{{session:name}}'" />
@@ -259,9 +271,14 @@
               :path="['extractions', index, 'name']"
             >
               <div class="space-y-1">
-                <Label :for="`${formId}-${item}-name`">Session variable name</Label>
+                <label
+                  :for="`${formId}-${item}-name`"
+                  class="text-sm font-medium"
+                >
+                  Session variable name
+                </label>
 
-                <Input
+                <UInput
                   v-model="field.input"
                   v-bind="field.props"
                   :id="`${formId}-${item}-name`"
@@ -271,7 +288,7 @@
 
                 <p
                   v-if="field.errors"
-                  class="text-destructive text-xs"
+                  class="text-error text-xs"
                   role="alert"
                 >
                   {{ field.errors.join(' ') }}
@@ -285,21 +302,25 @@
               :path="['extractions', index, 'kind']"
             >
               <div class="space-y-1">
-                <Label :for="`${formId}-${item}-kind`">Source</Label>
+                <label
+                  :for="`${formId}-${item}-kind`"
+                  class="text-sm font-medium"
+                >
+                  Source
+                </label>
 
-                <Select
+                <USelect
                   v-model="field.input"
                   :disabled="disabled"
                   :name="field.props.name"
-                >
-                  <SelectTrigger :id="`${formId}-${item}-kind`"><SelectValue /></SelectTrigger>
-
-                  <SelectContent>
-                    <SelectItem value="json">JSON field</SelectItem>
-                    <SelectItem value="header">Response header</SelectItem>
-                    <SelectItem value="cookie">Response cookie</SelectItem>
-                  </SelectContent>
-                </Select>
+                  :id="`${formId}-${item}-kind`"
+                  :items="[
+                    { label: 'JSON field', value: 'json' },
+                    { label: 'Response header', value: 'header' },
+                    { label: 'Response cookie', value: 'cookie' },
+                  ]"
+                  class="w-full"
+                />
               </div>
             </FormischField>
 
@@ -309,11 +330,14 @@
               :path="['extractions', index, 'selector']"
             >
               <div class="space-y-1">
-                <Label :for="`${formId}-${item}-selector`">
+                <label
+                  :for="`${formId}-${item}-selector`"
+                  class="text-sm font-medium"
+                >
                   JSON pointer, header or cookie name
-                </Label>
+                </label>
 
-                <Input
+                <UInput
                   v-model="field.input"
                   v-bind="field.props"
                   :id="`${formId}-${item}-selector`"
@@ -330,22 +354,24 @@
                 :path="['extractions', index, 'required']"
               >
                 <div class="space-y-1">
-                  <Label :for="`${formId}-${item}-required`">Required</Label>
+                  <label
+                    :for="`${formId}-${item}-required`"
+                    class="text-sm font-medium"
+                  >
+                    Required
+                  </label>
 
-                  <Select
+                  <USelect
                     :model-value="field.input ? 'yes' : 'no'"
                     :disabled="disabled"
+                    :id="`${formId}-${item}-required`"
+                    :items="[
+                      { label: 'Yes', value: 'yes' },
+                      { label: 'No', value: 'no' },
+                    ]"
+                    class="w-full"
                     @update:model-value="field.input = $event === 'yes'"
-                  >
-                    <SelectTrigger :id="`${formId}-${item}-required`">
-                      <SelectValue />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      <SelectItem value="yes">Yes</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               </FormischField>
 
@@ -355,48 +381,52 @@
                 :path="['extractions', index, 'overwrite']"
               >
                 <div class="space-y-1">
-                  <Label :for="`${formId}-${item}-overwrite`">Allow overwrite</Label>
+                  <label
+                    :for="`${formId}-${item}-overwrite`"
+                    class="text-sm font-medium"
+                  >
+                    Allow overwrite
+                  </label>
 
-                  <Select
+                  <USelect
                     :model-value="field.input ? 'yes' : 'no'"
                     :disabled="disabled"
+                    :id="`${formId}-${item}-overwrite`"
+                    :items="[
+                      { label: 'Yes', value: 'yes' },
+                      { label: 'No', value: 'no' },
+                    ]"
+                    class="w-full"
                     @update:model-value="field.input = $event === 'yes'"
-                  >
-                    <SelectTrigger :id="`${formId}-${item}-overwrite`">
-                      <SelectValue />
-                    </SelectTrigger>
-
-                    <SelectContent>
-                      <SelectItem value="yes">Yes</SelectItem>
-                      <SelectItem value="no">No</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               </FormischField>
             </div>
 
-            <Button
+            <UButton
               :disabled="disabled"
               type="button"
               variant="ghost"
+              color="neutral"
+              label="Remove extraction"
               @click="remove(form, { path: ['extractions'], at: index })"
-            >
-              Remove extraction
-            </Button>
+            />
           </div>
 
           <p
             v-if="rows.errors"
-            class="text-destructive text-xs"
+            class="text-error text-xs"
             role="alert"
           >
             {{ rows.errors.join(' ') }}
           </p>
 
-          <Button
+          <UButton
             :disabled="disabled || rows.items.length >= 32"
             type="button"
             variant="outline"
+            color="neutral"
+            label="Add extraction"
             @click="
               insert(form, {
                 path: ['extractions'],
@@ -409,18 +439,15 @@
                 },
               })
             "
-          >
-            Add extraction
-          </Button>
+          />
         </div>
       </FormischFieldArray>
 
-      <Button
+      <UButton
         :disabled="disabled"
         type="submit"
-      >
-        Apply step settings
-      </Button>
+        label="Apply step settings"
+      />
     </FormischForm>
 
     <RunRequestEditor
@@ -431,7 +458,7 @@
       @valid="emit('valid', $event)"
     />
 
-    <p class="text-muted-foreground text-xs">
+    <p class="text-muted text-xs">
       Transport, timeout, inspection limits, workload and budgets come from the main request
       configuration. Step requests execute sequentially within each iteration.
     </p>
