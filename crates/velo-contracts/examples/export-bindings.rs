@@ -90,6 +90,10 @@ fn main() {
         "export {};",
         velo_contracts::SavedConfiguration::decl(&config)
     );
+    println!("export {};", velo_engine::ApiCollection::decl(&config));
+    println!("export {};", velo_engine::CollectionDefaults::decl(&config));
+    println!("export {};", velo_engine::CollectionEntry::decl(&config));
+    println!("export {};", velo_engine::CollectionRequest::decl(&config));
     println!("export {};", velo_engine::TestDefinition::decl(&config));
     println!("export {};", velo_engine::ImportFormat::decl(&config));
     println!("export {};", velo_engine::ImportedRequest::decl(&config));

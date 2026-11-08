@@ -773,6 +773,135 @@ export type SavedConfiguration = {
    */
   config: RunConfig;
 };
+export type ApiCollection = {
+  /**
+   * Portable format version, currently 1.
+   */
+  version: number;
+  /**
+   * Stable local identity, 1 to 80 ASCII letters, digits, underscores or hyphens.
+   */
+  id: string;
+  /**
+   * Display name, at most 160 bytes.
+   */
+  name: string;
+  /**
+   * Purpose and context, at most 16 KiB.
+   */
+  description: string;
+  /**
+   * Usage notes, at most 16 KiB.
+   */
+  notes: string;
+  /**
+   * Root inherited scope.
+   */
+  defaults: CollectionDefaults;
+  /**
+   * Named overrides applied after inherited and request variables.
+   */
+  environments: Record<string, Record<string, string>>;
+  /**
+   * JSON pointers masked after assertions and extraction, before display, history or export.
+   */
+  sensitive_response_fields: string[];
+  /**
+   * Ordered folders and saved requests.
+   */
+  entries: CollectionEntry[];
+};
+export type CollectionDefaults = {
+  /**
+   * Ordered headers overridden case-insensitively by an inner scope.
+   */
+  headers: NameValue[];
+  /**
+   * Explicit authentication override; absence inherits the parent.
+   */
+  auth: RequestAuth | null;
+  /**
+   * Shared values or secret references, overridden by inner scopes and environments.
+   */
+  variables: Record<string, string>;
+};
+export type CollectionEntry =
+  | {
+      kind: 'folder';
+      /**
+       * Identity unique across the entire collection.
+       */
+      id: string;
+      /**
+       * Display name, at most 160 bytes.
+       */
+      name: string;
+      /**
+       * Purpose and context, at most 16 KiB.
+       */
+      description: string;
+      /**
+       * Usage notes, at most 16 KiB.
+       */
+      notes: string;
+      /**
+       * Defaults applied after the parent scope.
+       */
+      defaults: CollectionDefaults;
+      /**
+       * Ordered folders and saved requests.
+       */
+      entries: CollectionEntry[];
+    }
+  | {
+      kind: 'request';
+      /**
+       * Identity unique across the entire collection.
+       */
+      id: string;
+      /**
+       * Display name, at most 160 bytes.
+       */
+      name: string;
+      /**
+       * Purpose and context, at most 16 KiB.
+       */
+      description: string;
+      /**
+       * Usage notes, at most 16 KiB.
+       */
+      notes: string;
+      /**
+       * Canonical shared request, variables, environment overrides and dataset recipe.
+       */
+      definition: TestDefinition;
+      /**
+       * Inherit defaults when request authentication is None; false explicitly disables auth.
+       */
+      inherit_auth: boolean;
+      /**
+       * Response values made available to later requests in the session namespace.
+       */
+      extractions: Extraction[];
+    };
+export type CollectionRequest = {
+  /**
+   * Original saved request identity.
+   */
+  id: string;
+  /**
+   * Original saved request name.
+   */
+  name: string;
+  /**
+   * Shared request with inherited settings applied.
+   */
+  definition: TestDefinition;
+  /**
+   * Ordered response extraction rules.
+   */
+  extractions: Extraction[];
+};
 export type TestDefinition = {
   /**
    * Format version; only 1 is supported.

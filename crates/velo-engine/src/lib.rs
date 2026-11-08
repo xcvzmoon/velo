@@ -3,6 +3,7 @@
 mod admission;
 mod assertions;
 mod authoring;
+mod collections;
 mod config;
 mod dataset;
 mod http_options;
@@ -28,6 +29,11 @@ pub use assertions::{
 };
 #[doc(inline)]
 pub use authoring::TestDefinition;
+#[doc(inline)]
+pub use collections::{
+    ApiCollection, CollectionDefaults, CollectionEntry, CollectionRequest,
+    validate_definition_credentials,
+};
 pub use config::{
     NameValue, RequestBody, RequestMethod, ResourceBudget, RunConfig, RunConfirmation, RunError,
 };
