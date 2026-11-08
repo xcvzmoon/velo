@@ -1,6 +1,6 @@
 //! Bounded single-request inspection using the load engine transport.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{NameValue, RunConfig, RunError};
@@ -15,7 +15,7 @@ use crate::{NameValue, RunConfig, RunError};
 /// assert!(response.elapsed_ms >= 0.0);
 /// # }
 /// ```
-#[derive(Default, Serialize, TS)]
+#[derive(Clone, Default, Deserialize, Serialize, TS)]
 pub struct PreviewResponse {
     /// Assertion outcomes in configuration order; expectations and actual values are omitted.
     #[ts(type = "CheckOutcome[]")]
@@ -29,10 +29,38 @@ pub struct PreviewResponse {
     pub headers: Vec<NameValue>,
     /// Lossy UTF-8 body, with known request values masked.
     pub body: String,
+    /// Bytes received across response hops before bounded capture stopped; a lower bound when truncated.
+    pub received_bytes: u64,
+    /// Maximum retained body bytes, independent of the assertion inspection limit.
+    pub body_limit: u32,
+    /// Body representation; non-text and unsupported encodings are withheld.
+    pub body_format: BodyFormat,
+    /// True for live capture or opted-in history; false when retention omitted response content.
+    pub content_retained: bool,
     /// Whether body or header capture exceeded its limit.
     pub truncated: bool,
     /// True when response content has been masked.
     pub redacted: bool,
+}
+
+/// Interpretation of a bounded response body; content is always rendered as data.
+///
+/// # Examples
+/// ```
+/// let _format = velo_engine::BodyFormat::Text;
+/// ```
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum BodyFormat {
+    /// UTF-8 text; the caller may format valid JSON.
+    #[default]
+    Text,
+    /// A binary content type; the body is withheld.
+    Binary,
+    /// Compressed or otherwise encoded bytes; the body is withheld.
+    UnsupportedEncoding,
+    /// Invalid UTF-8; lossy replacement would misrepresent the response.
+    InvalidUtf8,
 }
 
 impl std::fmt::Debug for PreviewResponse {
@@ -55,7 +83,8 @@ impl std::fmt::Debug for PreviewResponse {
 ///
 /// # Returns
 /// Bounded response data with sensitive response headers and known request values masked.
-/// Truncated bodies are withheld when secret references were resolved, so partial secrets cannot leak.
+/// Truncated bodies are withheld for explicit authentication or resolved secret references,
+/// so a credential cut at the capture boundary cannot escape masking.
 /// Dropping the future cancels upload producers; normal completion waits for their cleanup.
 ///
 /// # Errors
@@ -99,7 +128,7 @@ pub async fn preview_request(
                 None,
             )
         })??;
-    let mut response =
+    let response =
         crate::transport::preview(&validated)
             .await
             .map_err(|failure| match failure {
@@ -114,19 +143,53 @@ pub async fn preview_request(
                     None,
                 ),
             })?;
+    redact_response(response, &validated, &request, secrets)
+}
+
+pub(crate) fn redact_response(
+    mut response: PreviewResponse,
+    validated: &crate::config::ValidatedConfig,
+    request: &serde_json::Value,
+    secrets: &[String],
+) -> Result<PreviewResponse, RunError> {
+    redact_response_fields(&mut response, &[]);
     let mut values = Vec::with_capacity(secrets.len());
     for secret in secrets {
         collect_values(&serde_json::Value::String(secret.clone()), &mut values);
     }
-    for value in validated.request.headers().values() {
+    for (name, value) in validated.request.headers() {
         if let Ok(value) = value.to_str()
             && !value.is_empty()
         {
             values.push(value.to_owned());
+            if matches!(
+                name,
+                &reqwest::header::AUTHORIZATION | &reqwest::header::PROXY_AUTHORIZATION
+            ) && let Some((scheme, credentials)) = value.split_once(' ')
+                && scheme.eq_ignore_ascii_case("basic")
+                && !credentials.trim().is_empty()
+            {
+                collect_values(
+                    &serde_json::Value::String(credentials.trim().to_owned()),
+                    &mut values,
+                );
+            }
         }
     }
-    collect_values(&request, &mut values);
-    if response.truncated && !secrets.is_empty() {
+    collect_values(request, &mut values);
+    let explicit_auth = request
+        .pointer("/auth/kind")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|kind| kind != "none")
+        || validated.request.headers().keys().any(|name| {
+            matches!(
+                name,
+                &reqwest::header::AUTHORIZATION
+                    | &reqwest::header::PROXY_AUTHORIZATION
+                    | &reqwest::header::COOKIE
+            )
+        });
+    if response.truncated && (!secrets.is_empty() || explicit_auth) {
         response.body = "[Response body withheld: truncation may expose a partial secret.]".into();
         response.redacted = true;
     }
@@ -151,7 +214,9 @@ pub async fn preview_request(
                 | "proxy-authorization"
                 | "www-authenticate"
                 | "location"
-        );
+        ) || ["token", "secret", "password", "api-key", "api_key"]
+            .iter()
+            .any(|name| pair.name.to_ascii_lowercase().contains(name));
         redact(
             &mut pair.name,
             &matcher,
@@ -237,5 +302,94 @@ fn redact(
     if matcher.is_match(text.as_str()) {
         *text = matcher.replace_all(text.as_str(), replacements);
         *redacted = true;
+    }
+}
+
+/// Masks configured JSON response fields before display, persistence, or export.
+///
+/// # Arguments
+/// * `response` - Bounded response whose checks and extractions already ran on original bytes.
+/// * `pointers` - Validated RFC 6901 pointers from the collection's sensitive field settings.
+///
+/// # Returns
+/// No value. Truncated, invalid, or non-JSON bodies are withheld when pointers are configured.
+/// Common credential field names are masked in JSON even without configured pointers.
+///
+/// # Examples
+/// ```
+/// let mut response = velo_engine::PreviewResponse::default();
+/// response.body = r#"{"token":"private","ok":true}"#.into();
+/// velo_engine::redact_response_fields(&mut response, &[]);
+/// assert!(!response.body.contains("private"));
+/// ```
+pub fn redact_response_fields(response: &mut PreviewResponse, pointers: &[String]) {
+    if response.body.is_empty() {
+        return;
+    }
+    let json_content = response.headers.iter().any(|header| {
+        header.name.eq_ignore_ascii_case("content-type")
+            && header.value.to_ascii_lowercase().contains("json")
+    }) || response.body.trim_start().starts_with(['{', '[']);
+    if response.truncated && (!pointers.is_empty() || json_content) {
+        response.body =
+            "[Response body withheld: sensitive field masking requires complete JSON.]".into();
+        response.redacted = true;
+        return;
+    }
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&response.body) else {
+        if !pointers.is_empty() {
+            response.body =
+                "[Response body withheld: sensitive field masking requires valid JSON.]".into();
+            response.redacted = true;
+        }
+        return;
+    };
+    mask_credentials(&mut value, &mut response.redacted);
+    for pointer in pointers {
+        if let Some(field) = value.pointer_mut(pointer) {
+            *field = serde_json::Value::String("[redacted]".into());
+            response.redacted = true;
+        }
+    }
+    if response.redacted {
+        response.body =
+            serde_json::to_string(&value).unwrap_or_else(|_| "[Response withheld]".into());
+        if response.body.len() > response.body_limit as usize {
+            response.body =
+                "[Response body withheld: masked JSON exceeds the capture limit.]".into();
+            response.truncated = true;
+        }
+    }
+}
+
+fn mask_credentials(value: &mut serde_json::Value, redacted: &mut bool) {
+    match value {
+        serde_json::Value::Object(fields) => {
+            for (name, value) in fields {
+                let name = name.to_ascii_lowercase().replace(['-', '_'], "");
+                if [
+                    "password",
+                    "secret",
+                    "token",
+                    "authorization",
+                    "cookie",
+                    "apikey",
+                ]
+                .iter()
+                .any(|part| name.contains(part))
+                {
+                    *value = serde_json::Value::String("[redacted]".into());
+                    *redacted = true;
+                } else {
+                    mask_credentials(value, redacted);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                mask_credentials(item, redacted);
+            }
+        }
+        _ => {}
     }
 }

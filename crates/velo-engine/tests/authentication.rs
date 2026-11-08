@@ -1,10 +1,13 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    collections::BTreeMap,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use axum::{Router, extract::Request, routing::get};
-use velo_engine::{ApiKeyPlacement, NameValue, RequestAuth, RunConfig, RunManager};
+use velo_engine::{ApiKeyPlacement, NameValue, RequestAuth, RunConfig, RunManager, TestDefinition};
 
 #[tokio::test]
 async fn api_key_header_and_query_use_shared_transport_once() {
@@ -111,4 +114,39 @@ fn api_keys_reject_ambiguous_fields_before_execution_and_mask_debug() {
         assert_eq!(error.field.as_deref(), Some("auth"));
         assert!(!error.message.contains("PRIVATE_API_KEY"));
     }
+}
+
+#[test]
+fn functional_resolution_preserves_session_fields_and_binds_api_key_secrets() {
+    let definition = TestDefinition {
+        config: RunConfig {
+            url: "{{origin}}/item/{{session:item}}".into(),
+            auth: RequestAuth::ApiKey {
+                name: "x-api-key".into(),
+                value: "{{secret:api-key}}".into(),
+                placement: ApiKeyPlacement::Header,
+            },
+            ..Default::default()
+        },
+        variables: BTreeMap::from([("origin".into(), "https://example.com".into())]),
+        ..Default::default()
+    };
+    let config = definition
+        .resolve_api(None, &BTreeMap::new(), |name| {
+            assert_eq!(name, "api-key");
+            Ok("PRIVATE_API_KEY".into())
+        })
+        .unwrap();
+    assert_eq!(config.url, "https://example.com/item/{{session:item}}");
+    let RequestAuth::ApiKey { value, .. } = config.auth else {
+        panic!("API key was lost")
+    };
+    assert_eq!(value, "PRIVATE_API_KEY");
+    assert_eq!(
+        definition
+            .resolve(None, |_| Ok("PRIVATE_API_KEY".into()))
+            .unwrap_err()
+            .code,
+        "VARIABLE_UNRESOLVED"
+    );
 }

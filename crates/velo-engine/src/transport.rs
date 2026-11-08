@@ -268,6 +268,14 @@ pub(crate) async fn execute(
 pub(crate) async fn preview(
     config: &ValidatedConfig,
 ) -> Result<crate::preview::PreviewResponse, Failure> {
+    inspect(config, None, None).await
+}
+
+pub(crate) async fn inspect(
+    config: &ValidatedConfig,
+    exchange: Option<&mut crate::scenario_runtime::Exchange<'_>>,
+    cancellation: Option<&CancellationToken>,
+) -> Result<crate::preview::PreviewResponse, Failure> {
     let cancel = config.upload_stop.child_token();
     let _cleanup = cancel.clone().drop_guard();
     let uploads_done = TaskTracker::new();
@@ -275,7 +283,7 @@ pub(crate) async fn preview(
     let mut response = crate::preview::PreviewResponse::default();
     let mut bytes = 0;
     let mut observation = crate::assertions::Observation::default();
-    let result = tokio::time::timeout(
+    let operation = tokio::time::timeout(
         config.timeout,
         consume(
             config,
@@ -285,18 +293,30 @@ pub(crate) async fn preview(
             &uploads_done,
             Capture {
                 preview: Some(&mut response),
-                exchange: None,
+                exchange,
             },
             &mut observation,
         ),
-    )
-    .await
-    .map_err(|_| Failure::Timeout)
-    .and_then(|result| result);
+    );
+    let result = if let Some(cancellation) = cancellation {
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => Err(Failure::Transport(Category::Request)),
+            result = operation => result.map_err(|_| Failure::Timeout).and_then(|result| result),
+        }
+    } else {
+        operation
+            .await
+            .map_err(|_| Failure::Timeout)
+            .and_then(|result| result)
+    };
     cancel.cancel();
     uploads_done.close();
     uploads_done.wait().await;
     result?;
+    response.received_bytes = bytes;
+    response.body_limit = 65_536;
+    response.content_retained = true;
     response.checks = observation.checks;
     response.elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
     Ok(response)
@@ -368,6 +388,10 @@ async fn consume(
         if let Some(exchange) = exchange.as_deref_mut() {
             match exchange.session.request_cookies(&url) {
                 Ok(Some(cookies)) if !request.headers().contains_key(header::COOKIE) => {
+                    if crate::config::insecure_auth_target(&url) {
+                        exchange.error = Some("INSECURE_AUTH_TARGET");
+                        return Err(Failure::Transport(Category::Request));
+                    }
                     request.headers_mut().insert(header::COOKIE, cookies);
                 }
                 Ok(_) => {}
@@ -444,7 +468,37 @@ async fn consume(
             }
         }
         if let Some(capture) = preview.as_deref_mut() {
-            capture.body = String::from_utf8_lossy(&body).into_owned();
+            use crate::preview::BodyFormat;
+            let encoded = response
+                .headers()
+                .get(header::CONTENT_ENCODING)
+                .is_some_and(|value| !value.as_bytes().eq_ignore_ascii_case(b"identity"));
+            let content_type = response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            let text = content_type.is_empty()
+                || content_type.starts_with("text/")
+                || content_type.contains("json")
+                || content_type.contains("xml")
+                || content_type.contains("javascript")
+                || content_type.contains("x-www-form-urlencoded");
+            capture.body_format = if encoded {
+                BodyFormat::UnsupportedEncoding
+            } else if !text {
+                BodyFormat::Binary
+            } else if std::str::from_utf8(&body).is_err() {
+                BodyFormat::InvalidUtf8
+            } else {
+                BodyFormat::Text
+            };
+            capture.body = if matches!(capture.body_format, BodyFormat::Text) {
+                String::from_utf8_lossy(&body).into_owned()
+            } else {
+                String::new()
+            };
         }
         hop_cancel.cancel();
         uploads_done.close();
@@ -461,8 +515,8 @@ async fn consume(
                 && let Err(error) = exchange.session.extract(
                     &exchange.step.extractions,
                     response.headers(),
-                    &body,
-                    truncated,
+                    &body[..body.len().min(config.inspection.body_bytes as usize)],
+                    truncated || body.len() > config.inspection.body_bytes as usize,
                 )
             {
                 exchange.error = Some(error);
@@ -500,6 +554,50 @@ async fn consume(
 mod tests {
     use super::*;
     use crate::{MultipartPart, RequestBody, RequestMethod, RunConfig};
+
+    #[tokio::test]
+    async fn session_cookies_cannot_bypass_remote_cleartext_auth_policy() {
+        let mut session = crate::scenario_runtime::Session::default();
+        let mut headers = header::HeaderMap::new();
+        headers.insert(
+            header::SET_COOKIE,
+            header::HeaderValue::from_static("session=PRIVATE_COOKIE; Path=/"),
+        );
+        session
+            .response_cookies(
+                &headers,
+                &reqwest::Url::parse("https://example.test/").unwrap(),
+            )
+            .unwrap();
+        let config = crate::config::validate(RunConfig {
+            url: "http://example.test/".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        let step = crate::ScenarioStep {
+            id: "request".into(),
+            request: crate::ScenarioRequest {
+                url: "http://example.test/".into(),
+                method: crate::RequestMethod::GET,
+                headers: vec![],
+                query: vec![],
+                body: crate::RequestBody::None,
+                auth: crate::RequestAuth::None,
+                assertions: vec![],
+            },
+            extractions: vec![],
+            think_ms: 0,
+            on_failure: crate::StepFailure::Stop,
+        };
+        let mut exchange = crate::scenario_runtime::Exchange {
+            session: &mut session,
+            step: &step,
+            error: None,
+        };
+        let result = inspect(&config, Some(&mut exchange), None).await;
+        assert!(matches!(result, Err(Failure::Transport(Category::Request))));
+        assert_eq!(exchange.error, Some("INSECURE_AUTH_TARGET"));
+    }
 
     #[test]
     fn diagnostic_categories_do_not_retain_infrastructure_messages() {

@@ -59,7 +59,9 @@ pub(crate) fn request_config(base: &RunConfig, request: ScenarioRequest) -> RunC
     }
 }
 
-fn placeholder_values(request: &ScenarioRequest) -> Result<BTreeMap<String, String>, RunError> {
+pub(crate) fn placeholder_values(
+    request: &ScenarioRequest,
+) -> Result<BTreeMap<String, String>, RunError> {
     let encoded =
         serde_json::to_string(request).map_err(|_| invalid("Request encoding failed."))?;
     let mut rest = encoded.as_str();
@@ -259,6 +261,23 @@ pub(crate) struct Session {
 }
 
 impl Session {
+    pub(crate) fn cookie_metadata(&self) -> Vec<crate::NameValue> {
+        self.cookies
+            .iter_unexpired()
+            .map(|cookie| crate::NameValue {
+                name: format!("{} ({:?}{:?})", cookie.name(), cookie.domain, cookie.path),
+                value: "[redacted]".into(),
+            })
+            .collect()
+    }
+
+    pub(crate) fn cookie_values(&self) -> Vec<String> {
+        self.cookies
+            .iter_unexpired()
+            .map(|cookie| cookie.value().to_owned())
+            .collect()
+    }
+
     pub(crate) fn request_cookies(
         &self,
         url: &Url,
@@ -273,7 +292,10 @@ impl Session {
             return Ok(None);
         }
         header::HeaderValue::from_str(&value)
-            .map(Some)
+            .map(|mut value| {
+                value.set_sensitive(true);
+                Some(value)
+            })
             .map_err(|_| "SESSION_COOKIE_INVALID")
     }
 

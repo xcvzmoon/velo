@@ -90,6 +90,13 @@ fn main() {
         "export {};",
         velo_contracts::SavedConfiguration::decl(&config)
     );
+    println!("export {};", velo_engine::ApiSessionView::decl(&config));
+    println!("export {};", velo_engine::FunctionalState::decl(&config));
+    println!("export {};", velo_engine::FunctionalResult::decl(&config));
+    println!("export {};", velo_engine::FunctionalRun::decl(&config));
+    println!("export {};", velo_engine::FunctionalKind::decl(&config));
+    println!("export {};", velo_engine::FunctionalRunState::decl(&config));
+    println!("export {};", velo_engine::BodyFormat::decl(&config));
     println!("export {};", velo_engine::ApiCollection::decl(&config));
     println!("export {};", velo_engine::CollectionDefaults::decl(&config));
     println!("export {};", velo_engine::CollectionEntry::decl(&config));

@@ -773,6 +773,88 @@ export type SavedConfiguration = {
    */
   config: RunConfig;
 };
+export type ApiSessionView = {
+  /**
+   * Extracted variable names; values remain in memory only.
+   */
+  variables: string[];
+  /**
+   * Cookie metadata, with masked values and domain/path scope.
+   */
+  cookies: NameValue[];
+};
+export type FunctionalState = 'passed' | 'failed' | 'cancelled' | 'skipped';
+export type FunctionalResult = {
+  /**
+   * Saved request identity.
+   */
+  request_id: string;
+  /**
+   * Authored display name, never a resolved target URL.
+   */
+  name: string;
+  /**
+   * One-based iteration number.
+   */
+  iteration: number;
+  /**
+   * Final step state.
+   */
+  state: FunctionalState;
+  /**
+   * Bounded masked response, absent before headers or for cancellation.
+   */
+  response: PreviewResponse | null;
+  /**
+   * Stable safe failure code, without response values.
+   */
+  error: string | null;
+};
+export type FunctionalRun = {
+  /**
+   * Always `functional`, including exported evidence.
+   */
+  kind: FunctionalKind;
+  /**
+   * Operation identity, also used for cancellation.
+   */
+  id: string;
+  /**
+   * Collection identity used to reopen a saved request without sending it.
+   */
+  collection_id: string;
+  /**
+   * Selected environment, or shared values when absent.
+   */
+  environment: string | null;
+  /**
+   * `running`, `completed`, or `cancelled`.
+   */
+  state: FunctionalRunState;
+  /**
+   * Planned step count, including skipped outcomes.
+   */
+  total: number;
+  /**
+   * Portable authored snapshots for history restoration, without resolved secrets or local file paths.
+   */
+  requests: CollectionRequest[];
+  /**
+   * Outcomes in displayed execution order.
+   */
+  results: FunctionalResult[];
+  /**
+   * Safe final session view; never a persisted cookie jar.
+   */
+  session: ApiSessionView;
+  /**
+   * Local persistence failure, if execution completed but history could not be retained.
+   */
+  storage_error: string | null;
+};
+export type FunctionalKind = 'functional';
+export type FunctionalRunState = 'running' | 'completed' | 'cancelled';
+export type BodyFormat = 'text' | 'binary' | 'unsupported_encoding' | 'invalid_utf8';
 export type ApiCollection = {
   /**
    * Portable format version, currently 1.
@@ -960,6 +1042,22 @@ export type PreviewResponse = {
    * Lossy UTF-8 body, with known request values masked.
    */
   body: string;
+  /**
+   * Bytes received across response hops before bounded capture stopped; a lower bound when truncated.
+   */
+  received_bytes: bigint;
+  /**
+   * Maximum retained body bytes, independent of the assertion inspection limit.
+   */
+  body_limit: number;
+  /**
+   * Body representation; non-text and unsupported encodings are withheld.
+   */
+  body_format: BodyFormat;
+  /**
+   * True for live capture or opted-in history; false when retention omitted response content.
+   */
+  content_retained: boolean;
   /**
    * Whether body or header capture exceeded its limit.
    */
