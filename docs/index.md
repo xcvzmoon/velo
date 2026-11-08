@@ -5,6 +5,8 @@ These guides describe the current implementation. Delivery history and dated mea
 | Guide                                                                | Contents                                                                                   |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | [Test authoring](authoring.md)                                       | Definitions, environments, secret references, request imports, and preview                 |
+| [MCP server](mcp.md)                                                 | Local client setup, offline authoring, selected evidence, and proposal review              |
+| [AI assistance](ai-assistance.md)                                    | Reviewed cloud submissions, editable drafts, evidence references, and credential handling  |
 | [Test data](datasets.md)                                             | Seeded Faker generation, CSV/JSON imports, lifetimes, allocation, and exhaustion           |
 | [Headless CLI and CI](headless.md)                                   | Preparation, authorization, secret inputs, datasets, exit statuses, artifacts, and CI      |
 | [Architecture](architecture.md)                                      | Crate boundaries, frontend, and native communication                                       |
