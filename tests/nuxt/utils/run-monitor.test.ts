@@ -31,7 +31,54 @@ const population: LatencySnapshot = {
 };
 
 function snapshot(runId = '1', seconds = 1): RunSnapshot {
+  const metrics: RunSnapshot['metrics'] = {
+    assertion_failure_rate: null,
+    diagnostics: {
+      assertions: [],
+      groups: [],
+      samples: [],
+      dropped_samples: '0',
+      dropped_groups: '0',
+      truncated_responses: '0',
+      retained_bytes: 0,
+      limits: {
+        body_bytes: 16_384,
+        sample_count: 16,
+        sample_bytes: 8192,
+      },
+    },
+    counters: {
+      started: '9007199254740993',
+      responses: '10',
+      successes: '9',
+      status_failures: '1',
+      transport_failures: '0',
+      timeouts: '0',
+      cancelled: '0',
+      in_flight: '0',
+      response_body_bytes: '100',
+      completed_iterations: '10',
+      failed_iterations: '1',
+    },
+    response_latency: population,
+    transport_latency: population,
+    timeout_latency: population,
+    http_failure_rate: 0.1,
+    request_rate: 10,
+    iteration_rate: 10,
+    success_rate: 9,
+    aggregation_wait_us: '0',
+    aggregation_interference: false,
+    counter_overflow: false,
+    max_in_flight: '1',
+  };
   return {
+    automatic_stop: null,
+    measurement: {
+      warmup_ms: 0,
+      evaluated_us: String(seconds * 1e6),
+      complete: false,
+    },
     scenarios: null,
     dataset: null,
     thresholds: [],
@@ -39,6 +86,8 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
     state: 'running',
     confirmation: {
       origin: 'http://127.0.0.1:8080',
+      warmup_ms: 0,
+      abort_policies: [],
       vus: 1,
       duration_ms: 60_000,
       workload: {
@@ -68,47 +117,8 @@ function snapshot(runId = '1', seconds = 1): RunSnapshot {
       missed_deadlines: '0',
       max_lateness_us: '0',
     },
-    metrics: {
-      assertion_failure_rate: null,
-      diagnostics: {
-        assertions: [],
-        groups: [],
-        samples: [],
-        dropped_samples: '0',
-        dropped_groups: '0',
-        truncated_responses: '0',
-        retained_bytes: 0,
-        limits: {
-          body_bytes: 16_384,
-          sample_count: 16,
-          sample_bytes: 8192,
-        },
-      },
-      counters: {
-        started: '9007199254740993',
-        responses: '10',
-        successes: '9',
-        status_failures: '1',
-        transport_failures: '0',
-        timeouts: '0',
-        cancelled: '0',
-        in_flight: '0',
-        response_body_bytes: '100',
-        completed_iterations: '10',
-        failed_iterations: '1',
-      },
-      response_latency: population,
-      transport_latency: population,
-      timeout_latency: population,
-      http_failure_rate: 0.1,
-      request_rate: 10,
-      iteration_rate: 10,
-      success_rate: 9,
-      aggregation_wait_us: '0',
-      aggregation_interference: false,
-      counter_overflow: false,
-      max_in_flight: '1',
-    },
+    metrics,
+    evaluated: metrics,
   };
 }
 
@@ -194,6 +204,8 @@ describe('run monitor', () => {
       timeout_ms: 30000,
       pacing_ms: 0,
       grace_ms: 5000,
+      warmup_ms: 0,
+      abort_policies: [],
       budget: snapshot().confirmation.budget,
     };
     const monitor = createRunMonitor({
@@ -418,4 +430,32 @@ describe('ramping monitor', () => {
     ]);
     monitor.dispose();
   });
+});
+
+it('treats automatic stop as terminal while retaining evidence and partial results', async () => {
+  const { monitor, setCurrent } = harness();
+  const stopped: RunSnapshot = {
+    ...snapshot(),
+    state: 'aborted',
+    automatic_stop: {
+      policy: {
+        rule: {
+          metric: 'http_failure_percent',
+          operator: 'less_than',
+          limit: 50,
+        },
+        window_ms: 1000,
+        min_samples: 10,
+        sustained_ms: 2000,
+      },
+      observed: 100,
+      samples: '10',
+      at_us: '1000000',
+      breached_us: '2000000',
+    },
+  };
+  setCurrent(stopped);
+  await monitor.recover();
+  expect(monitor.active.value).toBe(false);
+  expect(monitor.snapshot.value?.automatic_stop).toEqual(stopped.automatic_stop);
 });

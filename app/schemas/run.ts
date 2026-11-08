@@ -48,6 +48,20 @@ const thresholdSchema = v.pipe(
   ),
 );
 
+const policyDurationSchema = v.pipe(
+  positiveIntegerSchema,
+  v.minValue(100, 'Use at least 100 ms.'),
+  v.maxValue(60_000, 'Use at most 60,000 ms.'),
+  v.multipleOf(100, 'Use a multiple of 100 ms.'),
+);
+
+const abortPolicySchema = v.object({
+  rule: thresholdSchema,
+  window_ms: policyDurationSchema,
+  min_samples: positiveIntegerSchema,
+  sustained_ms: policyDurationSchema,
+});
+
 const requestFieldsSchema = v.object({
   url: v.pipe(
     v.string(),
@@ -78,6 +92,8 @@ const requestFieldsSchema = v.object({
   protocol: v.picklist(['auto', 'http1', 'http2']),
   max_redirects: nonnegativeIntegerSchema,
   thresholds: v.array(thresholdSchema),
+  warmup_ms: v.optional(nonnegativeIntegerSchema, 0),
+  abort_policies: v.optional(v.pipe(v.array(abortPolicySchema), v.maxLength(8)), []),
   assertions: v.optional(
     v.pipe(
       v.array(assertionEditorSchema),
@@ -199,6 +215,18 @@ const requestEditorFieldsSchema = v.variant('workloadKind', [
 
 export const requestEditorSchema = v.pipe(
   requestEditorFieldsSchema,
+  v.forward(
+    v.check(({ warmup_ms, workloadKind, duration_ms, stages }) => {
+      let duration = workloadKind === 'ramping' ? 0 : duration_ms;
+      if (workloadKind === 'ramping') {
+        for (const stage of stages) {
+          duration += stage.duration_ms;
+        }
+      }
+      return warmup_ms < duration;
+    }, 'Warm-up must be shorter than the total scheduling duration.'),
+    ['warmup_ms'],
+  ),
   v.forward(
     v.check(
       ({ method, bodyKind }) => !['GET', 'HEAD'].includes(method) || bodyKind === 'none',

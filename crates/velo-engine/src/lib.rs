@@ -1,5 +1,6 @@
 //! Desktop-independent HTTP load engine with bounded virtual-user execution.
 
+mod admission;
 mod assertions;
 mod authoring;
 mod config;
@@ -16,6 +17,8 @@ mod threshold;
 mod transport;
 mod workload;
 
+#[doc(inline)]
+pub use admission::{AbortEvidence, AbortPolicy, MeasurementWindow};
 #[doc(inline)]
 pub use assertions::{
     Assertion, AssertionRule, AssertionTotals, CheckOutcome, FailureGroup, InspectionLimits,

@@ -52,6 +52,8 @@ pub(crate) fn request_config(base: &RunConfig, request: ScenarioRequest) -> RunC
         pacing_ms: base.pacing_ms,
         grace_ms: base.grace_ms,
         thresholds: Vec::new(),
+        warmup_ms: 0,
+        abort_policies: Vec::new(),
         inspection: base.inspection.clone(),
         budget: base.budget.clone(),
     }

@@ -179,14 +179,20 @@ impl Store {
             velo_engine::RunState::Completed
                 | velo_engine::RunState::Cancelled
                 | velo_engine::RunState::Failed
+                | velo_engine::RunState::Aborted
         );
         let sequence = update.sequence.parse::<i64>().map_err(failure_from)?;
         transaction.execute("UPDATE runs SET snapshot=?2, terminal=?3, incomplete=MAX(incomplete,?4) WHERE id=?1", params![id, serde_json::to_string(&update.snapshot).map_err(failure_from)?, terminal, incomplete]).map_err(failure_from)?;
         if sequence % i64::from(stride) == 0 {
             let mut interval = update.clone();
-            interval.snapshot.metrics.diagnostics.samples.clear();
-            interval.snapshot.metrics.diagnostics.groups.clear();
-            interval.snapshot.metrics.diagnostics.retained_bytes = 0;
+            for metrics in [
+                &mut interval.snapshot.metrics,
+                &mut interval.snapshot.evaluated,
+            ] {
+                metrics.diagnostics.samples.clear();
+                metrics.diagnostics.groups.clear();
+                metrics.diagnostics.retained_bytes = 0;
+            }
             transaction
                 .execute(
                     "INSERT OR REPLACE INTO points VALUES (?1,?2,?3)",
@@ -508,6 +514,48 @@ mod tests {
     }
 
     #[test]
+    fn automatic_stop_evidence_survives_reopen_as_a_terminal_partial_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("history.sqlite");
+        let mut store = Store::open(&path).unwrap();
+        let mut update = sample();
+        update.snapshot.state = velo_engine::RunState::Aborted;
+        update.snapshot.measurement.complete = false;
+        update.snapshot.measurement.warmup_ms = 200;
+        update.snapshot.automatic_stop = Some(velo_engine::AbortEvidence {
+            policy: velo_engine::AbortPolicy {
+                rule: velo_engine::Threshold {
+                    metric: velo_engine::ThresholdMetric::HttpFailurePercent,
+                    operator: velo_engine::ThresholdOperator::LessThan,
+                    limit: 50.0,
+                },
+                window_ms: 100,
+                min_samples: 1,
+                sustained_ms: 200,
+            },
+            observed: Some(100.0),
+            samples: 5,
+            at_us: 500_000,
+            breached_us: 200_000,
+        });
+        store.begin("aborted", "GET", &update.snapshot).unwrap();
+        store.record("aborted", &update, false).unwrap();
+        drop(store);
+        let reopened = Store::open(&path).unwrap();
+        let entry = reopened.detail("aborted").unwrap();
+        assert!(!entry.interrupted);
+        assert_eq!(entry.snapshot["state"], "aborted");
+        assert_eq!(entry.snapshot["measurement"]["complete"], false);
+        assert_eq!(entry.snapshot["measurement"]["warmup_ms"], 200);
+        assert_eq!(entry.snapshot["automatic_stop"]["at_us"], "500000");
+        assert_eq!(entry.snapshot["automatic_stop"]["samples"], "5");
+        assert_eq!(
+            entry.points[0]["snapshot"]["automatic_stop"]["observed"],
+            100.0
+        );
+    }
+
+    #[test]
     fn diagnostics_persist_once_per_run_and_are_deleted_with_the_run() {
         let mut store = Store::initialize(Connection::open_in_memory().unwrap()).unwrap();
         let mut update = sample();
@@ -522,6 +570,7 @@ mod tests {
             .groups
             .push(velo_engine::FailureGroup { example, count: 17 });
         diagnostics.retained_bytes = serde_json::to_vec(&diagnostics.samples).unwrap().len() as u32;
+        update.snapshot.evaluated.diagnostics = update.snapshot.metrics.diagnostics.clone();
         store.begin("diagnostics", "GET", &update.snapshot).unwrap();
         store.record("diagnostics", &update, false).unwrap();
         let entry = store.detail("diagnostics").unwrap();
@@ -539,6 +588,18 @@ mod tests {
         );
         assert_eq!(
             entry.points[0]["snapshot"]["metrics"]["diagnostics"]["groups"],
+            serde_json::json!([])
+        );
+        assert_eq!(
+            entry.snapshot["evaluated"]["diagnostics"]["groups"][0]["count"],
+            "17"
+        );
+        assert_eq!(
+            entry.points[0]["snapshot"]["evaluated"]["diagnostics"]["samples"],
+            serde_json::json!([])
+        );
+        assert_eq!(
+            entry.points[0]["snapshot"]["evaluated"]["diagnostics"]["groups"],
             serde_json::json!([])
         );
         store.delete_run("diagnostics").unwrap();

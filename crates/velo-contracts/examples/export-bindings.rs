@@ -68,6 +68,9 @@ fn main() {
     println!("export {};", velo_engine::Threshold::decl(&config));
     println!("export {};", velo_engine::ThresholdStatus::decl(&config));
     println!("export {};", velo_engine::ThresholdResult::decl(&config));
+    println!("export {};", velo_engine::AbortPolicy::decl(&config));
+    println!("export {};", velo_engine::AbortEvidence::decl(&config));
+    println!("export {};", velo_engine::MeasurementWindow::decl(&config));
     println!("export {};", velo_engine::RunConfig::decl(&config));
     println!("export {};", velo_engine::RunError::decl(&config));
     println!("export {};", velo_engine::RunConfirmation::decl(&config));
