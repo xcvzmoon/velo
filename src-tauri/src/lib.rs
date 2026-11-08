@@ -61,6 +61,7 @@ pub fn run() {
             reports::update_run_metadata,
             reports::load_comparison_settings,
             reports::save_comparison,
+            reports::export_comparison,
             history::history_status,
             history::list_history,
             history::load_history,

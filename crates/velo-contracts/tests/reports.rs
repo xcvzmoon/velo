@@ -298,6 +298,67 @@ fn missing_samples_and_absent_optional_assertions_are_unevaluable() {
 }
 
 #[test]
+fn json_and_readable_reports_retain_precision_context_and_escape_user_text() {
+    let mut candidate = entry("candidate");
+    candidate.metadata.notes = "<script>alert('x')</script> & private notes".into();
+    let report = compare(
+        Some(entry("baseline")),
+        candidate,
+        &settings(RegressionMetric::RequestRate, 0.0, false),
+    );
+    let source = export_json(&report).unwrap();
+    let decoded: Value = serde_json::from_str(&source).unwrap();
+    assert_eq!(decoded["format_version"], 1);
+    assert_eq!(
+        decoded["candidate"]["snapshot"]["evaluated"]["counters"]["started"],
+        "18446744073709551615"
+    );
+    assert_eq!(decoded["candidate"]["stride"], 4);
+    assert!(decoded["candidate"]["snapshot"]["scenarios"].is_null());
+    let html = export_html(&report).unwrap();
+    assert!(html.contains("&lt;script&gt;"));
+    assert!(!html.contains("<script>"));
+    for evidence in [
+        "measurement",
+        "thresholds",
+        "definition_identity",
+        "diagnostics",
+        "telemetry",
+        "stride",
+        "incomplete",
+        "out_of_range",
+    ] {
+        assert!(html.contains(evidence), "{evidence}");
+    }
+}
+
+#[test]
+fn junit_has_aggregate_rule_cases_with_independent_threshold_and_assertion_failures() {
+    let mut candidate = entry("candidate");
+    candidate.snapshot["evaluated"]["diagnostics"]["assertions"][0]["id"] = json!("name\"<&");
+    let report = compare(
+        Some(entry("baseline")),
+        candidate.clone(),
+        &settings(RegressionMetric::RequestRate, 0.0, false),
+    );
+    let xml = export_junit(&report).unwrap();
+    assert!(xml.contains("tests=\"4\" failures=\"2\" skipped=\"0\""));
+    assert_eq!(xml.matches("<testcase ").count(), 4);
+    assert!(xml.contains("name&quot;&lt;&amp;"));
+    assert!(xml.contains("<system-out>"));
+    assert!(xml.contains("18446744073709551615"));
+    candidate.incomplete = true;
+    let report = compare(
+        Some(entry("baseline")),
+        candidate,
+        &settings(RegressionMetric::RequestRate, 0.0, false),
+    );
+    let xml = export_junit(&report).unwrap();
+    assert!(xml.contains("skipped=\"3\""));
+    assert!(xml.contains("failures=\"1\""));
+}
+
+#[test]
 fn invalid_budget_and_metadata_inputs_are_rejected_and_never_pass() {
     for limit in [f64::NAN, f64::INFINITY, -1.0, 1e13] {
         let rules = settings(RegressionMetric::RequestRate, limit, false);
@@ -321,4 +382,27 @@ fn invalid_budget_and_metadata_inputs_are_rejected_and_never_pass() {
     metadata.notes.clear();
     assert!(validate_metadata(&metadata).is_ok());
     assert!(serde_json::from_value::<ComparisonSettings>(json!({"baseline_id":"baseline", "budgets":[], "configuration_reviewed":true, "extra":"ignored?"})).is_err());
+}
+
+#[test]
+fn readable_charts_use_independent_scales_and_keep_zero_distinct_from_unavailable() {
+    let mut candidate = entry("candidate");
+    candidate.snapshot["evaluated"]["response_latency"]["p95_us"] = json!(4000);
+    candidate.snapshot["evaluated"]["assertion_failure_rate"] = Value::Null;
+    let mut baseline = entry("baseline");
+    baseline.snapshot["evaluated"]["http_failure_rate"] = json!(0.0);
+    candidate.snapshot["evaluated"]["http_failure_rate"] = json!(0.0);
+    let report = compare(
+        Some(baseline),
+        candidate,
+        &settings(RegressionMetric::RequestRate, 0.0, false),
+    );
+    let html = export_html(&report).unwrap();
+    assert_eq!(html.matches("<figure>").count(), 6);
+    assert!(html.contains("width:50%;height:100%"));
+    assert!(html.contains("width:0%;height:100%"));
+    assert!(html.contains("Candidate: unavailable; Assertion failure (%)"));
+    assert!(html.contains("Baseline: 0; HTTP failure (%)"));
+    assert!(!html.contains("width:NaN"));
+    assert!(!html.contains("width:inf"));
 }

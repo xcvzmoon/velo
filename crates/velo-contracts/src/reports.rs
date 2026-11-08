@@ -7,6 +7,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+mod export;
+
+#[doc(inline)]
+pub use export::{export_html, export_json, export_junit};
 use ts_rs::TS;
 
 use crate::{CommandError, HistoryEntry};

@@ -199,6 +199,7 @@ mod tests {
                 crate::reports::update_run_metadata,
                 crate::reports::load_comparison_settings,
                 crate::reports::save_comparison,
+                crate::reports::export_comparison,
                 crate::history::list_history,
                 crate::history::load_history,
                 crate::history::save_configuration,
@@ -417,6 +418,15 @@ mod tests {
             )
             .unwrap(),
             settings
+        );
+        assert_eq!(
+            invoke(
+                &window,
+                "export_comparison",
+                json!({"id":history[0]["id"], "format":"unsupported"})
+            )
+            .unwrap_err()["code"],
+            "INVALID_REPORT_FORMAT"
         );
         invoke(&window, "pin_baseline", json!({"id":null})).unwrap();
         assert!(
