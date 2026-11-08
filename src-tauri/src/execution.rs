@@ -32,10 +32,6 @@ pub(crate) async fn prepare_run(config: RunConfig) -> Result<RunConfirmation, Ru
         })?
 }
 
-fn step_identity(step: &velo_engine::ScenarioStep) -> serde_json::Value {
-    serde_json::json!({ "id": step.id, "method": step.request.method, "think_ms": step.think_ms, "on_failure": step.on_failure })
-}
-
 #[tauri::command]
 pub(crate) async fn start_run<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
@@ -71,25 +67,7 @@ pub(crate) async fn start_run<R: tauri::Runtime>(
         let _ = previous.await;
     }
     let method = format!("{:?}", config.method);
-    let scenario_identity = config.scenarios.as_ref().map(|plan| {
-        serde_json::json!({
-            "seed": plan.seed,
-            "setup": plan.setup.iter().map(step_identity).collect::<Vec<_>>(),
-            "cleanup": plan.cleanup.iter().map(step_identity).collect::<Vec<_>>(),
-            "scenarios": plan.scenarios.iter().map(|scenario| serde_json::json!({
-                "id": scenario.id, "weight": scenario.weight,
-                "steps": scenario.steps.iter().map(step_identity).collect::<Vec<_>>(),
-            })).collect::<Vec<_>>(),
-        })
-    });
-    let configuration = serde_json::json!({
-        "scenarios": scenario_identity,
-        "method": config.method, "protocol": config.protocol, "max_redirects": config.max_redirects,
-        "timeout_ms": config.timeout_ms, "pacing_ms": config.pacing_ms, "grace_ms": config.grace_ms,
-        "workload": config.workload, "warmup_ms": config.warmup_ms, "thresholds": config.thresholds,
-        "abort_policies": config.abort_policies, "inspection": config.inspection,
-        "assertion_ids": config.assertions.iter().map(|assertion| &assertion.id).collect::<Vec<_>>(),
-    });
+    let configuration = velo_engine::report_configuration(&config);
     let snapshot = state.manager.start(config, authorized).await?;
     let history_id = uuid::Uuid::new_v4().to_string();
     let mut incomplete = if let Some(history) = app.try_state::<crate::history::History>() {

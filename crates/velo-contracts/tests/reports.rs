@@ -342,8 +342,8 @@ fn junit_has_aggregate_rule_cases_with_independent_threshold_and_assertion_failu
         &settings(RegressionMetric::RequestRate, 0.0, false),
     );
     let xml = export_junit(&report).unwrap();
-    assert!(xml.contains("tests=\"4\" failures=\"2\" skipped=\"0\""));
-    assert_eq!(xml.matches("<testcase ").count(), 4);
+    assert!(xml.contains("tests=\"5\" failures=\"3\" skipped=\"0\""));
+    assert_eq!(xml.matches("<testcase ").count(), 5);
     assert!(xml.contains("name&quot;&lt;&amp;"));
     assert!(xml.contains("<system-out>"));
     assert!(xml.contains("18446744073709551615"));
@@ -355,7 +355,7 @@ fn junit_has_aggregate_rule_cases_with_independent_threshold_and_assertion_failu
     );
     let xml = export_junit(&report).unwrap();
     assert!(xml.contains("skipped=\"3\""));
-    assert!(xml.contains("failures=\"1\""));
+    assert!(xml.contains("failures=\"2\""));
 }
 
 #[test]
@@ -405,4 +405,27 @@ fn readable_charts_use_independent_scales_and_keep_zero_distinct_from_unavailabl
     assert!(html.contains("Baseline: 0; HTTP failure (%)"));
     assert!(!html.contains("width:NaN"));
     assert!(!html.contains("width:inf"));
+}
+
+#[test]
+fn run_outcome_consumes_native_verdicts_and_rejects_unavailable_evidence() {
+    let mut run = entry("run");
+    assert_eq!(run_verdict(&run), RegressionVerdict::Fail);
+    run.snapshot["thresholds"] = json!([]);
+    run.snapshot["evaluated"]["diagnostics"]["assertions"] = json!([]);
+    assert_eq!(run_verdict(&run), RegressionVerdict::Pass);
+    run.snapshot["scenarios"] = json!({"steps":[{"failed":"1"}]});
+    assert_eq!(run_verdict(&run), RegressionVerdict::Fail);
+    run.snapshot["scenarios"] = Value::Null;
+    run.snapshot["evaluated"]["diagnostics"]["assertions"] =
+        json!([{"passed":"1","failed":"0","unavailable":"1"}]);
+    assert_eq!(run_verdict(&run), RegressionVerdict::Unevaluable);
+    run.snapshot["evaluated"]["diagnostics"]["assertions"] = json!([]);
+    run.snapshot["thresholds"] = json!([{"status":"insufficient_data"}]);
+    assert_eq!(run_verdict(&run), RegressionVerdict::Unevaluable);
+    run.snapshot["thresholds"] = json!([]);
+    run.snapshot["evaluated"]["counters"]["responses"] = json!("0");
+    assert_eq!(run_verdict(&run), RegressionVerdict::Unevaluable);
+    run.snapshot["state"] = json!("aborted");
+    assert_eq!(run_verdict(&run), RegressionVerdict::Fail);
 }

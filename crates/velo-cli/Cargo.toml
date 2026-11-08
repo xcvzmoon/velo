@@ -1,0 +1,30 @@
+[package]
+name = "velo-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "velo-cli"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "time"] }
+uuid = { workspace = true, features = ["v4"] }
+velo-contracts.workspace = true
+velo-engine.workspace = true
+
+[dev-dependencies]
+axum = { workspace = true, features = ["http1", "tokio"] }
+tokio = { workspace = true, features = ["net"] }
+
+[lints]
+workspace = true

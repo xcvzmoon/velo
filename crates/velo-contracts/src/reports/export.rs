@@ -232,7 +232,7 @@ fn case(name: &str, verdict: RegressionVerdict, evidence: &str) -> String {
 /// # Arguments
 /// * `report` - Comparison evidence with separate absolute and regression verdicts.
 /// # Returns
-/// XML with a regression summary case, each budget, each candidate threshold, and each assertion.
+/// XML with run and regression summary cases, budgets, candidate thresholds, and assertions.
 /// Unevaluable or incomplete evidence becomes a skipped case; exceeded limits become failures.
 /// Full safe evidence is included as escaped JSON in `system-out`.
 /// # Errors
@@ -245,7 +245,7 @@ fn case(name: &str, verdict: RegressionVerdict, evidence: &str) -> String {
 /// ```
 pub fn export_junit(report: &ComparisonReport) -> Result<String, CommandError> {
     let evidence = escape(&export_json(report)?);
-    let mut cases = vec![(
+    let mut cases = vec![("run outcome".to_owned(), super::run_verdict(&report.candidate), "Native completion, measurement integrity, thresholds, assertions, and scenario outcomes.".to_owned()), (
         "regression summary".to_owned(),
         report.verdict,
         report.limitations.join("; "),

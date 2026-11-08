@@ -9,6 +9,7 @@ mod http_options;
 mod imports;
 mod metrics;
 mod preview;
+mod reporting;
 mod runner;
 mod scenario;
 mod scenario_metrics;
@@ -41,6 +42,8 @@ pub use imports::{ImportFormat, ImportedRequest, import_requests};
 pub use metrics::{Counters, LatencySnapshot, MetricsSnapshot};
 #[doc(inline)]
 pub use preview::{PreviewResponse, preview_request};
+#[doc(inline)]
+pub use reporting::report_configuration;
 pub use runner::{ArrivalSnapshot, RunManager, RunSnapshot, RunState, RunUpdate};
 #[doc(inline)]
 pub use scenario::{

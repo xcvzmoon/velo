@@ -1,0 +1,46 @@
+name: Authorized Velo load test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    runs-on: ubuntu-24.04
+    environment: load-testing
+    timeout-minutes: 15
+    env:
+      VELO_CI_ORIGIN: ${{ vars.VELO_CI_ORIGIN }}
+      VELO_CI_TOKEN: ${{ secrets.VELO_CI_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Select pinned Rust toolchain
+        run: rustup show active-toolchain
+      - name: Build standalone CLI
+        run: cargo build --locked --release -p velo-cli
+      - name: Validate without traffic
+        run: >-
+          ./target/release/velo-cli docs/examples/velo.test.json
+          --prepare
+          --variable baseUrl=VELO_CI_ORIGIN
+          --secret local-api-token=VELO_CI_TOKEN
+      - name: Run authorized target
+        run: |
+          mkdir -p artifacts
+          ./target/release/velo-cli docs/examples/velo.test.json \
+            --authorize "$VELO_CI_ORIGIN" \
+            --variable baseUrl=VELO_CI_ORIGIN \
+            --secret local-api-token=VELO_CI_TOKEN \
+            --json artifacts/result.json \
+            --junit artifacts/result.xml \
+            --html artifacts/result.html
+      - name: Retain reports on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: velo-reports-${{ github.run_id }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 7

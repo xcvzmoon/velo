@@ -75,7 +75,8 @@ pub struct CommandError {
 /// assert!(entry.stride >= 1);
 /// # }
 /// ```
-#[derive(Clone, Debug, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct HistoryEntry {
     /// HTTP method used for comparison eligibility.
     pub method: String,
